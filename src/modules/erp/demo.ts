@@ -56,10 +56,6 @@ export function buildDemoWorkspace(): Workspace {
   run('update_cheque', { id: bounced, status: 'cleared', date: '2026-09-22' });
   run('update_cheque', { id: bounced, status: 'bounced', date: '2026-09-24' });
 
-  const fbrByInvoice = (id: string) => workspace.fbr.find(entry => entry.invoiceId === id)!.id;
-  run('simulate_fbr', { id: fbrByInvoice(inv1), outcome: 'accepted' });
-  run('simulate_fbr', { id: fbrByInvoice(inv2), outcome: 'rejected' });
-  run('simulate_fbr', { id: fbrByInvoice(inv3), outcome: 'outcome_unknown' });
 
   const released = workspace.commissions.filter(commission => D(commission.released).gt(commission.paid)).map(commission => commission.id);
   run('approve_commission', { ids: released });

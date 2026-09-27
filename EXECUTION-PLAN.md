@@ -4,6 +4,8 @@ Prepared 24 September 2026. Planning baseline v1.
 
 **Founder direction:** prioritize a complete product over a fixed launch date. The December 2026 launch deadline is retired. This plan replaces the earlier delivery sequence and proposed release scope; the September 22 research remains background material.
 
+**Scope update, 27 September 2026:** the founder has deferred the FBR module and integration. The live prototype must not show an FBR section or create submission simulations. Earlier FBR requirements below are retained as historical planning notes and are not in the current development scope. Ordinary invoice tax amounts and accounting remain in scope.
+
 **Recommendation:** build a complete ERP for Pakistani importer-distributors with sales teams. Prove commission calculations early, then complete accounting, inventory, purchasing, imports, collections, payroll and compliance around them. Release publicly after controlled customer operation and repeatable onboarding.
 
 “Complete” means the agreed target business can run its normal operations and month-end close in SahulatERP. It does not mean supporting every industry or exception in Pakistan. Required exports to banks, accountants and government portals are part of a complete workflow; rebuilding calculations manually in spreadsheets is not.

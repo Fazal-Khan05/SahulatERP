@@ -2,6 +2,8 @@
 
 Prepared 24 September 2026 and updated 25 September 2026. A production-shaped prototype now covers the application foundation and synthetic end-to-end trading workflows. Discovery, partner validation, regulatory certification, live adapters, recovery rehearsal and commercial launch gates remain open. [EXECUTION-PLAN.md](EXECUTION-PLAN.md) defines the broader product gates.
 
+> **Scope update, 27 September 2026:** FBR integration and its simulator are deferred by the founder. Any FBR tasks below are historical candidates, not active backlog items. Invoice tax amounts and accounting remain in scope.
+
 ## 1. Discovery
 
 | ID | Task | Owner | Dependency | Done when |

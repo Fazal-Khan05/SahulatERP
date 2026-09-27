@@ -32,6 +32,6 @@ export function LoginScreen() {
       <Button type="submit" disabled={busy}>{busy?<Loader2 className="spin" size={17}/>:<ShieldCheck size={17}/>}Sign in securely</Button>
       <button type="button" className="text-button" onClick={reset} disabled={busy}>Forgot your password?</button>
     </form>
-    <div className="simulation-note"><ShieldCheck size={18}/><span><strong>Working prototype</strong> External filing and payment actions are simulated.</span></div>
-  </section><aside className="login-visual"><div><span className="login-kicker">SAHULAT TRADING CO.</span><h2>Your entire trading operation, one clear view.</h2><p>From imported stock to cleared collections and payroll, every number remains connected to its source.</p><div className="login-stat-grid"><span><strong>12</strong>Connected modules</span><span><strong>2</strong>Isolated workspaces</span><span><strong>100%</strong>Audited changes</span></div></div></aside></main>;
+    <div className="simulation-note"><ShieldCheck size={18}/><span><strong>Working prototype</strong> External payments and customs lookups are simulated.</span></div>
+  </section><aside className="login-visual"><div><span className="login-kicker">SAHULAT TRADING CO.</span><h2>Your entire trading operation, one clear view.</h2><p>From imported stock to cleared collections and payroll, every number remains connected to its source.</p><div className="login-stat-grid"><span><strong>11</strong>Connected modules</span><span><strong>2</strong>Isolated workspaces</span><span><strong>100%</strong>Audited changes</span></div></div></aside></main>;
 }

@@ -10,8 +10,10 @@ test('owner can sign in and review every ERP module', async ({ page }) => {
     await page.getByRole('button', { name: 'Sign in securely' }).click();
   }
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Tax & FBR' })).toHaveCount(0);
+  await expect(page.getByText('FBR simulations to review')).toHaveCount(0);
   await page.waitForLoadState('networkidle');
-  for (const module of ['Sales','Purchasing','Imports & costing','Inventory','Collections','Commissions','Payroll','Accounting','Tax & FBR','Reports','Settings']) {
+  for (const module of ['Sales','Purchasing','Imports & costing','Inventory','Collections','Commissions','Payroll','Accounting','Reports','Settings']) {
     await page.locator('button.nav-item').filter({ hasText: module }).click();
     await expect(page.locator('h1')).toContainText(module);
   }

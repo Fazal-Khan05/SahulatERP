@@ -66,4 +66,24 @@ describe('connected ERP workflow', () => {
     const ledger = workspace.journals.flatMap(journal => journal.lines).filter(line => line.account === '1100').reduce((total, line) => total.plus(line.debit).minus(line.credit), D(0));
     expect(subledger.eq(ledger)).toBe(true);
   });
+
+  it('posts invoice tax without creating an FBR simulation', () => {
+    const seeded = buildDemoWorkspace();
+    expect(seeded.fbr).toHaveLength(0);
+    const created = execute(seeded, {
+      type: 'create_document', idempotencyKey: 'invoice-without-fbr-draft',
+      payload: {
+        kind: 'sales_invoice', partyId: 'c-1', warehouseId: 'khi-main',
+        date: '2026-10-03', dueDate: '2026-10-31', currency: 'PKR', fxRate: '1',
+        lines: [{ itemId: 'i-1', quantity: '1', price: '2400', discount: '0', taxRate: '18', employeeId: 'e-4', splits: [] }],
+      },
+    }, owner);
+    const submitted = execute(created.workspace, {
+      type: 'submit_document', idempotencyKey: 'invoice-without-fbr-submit', payload: { id: created.recordId },
+    }, owner);
+    const invoice = submitted.workspace.documents.find(document => document.id === created.recordId)!;
+    expect(D(invoice.tax).gt(0)).toBe(true);
+    expect(submitted.workspace.journals.some(journal => journal.sourceId === invoice.id && journal.lines.some(line => line.account === '2100' && D(line.credit).gt(0)))).toBe(true);
+    expect(submitted.workspace.fbr).toHaveLength(0);
+  });
 });

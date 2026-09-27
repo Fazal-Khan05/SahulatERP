@@ -27,13 +27,13 @@ Verification commands:
 
 - Real Supabase password authentication and protected workspaces
 - Demo and design-partner tenants with PostgreSQL RLS read policies
-- Sales, purchasing, inventory, imports, collections, PDC, commission, payroll, accounting and simulated FBR command logic
+- Sales, purchasing, inventory, imports, collections, PDC, commission, payroll and accounting command logic
 - Decimal-safe postings, immutable posted journal tables, period locks and optimistic command revisions
-- Resettable synthetic transactions including partial collection, bounced cheque, return after payout, import landed cost and unknown FBR outcome
+- Resettable synthetic transactions including partial collection, bounced cheque, return after payout and import landed cost
 - Responsive dashboards, module tables, transaction entry, approvals, audit history, role preview and safe demo reset
 - Automated financial-invariant and signed-in browser tests
 
-External FBR, bank, customs, salary and notification transmissions remain simulators. Payroll and tax configurations are demonstrations requiring specialist review before any production rollout. The partner tenant is intentionally empty until redacted imports are reviewed.
+FBR integration and its simulator are deferred at the founder's request. Existing legacy FBR records may remain in older demo snapshots, but the application does not display or create them. Bank, customs, salary and notification transmissions remain simulations. Payroll and tax configurations are demonstrations requiring specialist review before any production rollout. The partner tenant is intentionally empty until redacted imports are reviewed.
 
 ## Planning and source material
 
@@ -51,4 +51,4 @@ External FBR, bank, customs, salary and notification transmissions remain simula
 
 These September 22 documents preserve original reasoning. Their dates, technical/legal claims and pricing are not automatically current or verified. Use the execution plan where planning recommendations conflict. Business-specific and statutory rules still require the evidence/review specified there.
 
-The Supabase prototype project is provisioned. GitHub/Vercel deployment and partner-data validation remain to be completed.
+The Supabase prototype project is provisioned and the demo is deployed at https://sahulaterp.vercel.app/. Partner-data validation remains to be completed.

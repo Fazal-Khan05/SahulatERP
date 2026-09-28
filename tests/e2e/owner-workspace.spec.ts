@@ -17,4 +17,14 @@ test('owner can sign in and review every ERP module', async ({ page }) => {
     await page.locator('button.nav-item').filter({ hasText: module }).click();
     await expect(page.locator('h1')).toContainText(module);
   }
+  const initialUrl = page.url();
+  await page.getByRole('button', { name: /Switch company/ }).click();
+  await expect(page.getByRole('menuitem', { name: /Sahulat Trading Co/ })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /Design Partner/ })).toBeVisible();
+  expect(page.url()).toBe(initialUrl);
+  await page.getByRole('menuitem', { name: /Sahulat Trading Co/ }).click();
+  expect(page.url()).toBe(initialUrl);
+  await page.getByRole('button', { name: /Switch company/ }).click();
+  await page.getByRole('menuitem', { name: /Design Partner/ }).click();
+  await expect(page.getByRole('button', { name: /Switch company, current company Design Partner/ })).toBeVisible();
 });

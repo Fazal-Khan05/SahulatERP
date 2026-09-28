@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, type FormEvent, type ReactNode } from 'react';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
-  ArrowDownLeft, Bell, Boxes, ChevronDown, ChevronRight, CircleDollarSign, ClipboardList,
+  ArrowDownLeft, Bell, Boxes, Check, ChevronDown, ChevronRight, CircleDollarSign, ClipboardList,
   CreditCard, FileText, Globe2, HandCoins, LayoutDashboard, Loader2, LogOut, Menu, Package,
   Plus, RefreshCw, Search, Settings, Ship, ShoppingBag, Sparkles, Users, Wallet,
 } from 'lucide-react';
@@ -12,7 +13,8 @@ import { accountBalance, commissionTotals, outstanding, stock, summary } from '@
 import { D, formatMoney } from '@/modules/erp/money';
 import { accountNames, type Actor, type Module, type Role, type Workspace } from '@/modules/erp/types';
 
-type Props = { initialWorkspace: Workspace; actor: Actor; memberships: {tenantId:string;role:Role;branchIds:string[]}[] };
+type WorkspaceMembership = {tenantId:string;role:Role;branchIds:string[];name:string;isDemo:boolean};
+type Props = { initialWorkspace: Workspace; actor: Actor; memberships: WorkspaceMembership[] };
 type Modal = 'sale'|'purchase'|'receipt'|null;
 const nav:{key:Module;label:string;icon:typeof LayoutDashboard}[]=[
   {key:'dashboard',label:'Overview',icon:LayoutDashboard},{key:'sales',label:'Sales',icon:ShoppingBag},
@@ -29,14 +31,42 @@ const roleModules:Record<Role,Module[]>={Owner:nav.map(item=>item.key),Accountan
 const canView=(role:Role,module:Module)=>roleModules[role].includes(module);
 const canEdit=(role:Role,module:Module)=>role!=='Auditor'&&({Owner:nav.map(item=>item.key),Accountant:['sales','purchasing','imports','inventory','collections','commissions','payroll','accounting','settings'],'Sales Manager':['sales','collections','commissions'],'Salesperson':['sales'],'Recovery Officer':['collections'],'Warehouse Manager':['purchasing','imports','inventory'],'Payroll Administrator':['payroll']} as Partial<Record<Role,Module[]>>)[role]?.includes(module)===true;
 
+function WorkspaceSwitcher({workspace,memberships}:{workspace:Workspace;memberships:WorkspaceMembership[]}){
+  return <DropdownMenu.Root>
+    <DropdownMenu.Trigger asChild>
+      <button type="button" className="workspace-picker" aria-label={`Switch company, current company ${workspace.company.name}`}>
+        <span className="company-icon">{workspace.company.logo}</span>
+        <span><strong>{workspace.company.name}</strong><small>{workspace.demo?'Demo workspace':'Private workspace'}</small></span>
+        <ChevronDown size={15}/>
+      </button>
+    </DropdownMenu.Trigger>
+    <DropdownMenu.Portal>
+      <DropdownMenu.Content className="workspace-menu" align="start" sideOffset={7}>
+        <div className="workspace-menu-label">YOUR COMPANIES</div>
+        {memberships.map(item=>{
+          const selected=item.tenantId===workspace.tenantId;
+          return <DropdownMenu.Item
+            key={item.tenantId}
+            className="workspace-menu-item"
+            onSelect={()=>{if(!selected)window.location.assign(`/?tenant=${encodeURIComponent(item.tenantId)}`)}}
+          >
+            <span className="company-icon">{item.name.trim().charAt(0).toUpperCase()}</span>
+            <span className="workspace-menu-name"><strong>{selected?workspace.company.name:item.name}</strong><small>{item.isDemo?'Demo workspace':'Private workspace'}</small></span>
+            {selected&&<Check size={16} aria-label="Current company"/>}
+          </DropdownMenu.Item>
+        })}
+      </DropdownMenu.Content>
+    </DropdownMenu.Portal>
+  </DropdownMenu.Root>
+}
+
 export function Workbench({initialWorkspace,actor,memberships}:Props){
   const [workspace,setWorkspace]=useState(initialWorkspace);const [active,setActive]=useState<Module>('dashboard');
   const [mobile,setMobile]=useState(false);const [modal,setModal]=useState<Modal>(null);const [busy,setBusy]=useState('');const [notice,setNotice]=useState('');const [role,setRole]=useState<Role>(actor.role);
   async function command(type:string,payload:Record<string,unknown>){setBusy(type);setNotice('');try{const response=await fetch('/api/workspace',{method:'POST',headers:{'content-type':'application/json','x-tenant-id':workspace.tenantId},body:JSON.stringify({type,payload,idempotencyKey:crypto.randomUUID()})});const result=await response.json();if(!response.ok||!result.success)throw new Error(result.message||'The change could not be saved.');setWorkspace(result.workspace);setNotice(result.message);setModal(null)}catch(error){setNotice(error instanceof Error?error.message:'The change could not be saved.')}finally{setBusy('')}}
   async function resetDemo(){setBusy('reset');const response=await fetch('/api/demo-reset',{method:'POST'});const result=await response.json();if(response.ok)setWorkspace(result.workspace);setNotice(result.message);setBusy('')}
   const initials=actor.name.split(/\s+/).map(word=>word[0]).join('').slice(0,2).toUpperCase();
-  const switchWorkspace=()=>{const other=memberships.find(item=>item.tenantId!==workspace.tenantId);if(other)window.location.assign(`/?tenant=${other.tenantId}`)};
-  return <div className="app-shell"><aside className={`sidebar ${mobile?'mobile-open':''}`}><a className="brand" href="/"><span className="brand-mark">S</span><span>Sahulat<span className="brand-light">ERP</span></span></a><button className="workspace-picker" onClick={switchWorkspace}><div className="company-icon">{workspace.company.logo}</div><div><strong>{workspace.company.name}</strong><small>{workspace.demo?'Demo workspace':'Private workspace'}</small></div><ChevronDown size={15}/></button><div className="nav-label">WORKSPACE</div><nav>{nav.filter(item=>canView(role,item.key)).map(({key,label,icon:Icon})=><button key={key} className={active===key?'nav-item active':'nav-item'} onClick={()=>{setActive(key);setMobile(false)}}><Icon size={18}/><span>{label}</span>{key==='commissions'&&<span className="new-label">LIVE</span>}</button>)}</nav><div className="sidebar-bottom"><div className="demo-note"><Sparkles size={17}/><div><strong>Persistent Supabase data</strong><small>Revision {workspace.revision} · audited</small></div></div><form action="/auth/signout" method="post"><button className="profile"><span className="avatar">{initials}</span><div><strong>{actor.name}</strong><small>{role}</small></div><LogOut size={15}/></button></form></div></aside><div className="main-shell"><header className="topbar"><div className="breadcrumb"><button className="mobile-menu" onClick={()=>setMobile(value=>!value)}><Menu size={19}/></button><span>Workspace</span><ChevronRight size={14}/><strong>{labels[active]}</strong></div><div className="topbar-right"><span className="search-hint"><Search size={16}/> Search anything <kbd>⌘ K</kbd></span><span className="topbar-divider"/><Bell size={19}/><span className="mini-avatar">{initials}</span></div></header><main className="main-content"><div className="page-heading"><div><div className="eyebrow">{new Date().toLocaleDateString('en-PK',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).toUpperCase()}</div><h1>{labels[active]}<span className="live-tag">{workspace.demo?'Demo workspace':'Design partner'}</span></h1><p>{descriptions[active]}</p></div><div className="heading-actions"><Button variant="outline"><Globe2 size={16}/>All branches<ChevronDown size={14}/></Button>{canEdit(role,active)&&<Button onClick={()=>setModal(active==='purchasing'?'purchase':active==='collections'?'receipt':'sale')}><Plus size={17}/>New transaction</Button>}</div></div>{notice&&<div className={notice.includes('could not')?'error-note':'form-note'}>{notice}</div>}<View active={active} workspace={workspace} actor={{...actor,role}} busy={busy} command={command} open={setModal} go={setActive} reset={resetDemo} role={role} setRole={next=>{setRole(next);if(!canView(next,active))setActive('dashboard')}}/><footer className="page-footer"><span>SAHULAT ERP <span>Made for the way you do business.</span></span><span>PKR · Asia/Karachi</span></footer></main></div><TransactionDialog modal={modal} close={()=>setModal(null)} workspace={workspace} busy={busy} command={command}/></div>
+  return <div className="app-shell"><aside className={`sidebar ${mobile?'mobile-open':''}`}><a className="brand" href="/"><span className="brand-mark">S</span><span>Sahulat<span className="brand-light">ERP</span></span></a><WorkspaceSwitcher workspace={workspace} memberships={memberships}/><div className="nav-label">WORKSPACE</div><nav>{nav.filter(item=>canView(role,item.key)).map(({key,label,icon:Icon})=><button key={key} className={active===key?'nav-item active':'nav-item'} onClick={()=>{setActive(key);setMobile(false)}}><Icon size={18}/><span>{label}</span>{key==='commissions'&&<span className="new-label">LIVE</span>}</button>)}</nav><div className="sidebar-bottom"><div className="demo-note"><Sparkles size={17}/><div><strong>Persistent Supabase data</strong><small>Revision {workspace.revision} · audited</small></div></div><form action="/auth/signout" method="post"><button className="profile"><span className="avatar">{initials}</span><div><strong>{actor.name}</strong><small>{role}</small></div><LogOut size={15}/></button></form></div></aside><div className="main-shell"><header className="topbar"><div className="breadcrumb"><button className="mobile-menu" onClick={()=>setMobile(value=>!value)}><Menu size={19}/></button><span>Workspace</span><ChevronRight size={14}/><strong>{labels[active]}</strong></div><div className="topbar-right"><span className="search-hint"><Search size={16}/> Search anything <kbd>⌘ K</kbd></span><span className="topbar-divider"/><Bell size={19}/><span className="mini-avatar">{initials}</span></div></header><main className="main-content"><div className="page-heading"><div><div className="eyebrow">{new Date().toLocaleDateString('en-PK',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).toUpperCase()}</div><h1>{labels[active]}<span className="live-tag">{workspace.demo?'Demo workspace':'Design partner'}</span></h1><p>{descriptions[active]}</p></div><div className="heading-actions"><Button variant="outline"><Globe2 size={16}/>All branches<ChevronDown size={14}/></Button>{canEdit(role,active)&&<Button onClick={()=>setModal(active==='purchasing'?'purchase':active==='collections'?'receipt':'sale')}><Plus size={17}/>New transaction</Button>}</div></div>{notice&&<div className={notice.includes('could not')?'error-note':'form-note'}>{notice}</div>}<View active={active} workspace={workspace} actor={{...actor,role}} busy={busy} command={command} open={setModal} go={setActive} reset={resetDemo} role={role} setRole={next=>{setRole(next);if(!canView(next,active))setActive('dashboard')}}/><footer className="page-footer"><span>SAHULAT ERP <span>Made for the way you do business.</span></span><span>PKR · Asia/Karachi</span></footer></main></div><TransactionDialog modal={modal} close={()=>setModal(null)} workspace={workspace} busy={busy} command={command}/></div>
 }
 
 type ViewProps={active:Module;workspace:Workspace;actor:Actor;busy:string;command:(type:string,payload:Record<string,unknown>)=>Promise<void>;open:(modal:Modal)=>void;go:(module:Module)=>void;reset:()=>void;role:Role;setRole:(role:Role)=>void};

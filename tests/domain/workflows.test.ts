@@ -128,6 +128,39 @@ describe('connected ERP workflow', () => {
     expect(result.workspace.stockMoves.filter(move => move.sourceId === result.recordId)).toHaveLength(2);
   });
 
+  it('sets one warehouse count and posts an audited, balanced stock correction', () => {
+    const workspace = buildDemoWorkspace();
+    const before = stock(workspace, 'i-1', 'khi-main');
+    const target = D(before.quantity).plus(7).toString();
+    const result = execute(workspace, {
+      type: 'set_stock_quantity', idempotencyKey: 'set-count-add-test',
+      payload: { itemId: 'i-1', warehouseId: 'khi-main', expectedQuantity: before.quantity, targetQuantity: target, cost: '1500', date: '2026-10-03', reason: 'Physical count', purpose: 'count_correction' },
+    }, owner);
+    expect(stock(result.workspace, 'i-1', 'khi-main').quantity).toBe(D(target).toFixed(4));
+    expect(result.workspace.stockMoves.find(move => move.sourceId === result.recordId)?.quantity).toBe('7.0000');
+    const journal = result.workspace.journals.find(entry => entry.sourceId === result.recordId)!;
+    expect(journal.lines.find(line => line.account === '1200')?.debit).toBe('10500.0000');
+    expect(journal.lines.find(line => line.account === '5300')?.credit).toBe('10500.0000');
+    expect(result.workspace.audit.at(-1)?.action).toBe('set_stock_quantity');
+  });
+
+  it('rejects a stale count and values a full reduction at its exact remaining value', () => {
+    const workspace = buildDemoWorkspace();
+    const before = stock(workspace, 'i-1', 'khi-main');
+    expect(() => execute(workspace, {
+      type: 'set_stock_quantity', idempotencyKey: 'stale-count-test',
+      payload: { itemId: 'i-1', warehouseId: 'khi-main', expectedQuantity: '1', targetQuantity: '2', cost: '1500', date: '2026-10-03', reason: 'Count correction' },
+    }, owner)).toThrow(/Stock changed/);
+    const result = execute(workspace, {
+      type: 'set_stock_quantity', idempotencyKey: 'full-reduction-test',
+      payload: { itemId: 'i-1', warehouseId: 'khi-main', expectedQuantity: before.quantity, targetQuantity: '0', date: '2026-10-03', reason: 'Damaged stock' },
+    }, owner);
+    expect(stock(result.workspace, 'i-1', 'khi-main')).toEqual({ quantity: '0.0000', value: '0.0000', average: '0.0000' });
+    const journal = result.workspace.journals.find(entry => entry.sourceId === result.recordId)!;
+    expect(journal.lines.find(line => line.account === '1200')?.credit).toBe(before.value);
+    expect(journal.lines.find(line => line.account === '5300')?.debit).toBe(before.value);
+  });
+
   it('keeps outstanding receivables equal to submitted invoice balances', () => {
     const workspace = buildDemoWorkspace();
     const subledger = sum(workspace.documents.filter(document => document.kind === 'sales_invoice' && document.status === 'submitted').map(outstanding));

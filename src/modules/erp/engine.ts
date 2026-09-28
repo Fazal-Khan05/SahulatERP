@@ -2,7 +2,7 @@ import { z } from "zod";
 import { D, money, sum, allocate } from "./money";
 import { accountNames, type Actor, type Workspace, type Document, type Line, type JournalLine, type CommissionPlan } from "./types";
 
-export const commandSchema=z.object({type:z.enum(["create_document","submit_document","convert_document","return_document","create_receipt","update_cheque","approve_commission","create_payroll","update_payroll","create_shipment","add_shipment_cost","allocate_shipment","bulk_stock_increase","stock_transfer","stock_adjust","create_journal","reverse_journal","set_period","save_party","save_item","save_employee","save_plan","save_settings","bank_import","bank_match","follow_up","import_records"]),idempotencyKey:z.string().min(8).max(100),payload:z.record(z.string(),z.unknown())});
+export const commandSchema=z.object({type:z.enum(["create_document","submit_document","convert_document","return_document","create_receipt","update_cheque","approve_commission","create_payroll","update_payroll","create_shipment","add_shipment_cost","allocate_shipment","bulk_stock_increase","stock_transfer","stock_adjust","set_stock_quantity","create_journal","reverse_journal","set_period","save_party","save_item","save_employee","save_plan","save_settings","bank_import","bank_match","follow_up","import_records"]),idempotencyKey:z.string().min(8).max(100),payload:z.record(z.string(),z.unknown())});
 export type Command=z.infer<typeof commandSchema>;
 const id=()=>crypto.randomUUID();
 const today=()=>new Date().toISOString().slice(0,10);
@@ -15,7 +15,7 @@ const pct=nonneg.refine(v=>D(v).lte(100),"Percentage cannot exceed 100.");
 const allow:Record<string,string[]>={
  create_document:["Accountant","Sales Manager","Salesperson","Warehouse Manager"],submit_document:["Accountant","Sales Manager","Warehouse Manager"],convert_document:["Accountant","Sales Manager","Salesperson","Warehouse Manager"],return_document:["Accountant","Sales Manager"],
  create_receipt:["Accountant","Recovery Officer"],update_cheque:["Accountant","Recovery Officer"],approve_commission:["Accountant","Sales Manager"],create_payroll:["Accountant","Payroll Administrator"],update_payroll:["Accountant","Payroll Administrator"],
- create_shipment:["Accountant","Warehouse Manager"],add_shipment_cost:["Accountant"],allocate_shipment:["Accountant"],bulk_stock_increase:["Accountant","Warehouse Manager"],stock_transfer:["Warehouse Manager","Accountant"],stock_adjust:["Warehouse Manager","Accountant"],create_journal:["Accountant"],reverse_journal:["Accountant"],set_period:["Accountant"],save_party:["Accountant","Sales Manager"],save_item:["Warehouse Manager","Accountant"],save_employee:["Payroll Administrator"],save_plan:["Sales Manager"],save_settings:[],bank_import:["Accountant"],bank_match:["Accountant"],follow_up:["Recovery Officer","Sales Manager"],import_records:["Accountant"]
+ create_shipment:["Accountant","Warehouse Manager"],add_shipment_cost:["Accountant"],allocate_shipment:["Accountant"],bulk_stock_increase:["Accountant","Warehouse Manager"],stock_transfer:["Warehouse Manager","Accountant"],stock_adjust:["Warehouse Manager","Accountant"],set_stock_quantity:["Warehouse Manager","Accountant"],create_journal:["Accountant"],reverse_journal:["Accountant"],set_period:["Accountant"],save_party:["Accountant","Sales Manager"],save_item:["Warehouse Manager","Accountant"],save_employee:["Payroll Administrator"],save_plan:["Sales Manager"],save_settings:[],bank_import:["Accountant"],bank_match:["Accountant"],follow_up:["Recovery Officer","Sales Manager"],import_records:["Accountant"]
 };
 export function canRun(role:string,action:string){return role==="Owner"||(allow[action]??[]).includes(role)}
 function requireOpen(w:Workspace,d:string){date(d);if(w.periods.some(p=>p.month===d.slice(0,7)&&p.locked))throw new Error(`Accounting period ${d.slice(0,7)} is locked.`);}
@@ -107,6 +107,21 @@ export function execute(input:Workspace,raw:unknown,actor:Actor):{workspace:Work
  journal.push(jl("2000",0,money(sum(pending.map(c=>c.amount)))));postJournal(w,`${sh.id}:${pending.map(c=>c.id).join(":")}`,`Landed costs · ${sh.number}`,journal,d);sh.status="costed";result=sh.id;message="Costs allocated. Inventory, COGS and supplier liability updated.";break;}
  case "stock_transfer":{const item=s(p,"itemId"),from=s(p,"from"),to=s(p,"to");if(from===to)throw new Error("Choose two different warehouses.");warehouseAccess(w,actor,from);warehouseAccess(w,actor,to);const qty=pos.parse(p.quantity);const d=date(p.date??today());requireOpen(w,d);const value=D(stock(w,item,from).average).mul(qty).toDecimalPlaces(4);result=id();move(w,item,from,money(D(qty).negated()),money(value.negated()),result,d,"transfer_out");move(w,item,to,qty,money(value),result,d,"transfer_in");message=`Moved ${D(qty).toString()} ${found(w.items,item,"Product").name} from ${found(w.warehouses,from,"Warehouse").name} to ${found(w.warehouses,to,"Warehouse").name}.`;break;}
  case "stock_adjust":{const item=s(p,"itemId"),warehouse=s(p,"warehouseId");warehouseAccess(w,actor,warehouse);found(w.items,item,"Product");const qty=decimal.parse(p.quantity);if(D(qty).eq(0))throw new Error("Enter a non-zero adjustment.");const d=date(p.date??today());requireOpen(w,d);const reason=s(p,"reason");if(!reason.trim())throw new Error("Adjustment reason is required.");const cost=nonneg.parse(p.cost??stock(w,item,warehouse).average);const value=D(qty).mul(cost).toDecimalPlaces(4);result=id();move(w,item,warehouse,qty,money(value),result,d,"adjustment");postJournal(w,result,reason,value.gte(0)?[jl("1200",money(value)),jl("5300",0,money(value))]:[jl("5300",money(value.negated())),jl("1200",0,money(value.negated()))],d);break;}
+ case "set_stock_quantity":{
+  const input=z.object({itemId:z.string(),warehouseId:z.string(),expectedQuantity:nonneg,targetQuantity:nonneg,cost:nonneg.optional(),date:z.iso.date(),reason:z.string().trim().min(1).max(2000),purpose:z.enum(["opening_stock","count_correction"]).default("count_correction")}).parse(p);
+  const item=found(w.items,input.itemId,"Product");const warehouse=found(w.warehouses,input.warehouseId,"Warehouse");warehouseAccess(w,actor,warehouse.id);requireOpen(w,input.date);
+  const current=stock(w,item.id,warehouse.id);
+  if(!D(current.quantity).eq(input.expectedQuantity))throw new Error(`Stock changed since you opened this item. Current quantity in ${warehouse.name}: ${D(current.quantity).toString()}. Refresh and try again.`);
+  const delta=D(input.targetQuantity).minus(current.quantity);
+  if(delta.isZero())throw new Error("Enter a different quantity to save a stock correction.");
+  const value=delta.gt(0)?D(delta).mul(input.cost??(D(current.average).gt(0)?current.average:item.cost)).toDecimalPlaces(4):D(current.value).mul(delta).div(current.quantity).toDecimalPlaces(4);
+  if(delta.gt(0)&&value.lte(0))throw new Error("Enter a unit cost above zero for added stock.");
+  result=id();move(w,item.id,warehouse.id,money(delta),money(value),result,input.date,"count_correction");
+  const absolute=money(value.abs());const offset=delta.gt(0)&&input.purpose==="opening_stock"?"3000":"5300";
+  postJournal(w,result,`Stock correction · ${item.sku} · ${warehouse.name} · ${input.reason}`,delta.gt(0)?[jl("1200",absolute),jl(offset,0,absolute)]:[jl(offset,absolute),jl("1200",0,absolute)],input.date);
+  message=`${item.name} in ${warehouse.name} updated from ${D(current.quantity).toString()} to ${D(input.targetQuantity).toString()} ${item.unit}. Stock and ledger updated.`;
+  break;
+ }
  case "bulk_stock_increase":{
   const input=z.object({warehouseId:z.string(),date:z.iso.date(),purpose:z.enum(["opening_stock","count_correction"]),reason:z.string().trim().min(1).max(2000),lines:z.array(z.object({itemId:z.string(),quantity:pos,cost:pos})).min(1).max(500)}).parse(p);
   warehouseAccess(w,actor,input.warehouseId);requireOpen(w,input.date);

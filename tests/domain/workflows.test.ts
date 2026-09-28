@@ -53,6 +53,56 @@ describe('connected ERP workflow', () => {
     expect(subledger.eq(ledger)).toBe(true);
   });
 
+  it('increases several products in one audited, balanced stock posting', () => {
+    const workspace = buildDemoWorkspace();
+    const first = stock(workspace, 'i-1', 'khi-main');
+    const second = stock(workspace, 'i-2', 'khi-main');
+    const beforeLedger = D(workspace.journals.flatMap(journal => journal.lines).filter(line => line.account === '1200').reduce((total, line) => total.plus(line.debit).minus(line.credit), D(0)));
+    const result = execute(workspace, {
+      type: 'bulk_stock_increase', idempotencyKey: 'bulk-increase-test',
+      payload: { warehouseId: 'khi-main', date: '2026-10-03', purpose: 'count_correction', reason: 'Count correction', lines: [
+        { itemId: 'i-1', quantity: '10', cost: '1500' },
+        { itemId: 'i-2', quantity: '5', cost: '2000' },
+      ] },
+    }, owner);
+    expect(D(stock(result.workspace, 'i-1', 'khi-main').quantity).minus(first.quantity).eq(10)).toBe(true);
+    expect(D(stock(result.workspace, 'i-2', 'khi-main').quantity).minus(second.quantity).eq(5)).toBe(true);
+    expect(result.workspace.stockMoves.filter(move => move.sourceId === result.recordId)).toHaveLength(2);
+    const journal = result.workspace.journals.find(entry => entry.sourceId === result.recordId)!;
+    expect(journal.lines.find(line => line.account === '1200')?.debit).toBe('25000.0000');
+    expect(journal.lines.find(line => line.account === '5300')?.credit).toBe('25000.0000');
+    expect(sum(journal.lines.map(line => line.debit)).eq(sum(journal.lines.map(line => line.credit)))).toBe(true);
+    const afterLedger = sum(result.workspace.journals.flatMap(entry => entry.lines).filter(line => line.account === '1200').map(line => D(line.debit).minus(line.credit)));
+    expect(afterLedger.minus(beforeLedger).eq(25000)).toBe(true);
+    expect(result.workspace.audit.at(-1)?.action).toBe('bulk_stock_increase');
+  });
+
+  it('offsets opening stock against owner capital', () => {
+    const workspace = buildDemoWorkspace();
+    const result = execute(workspace, {
+      type: 'bulk_stock_increase', idempotencyKey: 'opening-stock-test',
+      payload: { warehouseId: 'lhe-main', date: '2026-10-03', purpose: 'opening_stock', reason: 'Starting stock count', lines: [
+        { itemId: 'i-4', quantity: '3', cost: '4200' },
+      ] },
+    }, owner);
+    const journal = result.workspace.journals.find(entry => entry.sourceId === result.recordId)!;
+    expect(journal.lines.find(line => line.account === '3000')?.credit).toBe('12600.0000');
+    expect(journal.lines.some(line => line.account === '5300')).toBe(false);
+  });
+
+  it('rejects an invalid bulk increase without changing any stock', () => {
+    const workspace = buildDemoWorkspace();
+    const before = structuredClone(workspace);
+    expect(() => execute(workspace, {
+      type: 'bulk_stock_increase', idempotencyKey: 'invalid-bulk-increase',
+      payload: { warehouseId: 'khi-main', date: '2026-10-03', purpose: 'count_correction', reason: 'Count correction', lines: [
+        { itemId: 'i-1', quantity: '10', cost: '1500' },
+        { itemId: 'i-2', quantity: '5', cost: '0' },
+      ] },
+    }, owner)).toThrow();
+    expect(workspace).toEqual(before);
+  });
+
   it('blocks negative stock without mutating the original workspace', () => {
     const workspace = buildDemoWorkspace();
     const before = structuredClone(workspace);

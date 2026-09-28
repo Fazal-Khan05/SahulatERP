@@ -26,6 +26,17 @@ test('owner can sign in and review every ERP module', async ({ page }) => {
   for (const module of ['Sales','Purchasing','Imports & costing','Inventory','Collections','Commissions','Payroll','Accounting','Reports','Settings']) {
     await page.locator('button.nav-item').filter({ hasText: module }).click();
     await expect(page.locator('h1')).toContainText(module);
+    if (module === 'Inventory') {
+      await page.getByRole('button', { name: 'Increase stock' }).last().click();
+      const increase = page.getByRole('dialog', { name: 'Increase inventory' });
+      await expect(increase).toBeVisible();
+      await increase.getByLabel('Increase LED Panel Light · 24W').fill('10');
+      await expect(increase.getByText('1 product selected')).toBeVisible();
+      await increase.getByLabel('Same quantity for all').fill('2');
+      await increase.getByRole('button', { name: 'Fill all' }).click();
+      await expect(increase.getByText('6 products selected')).toBeVisible();
+      await increase.getByRole('button', { name: 'Cancel' }).click();
+    }
   }
   const initialUrl = page.url();
   await page.getByRole('button', { name: /Switch company/ }).click();

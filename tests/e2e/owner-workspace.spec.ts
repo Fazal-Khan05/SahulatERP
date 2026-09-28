@@ -13,6 +13,16 @@ test('owner can sign in and review every ERP module', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Tax & FBR' })).toHaveCount(0);
   await expect(page.getByText('FBR simulations to review')).toHaveCount(0);
   await page.waitForLoadState('networkidle');
+  await page.getByRole('button', { name: 'View invoice INV-2026-0001' }).click();
+  const invoice = page.getByRole('dialog', { name: 'Invoice INV-2026-0001' });
+  await expect(invoice).toBeVisible();
+  await expect(invoice.getByText('Al-Noor Electronics')).toBeVisible();
+  await expect(invoice.getByText('LED Panel Light · 24W')).toBeVisible();
+  await expect(invoice.getByText('Smart Extension Board')).toBeVisible();
+  await expect(invoice.getByText('REC-0001')).toBeVisible();
+  await expect(invoice.getByText('Balance due')).toBeVisible();
+  await expect(invoice.locator('.invoice-balance')).toContainText('Rs 283,200');
+  await invoice.getByRole('button', { name: 'Close dialog' }).click();
   for (const module of ['Sales','Purchasing','Imports & costing','Inventory','Collections','Commissions','Payroll','Accounting','Reports','Settings']) {
     await page.locator('button.nav-item').filter({ hasText: module }).click();
     await expect(page.locator('h1')).toContainText(module);

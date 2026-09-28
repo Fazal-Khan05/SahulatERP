@@ -36,6 +36,14 @@ test('owner can sign in and review every ERP module', async ({ page }) => {
       await increase.getByRole('button', { name: 'Fill all' }).click();
       await expect(increase.getByText('6 products selected')).toBeVisible();
       await increase.getByRole('button', { name: 'Cancel' }).click();
+      await page.getByRole('button', { name: 'Transfer stock' }).click();
+      const transfer = page.getByRole('dialog', { name: 'Transfer stock' });
+      await expect(transfer).toBeVisible();
+      await transfer.getByLabel('Product').selectOption('i-4');
+      await transfer.getByLabel('To warehouse').selectOption('lhe-main');
+      await transfer.getByLabel('Quantity to move').fill('280');
+      await expect(transfer.locator('.stock-transfer-preview').getByText('Lahore · Distribution')).toBeVisible();
+      await transfer.getByRole('button', { name: 'Cancel' }).click();
     }
   }
   const initialUrl = page.url();

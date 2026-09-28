@@ -110,6 +110,24 @@ describe('connected ERP workflow', () => {
     expect(workspace).toEqual(before);
   });
 
+  it('moves stock between warehouses without increasing company-wide quantity or value', () => {
+    const workspace = buildDemoWorkspace();
+    const sourceBefore = stock(workspace, 'i-1', 'khi-main');
+    const destinationBefore = stock(workspace, 'i-1', 'lhe-main');
+    const totalBefore = stock(workspace, 'i-1');
+    const journalsBefore = workspace.journals.length;
+    const result = execute(workspace, {
+      type: 'stock_transfer', idempotencyKey: 'warehouse-transfer-test',
+      payload: { itemId: 'i-1', from: 'khi-main', to: 'lhe-main', quantity: '50', date: '2026-10-03' },
+    }, owner);
+    expect(D(stock(result.workspace, 'i-1', 'khi-main').quantity).eq(D(sourceBefore.quantity).minus(50))).toBe(true);
+    expect(D(stock(result.workspace, 'i-1', 'lhe-main').quantity).eq(D(destinationBefore.quantity).plus(50))).toBe(true);
+    expect(stock(result.workspace, 'i-1').quantity).toBe(totalBefore.quantity);
+    expect(stock(result.workspace, 'i-1').value).toBe(totalBefore.value);
+    expect(result.workspace.journals).toHaveLength(journalsBefore);
+    expect(result.workspace.stockMoves.filter(move => move.sourceId === result.recordId)).toHaveLength(2);
+  });
+
   it('keeps outstanding receivables equal to submitted invoice balances', () => {
     const workspace = buildDemoWorkspace();
     const subledger = sum(workspace.documents.filter(document => document.kind === 'sales_invoice' && document.status === 'submitted').map(outstanding));

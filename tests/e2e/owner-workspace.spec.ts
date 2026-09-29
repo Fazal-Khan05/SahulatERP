@@ -26,7 +26,29 @@ test('owner can sign in and review every ERP module', async ({ page }) => {
   for (const module of ['Sales','Purchasing','Imports & costing','Inventory','Collections','Commissions','Payroll','Accounting','Reports','Settings']) {
     await page.locator('button.nav-item').filter({ hasText: module }).click();
     await expect(page.locator('h1')).toContainText(module);
+    if (module === 'Sales') {
+      const sales = page.locator('section.card').first();
+      await sales.getByLabel('Document type').selectOption('sales_invoice');
+      await sales.getByLabel('Search invoices').fill('INV-2026-0001');
+      await expect(sales.locator('tbody tr')).toHaveCount(1);
+      await expect(sales.getByRole('cell', { name: 'Al-Noor Electronics' })).toBeVisible();
+      await sales.getByRole('button', { name: 'View invoice INV-2026-0001' }).click();
+      await expect(page.getByRole('dialog', { name: 'Invoice INV-2026-0001' })).toBeVisible();
+      await page.getByRole('dialog', { name: 'Invoice INV-2026-0001' }).getByRole('button', { name: 'Close dialog' }).click();
+      await sales.getByLabel('Customer').selectOption('c-2');
+      await expect(sales.getByText('No sales documents match these filters.')).toBeVisible();
+      await sales.getByRole('button', { name: 'Clear filters' }).click();
+      expect(await sales.locator('tbody tr').count()).toBeGreaterThan(1);
+    }
     if (module === 'Inventory') {
+      const inventory = page.locator('section.card').first();
+      await inventory.getByLabel('Search inventory').fill('HM-002');
+      await expect(inventory.locator('tbody tr')).toHaveCount(1);
+      await inventory.getByLabel('Warehouse filter').selectOption('lhe-main');
+      await expect(inventory.getByRole('heading', { name: 'Stock in Lahore · Distribution' })).toBeVisible();
+      await inventory.getByLabel('Stock level').selectOption('out');
+      await expect(inventory.getByText('No products match these filters.')).toBeVisible();
+      await inventory.getByRole('button', { name: 'Clear filters' }).click();
       await page.getByRole('button', { name: 'View Rechargeable Desk Fan' }).click();
       const item = page.getByRole('dialog', { name: 'Rechargeable Desk Fan' });
       await expect(item).toBeVisible();

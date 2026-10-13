@@ -56,10 +56,10 @@ export function InventoryView({ workspace, actor, busy, notice, command, openSto
         <label>Stock level<select aria-label="Stock level" value={availability} onChange={event => setAvailability(event.target.value)}><option value="">All levels</option><option value="in">In stock</option><option value="low">Low stock</option><option value="out">Out of stock</option></select></label>
         {filtered && <button className="list-filter-clear" type="button" onClick={clear}>Clear filters</button>}
       </div>
-      <div className="table-scroll"><table><thead><tr>{['SKU','Product','Category',warehouse ? 'Warehouse quantity' : 'Total quantity','Average cost','Value','Reorder','Actions'].map(head => <th key={head}>{head}</th>)}</tr></thead><tbody>{rows.length ? rows : <tr><td colSpan={8}><div className="empty-state">No products match these filters.</div></td></tr>}</tbody></table></div>
+      <div className="table-scroll"><table><thead><tr>{['SKU','Product','Category',warehouse ? 'Warehouse quantity' : 'Total quantity','Average cost','Value','Reorder','Actions'].map(head => <th key={head}>{head}</th>)}</tr></thead><tbody>{rows.length ? rows : <tr><td colSpan={8}><div className="empty-state">No products match these filters.</div></td></tr>}</tbody></table></div><p className="table-scroll-hint">Swipe sideways to see every column.</p>
     </section>
     <section className="card"><div className="card-heading"><div><h2>Stock by warehouse</h2><p>Invoices draw stock from their selected warehouse.</p></div></div>
-      <div className="table-scroll"><table><thead><tr>{['SKU','Product','Warehouse','Quantity','Average cost','Value'].map(head => <th key={head}>{head}</th>)}</tr></thead><tbody>{breakdownRows.length ? breakdownRows : <tr><td colSpan={6}><div className="empty-state">No warehouse stock matches these filters.</div></td></tr>}</tbody></table></div>
+      <div className="table-scroll"><table><thead><tr>{['SKU','Product','Warehouse','Quantity','Average cost','Value'].map(head => <th key={head}>{head}</th>)}</tr></thead><tbody>{breakdownRows.length ? breakdownRows : <tr><td colSpan={6}><div className="empty-state">No warehouse stock matches these filters.</div></td></tr>}</tbody></table></div><p className="table-scroll-hint">Swipe sideways to see every column.</p>
     </section>
     {selected && <ItemDetails key={`${selected.itemId}:${selected.mode}`} workspace={workspace} actor={actor} itemId={selected.itemId} initialMode={selected.mode} onClose={() => setSelected(null)} command={command} busy={busy} notice={notice}/>}
   </div>;

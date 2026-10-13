@@ -1,0 +1,45 @@
+'use client';
+import { useEffect, useState, type FormEvent } from 'react';
+import { CheckCircle2, Loader2, LockKeyhole, ShieldCheck } from 'lucide-react';
+import { createBrowserSupabase } from '@/lib/supabase/client';
+import { Button } from './ui/button';
+
+type State = 'checking' | 'ready' | 'expired' | 'saved';
+
+export function ResetPassword() {
+  const [state, setState] = useState<State>('checking');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+
+  // The callback route exchanged the emailed code for a recovery session; without one the link is expired or used.
+  useEffect(() => {
+    createBrowserSupabase().auth.getUser().then(({ data }) => setState(data.user ? 'ready' : 'expired'));
+  }, []);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault(); setMessage('');
+    if (password.length < 8) return setMessage('Use at least 8 characters.');
+    if (password !== confirm) return setMessage('The two passwords do not match.');
+    setBusy(true);
+    const { error } = await createBrowserSupabase().auth.updateUser({ password });
+    setBusy(false);
+    if (error) return setMessage(error.message);
+    setState('saved');
+  }
+
+  return <main className="login-shell reset-shell"><section className="login-panel">
+    <div className="login-brand"><span className="brand-mark">S</span><span>Sahulat<strong>ERP</strong></span></div>
+    <div className="login-copy"><span className="eyebrow">ACCOUNT RECOVERY</span><h1>Set a new password</h1></div>
+    {state === 'checking' && <p className="form-note"><Loader2 className="spin" size={16}/> Checking your reset link…</p>}
+    {state === 'expired' && <div className="login-form"><p className="error-note">This reset link has expired or was already used. Request a new one from the sign-in page.</p><a className="button button-primary" href="/">Back to sign in</a></div>}
+    {state === 'saved' && <div className="login-form"><p className="form-note"><CheckCircle2 size={16}/> Your password was changed.</p><a className="button button-primary" href="/">Continue to SahulatERP</a></div>}
+    {state === 'ready' && <form onSubmit={submit} className="login-form">
+      <label>New password<div className="input-wrap"><LockKeyhole size={17}/><input value={password} onChange={event => setPassword(event.target.value)} type="password" autoComplete="new-password" required minLength={8}/></div></label>
+      <label>Confirm new password<div className="input-wrap"><LockKeyhole size={17}/><input value={confirm} onChange={event => setConfirm(event.target.value)} type="password" autoComplete="new-password" required minLength={8}/></div></label>
+      {message && <p className="error-note">{message}</p>}
+      <Button type="submit" disabled={busy}>{busy ? <Loader2 className="spin" size={17}/> : <ShieldCheck size={17}/>}Save new password</Button>
+    </form>}
+  </section></main>;
+}

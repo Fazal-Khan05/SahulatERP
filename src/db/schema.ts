@@ -9,6 +9,7 @@ export const tenants = pgTable('tenants', {
 export const memberships = pgTable('memberships', {
   tenantId: uuid('tenant_id').notNull().references(()=>tenants.id,{onDelete:'cascade'}), userId: uuid('user_id').notNull(), role: appRole().notNull(),
   branchIds: text('branch_ids').array().notNull().default([]), active: boolean().notNull().default(true), createdAt: timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
+  employeeId: text('employee_id'),
 }, table=>[primaryKey({columns:[table.tenantId,table.userId]})]);
 export const workspaceSnapshots = pgTable('workspace_snapshots', {
   tenantId: uuid('tenant_id').primaryKey().references(()=>tenants.id,{onDelete:'cascade'}), revision: integer().notNull().default(0),

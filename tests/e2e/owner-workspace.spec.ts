@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 test('owner can sign in and review every ERP module', async ({ page }) => {
   const password = process.env.BOOTSTRAP_OWNER_PASSWORD;
   if (!password) test.skip(true, 'BOOTSTRAP_OWNER_PASSWORD is not configured.');
-  await page.goto('/');
+  await page.goto('/?tenant=11111111-1111-4111-8111-111111111111');
   if (await page.getByRole('heading', { name: 'Welcome back' }).isVisible()) {
     await page.getByLabel('Email address').fill(process.env.BOOTSTRAP_OWNER_EMAIL || 'owner@sahulaterp.com');
     await page.locator('input[type="password"]').fill(password!);

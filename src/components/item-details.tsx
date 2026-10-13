@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Pencil } from 'lucide-react';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
+import { businessToday } from '@/modules/erp/dates';
 import { stock } from '@/modules/erp/engine';
 import { D, formatMoney } from '@/modules/erp/money';
 import type { Actor, Workspace } from '@/modules/erp/types';
@@ -33,7 +34,7 @@ export function ItemDetails({ workspace, actor, itemId, initialMode, onClose, co
   });
   const [purpose, setPurpose] = useState<'count_correction' | 'opening_stock'>('count_correction');
   const [reason, setReason] = useState('');
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => businessToday());
   const [submittedRevision, setSubmittedRevision] = useState<number | null>(null);
   useEffect(() => { if (submittedRevision !== null && workspace.revision !== submittedRevision) onClose(); }, [workspace.revision, submittedRevision, onClose]);
 

@@ -15,7 +15,7 @@ Prepared 24 September 2026 and updated 25 September 2026. A production-shaped pr
 | D05 | Commission rulebook with exceptions | Founder + sales lead | D04 | Inputs, expected amounts, dates and approver for every rule |
 | D06 | Reference dataset/reconciliation | Founder + accountant | D04, D05 | Three usable months; source discrepancies explained |
 | D07 | Five additional customer interviews | Founder | Interview guide | Workflow/price evidence recorded without universal claims |
-| D08 | Compliance matrix/integrator route | Founder + accountant | D02 | Scenarios, sources and questions owned; access process started by authorized owner |
+| D08 | ~~Compliance matrix/integrator route~~ **Closed 13 Oct 2026: FBR invoicing out of scope** | Founder | — | Sales-tax bookkeeping only; no FBR submission |
 | D09 | Release scope/commercial pilot | Founder + partner | D01–D08 | Profile, exclusions, acceptance and proposed terms recorded |
 | D10 | Domain/schema/posting review | Founder + reviewers | D05, D06, D09 | Ownership, states and financial effects understood; G0 passed |
 
@@ -32,7 +32,7 @@ Interview prompts: show the last commission dispute, a partially paid/returned i
 | F05 | Accounts/periods/posting service | F03, F04 | Balanced atomic posting, reversal and lock concurrency tests |
 | F06 | Audit/jobs/outbox/monitoring | F03, F05 | Repeated jobs have one local effect; failures actionable |
 | F07 | Backup/restore rehearsal | F02, F05 | Isolated database/file recovery demonstrated |
-| F08 | FBR sandbox contract exercise | D08, F02 | Versioned samples/errors; no assumed remote deduplication |
+| F08 | ~~FBR sandbox contract exercise~~ **Closed 13 Oct 2026: out of scope** | — | — |
 | F09 | Foundation review | F03–F08 | G1 passed; unresolved external issues explicitly tracked |
 | C01 | Historical invoice/receipt/return import | D06, F09 | Source IDs/checksums, preview and repeat-safe commit |
 | C02 | Versioned plans/assignments/hierarchy | D05, C01 | Historical beneficiaries/rates reproducible |
@@ -46,21 +46,22 @@ Historical imports call the same domain operations later used by sales/collectio
 
 | ID | Task | Dependency | Acceptance |
 |---|---|---|---|
+| T00 | Onboarding wizard, module toggles, branding, printable documents — [plan](docs/plans/2026-10-13-onboarding-modules-branding.md) | F03 | Owner reaches a branded printable invoice unaided; disabled modules unreachable everywhere; FBR and bank-reconciliation code removed |
 | T01 | Parties/items/units/prices/terms/tax identities | F09 | Imports validate identifiers, units and ownership |
 | T02 | Domestic PO/receipt/bill/payment | T01, F05 | Partial receipts/bills and AP/postings reconcile |
 | T03 | Stock/reservations/costing/transfers/counts | T02 | Quantity/value, negative-stock and concurrency checks |
-| T04 | Quote/order/dispatch/invoice/receipt | T03, F08 | Local state and postings agree; live tax issuance waits for compliance gate |
+| T04 | Quote/order/dispatch/invoice/receipt | T03 | Local state and postings agree; printable via the standard template |
 | T05 | Returns/notes/reversals | T04 | Original quantity/cost/tax references; no over-return |
 | T06 | Collections/PDC/credit limits/overrides | T04, F03 | Partial allocation and bounce handled; overrides attributable |
 | T07 | Trading-to-commission connection | C05, T05, T06 | One event has one effect; G3 passed |
 | I01 | FX bills/payment/revaluation | T02, F05 | Accountant-approved realized/unrealized FX cases |
 | I02 | Shipment/GD/classified costs | T03, I01 | Cost versus recoverable/expense/deposit reviewed |
 | I03 | Cost allocation/finalization/late adjustment | I02 | Cost-pool totals and sold/unsold portions reconcile; G4a passed |
-| X01 | Approved effective-dated tax rules | D08, T04, I02 | Applicable/exempt cases and status snapshots validated |
-| X02 | Production FBR adapter/state machine | F08, X01, F06 | Accepted/rejected/unknown outcomes and reconciliation verified |
+| X01 | Approved effective-dated tax rules (bookkeeping only, no FBR submission) | T04, I02 | Applicable/exempt cases and status snapshots validated |
+| X02 | ~~Production FBR adapter/state machine~~ **Closed 13 Oct 2026: out of scope** | — | — |
 | X03 | Invoice outputs/correction procedures | X02, T05 | Required fields and correction scenarios accepted |
 | X04 | Tax workpapers/exports/reconciliation | X03, I03 | Accountant completes current-format rehearsal; G4b passed |
-| P01 | Employees/salaries/attendance | F03, F04, D08 | Effective dates and access boundaries verified |
+| P01 | Employees/salaries/attendance | F03, F04 | Effective dates and access boundaries verified |
 | P02 | Applicable statutory payroll | P01 | Reviewed payroll, adjustments and historical reruns match |
 | P03 | Commission/payroll approval/payslip/export | P02, T07 | No payout enters two payrolls; GL/liabilities reconcile; G4c passed |
 | R01 | Bank-statement import/reconciliation | T06, I01 | Partial/multiple matches, fees and unmatched entries explained |
@@ -98,8 +99,20 @@ The accounting posting map must prevent double recognition of commission expense
 | Locked period/correction | History preserved and authorization recorded |
 | Restored database/attachments | Balances/documents and recovery targets verified |
 | Replayed migration | No duplicate balances or historical FBR submissions |
+| Commission released after an earlier payroll paid part of it | Later release is payable in a new run (`tests/domain/fixes.test.ts`) |
+| Cheque bounces after its commission was paid | Overpayment recovered through payroll; payable equals earned less paid |
+| Late landed cost after a transfer | Cost follows the transferred units, not COGS |
+| Unbalanced or rewritten journal reaches the database | Whole save, snapshot included, rolls back (`tests/domain/database.test.ts`) |
 
-## 6. Execution discipline
+## 6. Prototype status note (12 October 2026)
+
+The prototype re-test is in `reports/qa-2026-10-12/`. All 17 findings from 29 September plus 5 scan findings are fixed; open items there need founder or reviewer decisions, not code:
+
+- **Persistence model (affects F03/F05):** saves are now atomic (snapshot and relational projection in one transaction, migration `202610120001`), but the JSON snapshot is still the source of truth and the server reads it with the service-role key after an explicit membership check. CLAUDE.md requirement 4 wants ordinary runtime queries off that key. Moving to normalized tables as the source of truth, with a restricted database role, needs the D10 schema/posting review first.
+- **Commission target multiplier (C02/C03):** once a target is crossed, the multiplier applies to the whole line, not only the amount above target. Confirm against reviewed partner examples (D05).
+- **Salesperson accounts:** `memberships.employee_id` must be set for a salesperson to see or create their own sales.
+
+## 7. Execution discipline
 
 Before implementation identify actor, input/output, postings, authorization, failures and approved numerical examples. Review schema/migration. Build the complete slice, verify its criteria, demonstrate it with reference data and retain evidence before marking done.
 

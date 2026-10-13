@@ -23,3 +23,29 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder
           SUPABASE_SERVICE_ROLE_KEY: ci-placeholder
+
+  # Browser tests need a Supabase project with seeded data. They run only when these repository
+  # secrets exist; point them at a disposable QA project, never at customer data.
+  e2e:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.QA_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.QA_SUPABASE_PUBLISHABLE_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.QA_SUPABASE_SERVICE_ROLE_KEY }}
+      BOOTSTRAP_OWNER_EMAIL: ${{ secrets.QA_OWNER_EMAIL }}
+      BOOTSTRAP_OWNER_PASSWORD: ${{ secrets.QA_OWNER_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        if: env.BOOTSTRAP_OWNER_PASSWORD != ''
+      - uses: actions/setup-node@v4
+        if: env.BOOTSTRAP_OWNER_PASSWORD != ''
+        with:
+          node-version: 22
+          cache: npm
+      - if: env.BOOTSTRAP_OWNER_PASSWORD != ''
+        run: npm ci
+      - if: env.BOOTSTRAP_OWNER_PASSWORD != ''
+        # Ubuntu runners ship Google Chrome, which playwright.config.ts uses (channel: chrome).
+        run: npx playwright test owner-workspace.spec.ts qa-regression.spec.ts --workers=1

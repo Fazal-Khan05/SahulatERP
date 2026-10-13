@@ -1,0 +1,533 @@
+{
+  "modules": {
+    "Overview": {
+      "headings": [
+        "Sales & collections",
+        "Needs your attention",
+        "Recent sales"
+      ],
+      "buttons": [
+        {
+          "text": "All branches",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "New transaction",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "Commission awaiting approval0 records",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "Shipment costs unallocated1 records",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "Open customer invoices4 records",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "INV-2026-0005",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "View",
+          "label": "View invoice INV-2026-0005",
+          "disabled": false
+        },
+        {
+          "text": "INV-2026-0004",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "View",
+          "label": "View invoice INV-2026-0004",
+          "disabled": false
+        },
+        {
+          "text": "INV-2026-0003",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "View",
+          "label": "View invoice INV-2026-0003",
+          "disabled": false
+        },
+        {
+          "text": "INV-2026-0002",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "View",
+          "label": "View invoice INV-2026-0002",
+          "disabled": false
+        },
+        {
+          "text": "INV-2026-0001",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "View",
+          "label": "View invoice INV-2026-0001",
+          "disabled": false
+        }
+      ],
+      "tableRows": 5
+    },
+    "Sales": {
+      "headings": [
+        "Sales documents"
+      ],
+      "buttons": [
+        {
+          "text": "All branches",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "New transaction",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "New invoice",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "View",
+          "label": "View invoice INV-2026-0001",
+          "disabled": false
+        },
+        {
+          "text": "View",
+          "label": "View invoice INV-2026-0002",
+          "disabled": false
+        },
+        {
+          "text": "View",
+          "label": "View invoice INV-2026-0003",
+          "disabled": false
+        },
+        {
+          "text": "View",
+          "label": "View invoice INV-2026-0004",
+          "disabled": false
+        },
+        {
+          "text": "View",
+          "label": "View invoice INV-2026-0005",
+          "disabled": false
+        },
+        {
+          "text": "Submit",
+          "label": null,
+          "disabled": false
+        }
+      ],
+      "tableRows": 6
+    },
+    "Purchasing": {
+      "headings": [
+        "Purchase documents"
+      ],
+      "buttons": [
+        {
+          "text": "All branches",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "New transaction",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "New purchase order",
+          "label": null,
+          "disabled": false
+        }
+      ],
+      "tableRows": 3
+    },
+    "Imports & costing": {
+      "headings": [
+        "Import shipments"
+      ],
+      "buttons": [
+        {
+          "text": "All branches",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "New transaction",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "Allocate",
+          "label": null,
+          "disabled": false
+        }
+      ],
+      "tableRows": 1
+    },
+    "Inventory": {
+      "headings": [
+        "Stock across all warehouses",
+        "Stock by warehouse"
+      ],
+      "buttons": [
+        {
+          "text": "All branches",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "Transfer stock",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "View",
+          "label": "View LED Panel Light · 24W",
+          "disabled": false
+        },
+        {
+          "text": "Edit",
+          "label": "Edit LED Panel Light · 24W",
+          "disabled": false
+        },
+        {
+          "text": "View",
+          "label": "View Smart Extension Board",
+          "disabled": false
+        },
+        {
+          "text": "Edit",
+          "label": "Edit Smart Extension Board",
+          "disabled": false
+        },
+        {
+          "text": "View",
+          "label": "View Electric Kettle · 1.8L",
+          "disabled": false
+        },
+        {
+          "text": "Edit",
+          "label": "Edit Electric Kettle · 1.8L",
+          "disabled": false
+        },
+        {
+          "text": "View",
+          "label": "View Rechargeable Desk Fan",
+          "disabled": false
+        },
+        {
+          "text": "Edit",
+          "label": "Edit Rechargeable Desk Fan",
+          "disabled": false
+        },
+        {
+          "text": "View",
+          "label": "View USB-C Fast Charger · 65W",
+          "disabled": false
+        },
+        {
+          "text": "Edit",
+          "label": "Edit USB-C Fast Charger · 65W",
+          "disabled": false
+        },
+        {
+          "text": "View",
+          "label": "View Motion Sensor Switch",
+          "disabled": false
+        },
+        {
+          "text": "Edit",
+          "label": "Edit Motion Sensor Switch",
+          "disabled": false
+        }
+      ],
+      "tableRows": 24
+    },
+    "Collections": {
+      "headings": [
+        "Collections and post-dated cheques"
+      ],
+      "buttons": [
+        {
+          "text": "All branches",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "New transaction",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "Record receipt",
+          "label": null,
+          "disabled": false
+        }
+      ],
+      "tableRows": 4
+    },
+    "Commissions": {
+      "headings": [
+        "Commission entitlements"
+      ],
+      "buttons": [
+        {
+          "text": "All branches",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "New transaction",
+          "label": null,
+          "disabled": false
+        }
+      ],
+      "tableRows": 5
+    },
+    "Payroll": {
+      "headings": [
+        "Payroll runs"
+      ],
+      "buttons": [
+        {
+          "text": "All branches",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "New transaction",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "Create payroll",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "reviewed",
+          "label": null,
+          "disabled": false
+        }
+      ],
+      "tableRows": 2
+    },
+    "Accounting": {
+      "headings": [
+        "Trial balance",
+        "Recent posted journals"
+      ],
+      "buttons": [
+        {
+          "text": "All branches",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "New transaction",
+          "label": null,
+          "disabled": false
+        }
+      ],
+      "tableRows": 26
+    },
+    "Reports": {
+      "headings": [
+        "Control reconciliation"
+      ],
+      "buttons": [
+        {
+          "text": "All branches",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "New transaction",
+          "label": null,
+          "disabled": false
+        }
+      ],
+      "tableRows": 2
+    },
+    "Settings": {
+      "headings": [
+        "Company and access",
+        "Audit history"
+      ],
+      "buttons": [
+        {
+          "text": "All branches",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "New transaction",
+          "label": null,
+          "disabled": false
+        },
+        {
+          "text": "Reset demo",
+          "label": null,
+          "disabled": false
+        }
+      ],
+      "tableRows": 15
+    }
+  },
+  "dialogs": {
+    "Sales": "New sales invoice",
+    "Purchasing": "New purchase order",
+    "Imports & costing": "New sales invoice",
+    "Collections": "Record customer receipt",
+    "Commissions": "New sales invoice",
+    "Payroll": "New sales invoice",
+    "Accounting": "New sales invoice",
+    "Reports": "New sales invoice",
+    "Settings": "New sales invoice"
+  },
+  "rolePreview": {
+    "Owner": {
+      "modules": [
+        "Overview",
+        "Sales",
+        "Purchasing",
+        "Imports & costing",
+        "Inventory",
+        "Collections",
+        "CommissionsLIVE",
+        "Payroll",
+        "Accounting",
+        "Reports",
+        "Settings"
+      ],
+      "previewControlVisible": true
+    },
+    "Accountant": {
+      "modules": [
+        "Overview",
+        "Sales",
+        "Purchasing",
+        "Imports & costing",
+        "Inventory",
+        "Collections",
+        "CommissionsLIVE",
+        "Payroll",
+        "Accounting",
+        "Reports",
+        "Settings"
+      ],
+      "previewControlVisible": true
+    },
+    "Sales Manager": {
+      "modules": [
+        "Overview",
+        "Sales",
+        "Collections",
+        "CommissionsLIVE",
+        "Reports"
+      ],
+      "previewControlVisible": false
+    },
+    "Salesperson": {
+      "modules": [
+        "Overview",
+        "Sales",
+        "Collections",
+        "CommissionsLIVE"
+      ],
+      "previewControlVisible": false
+    },
+    "Recovery Officer": {
+      "modules": [
+        "Overview",
+        "Collections",
+        "Reports"
+      ],
+      "previewControlVisible": false
+    },
+    "Warehouse Manager": {
+      "modules": [
+        "Overview",
+        "Purchasing",
+        "Imports & costing",
+        "Inventory",
+        "Reports"
+      ],
+      "previewControlVisible": false
+    },
+    "Payroll Administrator": {
+      "modules": [
+        "Overview",
+        "CommissionsLIVE",
+        "Payroll",
+        "Reports"
+      ],
+      "previewControlVisible": false
+    },
+    "Auditor": {
+      "modules": [
+        "Overview",
+        "Sales",
+        "Purchasing",
+        "Imports & costing",
+        "Inventory",
+        "Collections",
+        "CommissionsLIVE",
+        "Payroll",
+        "Accounting",
+        "Reports",
+        "Settings"
+      ],
+      "previewControlVisible": true
+    }
+  },
+  "browserErrors": [],
+  "revision": "Revision 44 · audited",
+  "apiBoundaries": {
+    "anonymousGet": 401,
+    "missingTenant": 403,
+    "nonMemberTenant": 403
+  },
+  "searchShortcutOpened": false,
+  "branchButtonChangedPage": false,
+  "branchMenuCount": 0,
+  "salesDateFromResults": 1,
+  "returnedInvoiceBalance": "Balance due\nRs -53,100",
+  "warehouseRow": "HM-002\tRechargeable Desk Fan\tHome\t150 pcs\tRs 4,200\tRs 630,000\tavailable\t\nView\nEdit",
+  "homeCategoryRows": 2,
+  "editLahoreCount": "150 pcs",
+  "editDifference": "Quantity change\n+849 pcs",
+  "transferInitialAvailable": "Karachi · Main\nAvailable: 550 pcs\nKarachi · Port\nCurrently: 0 pcs",
+  "768-overview-pageOverflow": false,
+  "768-overview-tableScrollNeeded": true,
+  "768-sales-pageOverflow": false,
+  "768-sales-tableScrollNeeded": true,
+  "768-inventory-pageOverflow": false,
+  "768-inventory-tableScrollNeeded": true,
+  "390-overview-pageOverflow": false,
+  "390-overview-tableScrollNeeded": true,
+  "390-sales-pageOverflow": false,
+  "390-sales-tableScrollNeeded": true,
+  "390-inventory-pageOverflow": false,
+  "390-inventory-tableScrollNeeded": true
+}

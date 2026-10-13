@@ -255,3 +255,27 @@
 .branch-inline input{max-width:320px;min-height:36px}
 .record-label{display:inline-flex;gap:4px}.record-required{color:#b94145}
 .nav-item:disabled{cursor:default;opacity:1}
+
+/* Document editor and dialogs */
+.editor-dialog{width:min(1100px,96vw);max-height:94vh;overflow:auto}
+.editor-head{margin-top:16px}
+.editor-head label{font-size:.76rem;color:#4a5b6d;display:flex;flex-direction:column;gap:6px}
+.editor-lines{margin-top:18px;border:1px solid var(--border);border-radius:9px}
+.editor-lines th,.editor-lines td{padding:8px 10px;vertical-align:top}
+.editor-lines th.num,.editor-lines td.num{text-align:right}
+.editor-lines input.num{text-align:right;min-width:90px}
+.editor-lines td select{min-width:220px}
+.editor-lines td small{display:block}
+.editor-lines td.amount{font-variant-numeric:tabular-nums;white-space:nowrap;padding-top:18px;font-weight:600}
+.editor-foot{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;margin-top:16px;flex-wrap:wrap}
+.editor-foot-left{display:flex;flex-direction:column;gap:12px;flex:1;min-width:260px}
+.editor-notes{font-size:.76rem;color:#4a5b6d;display:flex;flex-direction:column;gap:6px}
+.editor-totals{min-width:260px;border:1px solid var(--border);border-radius:9px;padding:6px 14px}
+.editor-totals th{font-size:.8rem}
+.editor-totals td{font-size:.85rem}
+.doc-actions{display:flex;flex-wrap:wrap;gap:8px;margin:-8px 0 18px}
+.payment-tools{display:flex;justify-content:space-between;gap:16px;align-items:flex-end;margin-top:14px;flex-wrap:wrap}
+.payment-tools label{font-size:.76rem;color:#4a5b6d;display:flex;flex-direction:column;gap:6px;flex:1;min-width:240px}
+.payment-summary{display:flex;flex-direction:column;gap:4px;font-size:.76rem;color:#4a5b6d;text-align:right}
+.payment-summary strong{font-size:1.05rem;color:#152234}
+@media(max-width:760px){.editor-dialog{padding:16px}.editor-foot{flex-direction:column}.editor-totals{width:100%}}

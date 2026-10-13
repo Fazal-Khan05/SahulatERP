@@ -48,10 +48,10 @@ Historical imports call the same domain operations later used by sales/collectio
 |---|---|---|---|
 | T00 | **Built 14 Oct 2026** — onboarding wizard, module toggles, branding, printable documents — [plan](docs/plans/2026-10-13-onboarding-modules-branding.md), [QA](reports/qa-2026-10-14/ONBOARDING_MODULES_QA.md) | F03 | Owner reaches a branded printable invoice unaided; disabled modules unreachable everywhere; FBR and bank-reconciliation code removed |
 | T01 | **Built 14 Oct 2026** — customers, suppliers, products, employees, warehouses and plans screens; archive; CSV import/export — [plan](docs/plans/2026-10-14-master-data.md), [QA](reports/qa-2026-10-14/MASTER_DATA_QA.md). Units of measure and price lists deferred. | F09 | Imports validate identifiers and ownership; all-or-nothing with row-numbered errors |
-| T02 | Domestic PO/receipt/bill/payment | T01, F05 | Partial receipts/bills and AP/postings reconcile |
+| T02 | **Built 15 Oct 2026** — PO → GRN → bill with partial receipts, supplier payments with multi-bill allocation and FX difference — [plan](docs/plans/2026-10-15-document-cycles.md), [QA](reports/qa-2026-10-15/DOCUMENT_CYCLES_QA.md) | T01, F05 | Partial receipts/bills and AP/postings reconcile |
 | T03 | Stock/reservations/costing/transfers/counts | T02 | Quantity/value, negative-stock and concurrency checks |
-| T04 | Quote/order/dispatch/invoice/receipt | T03 | Local state and postings agree; printable via the standard template |
-| T05 | Returns/notes/reversals | T04 | Original quantity/cost/tax references; no over-return |
+| T04 | **Built 15 Oct 2026** — quotation → order → partial deliveries → invoices, multi-line editor, draft edit/cancel, receipts allocated across invoices — [plan](docs/plans/2026-10-15-document-cycles.md) | T03 | Local state and postings agree; printable via the standard template |
+| T05 | **Built 15 Oct 2026 (UI)** — return dialog for invoices and bills; over-return refused | T04 | Original quantity/cost/tax references; no over-return |
 | T06 | Collections/PDC/credit limits/overrides | T04, F03 | Partial allocation and bounce handled; overrides attributable |
 | T07 | Trading-to-commission connection | C05, T05, T06 | One event has one effect; G3 passed |
 | I01 | FX bills/payment/revaluation | T02, F05 | Accountant-approved realized/unrealized FX cases |

@@ -66,7 +66,7 @@ export const purchaseKinds = ["purchase_order", "goods_receipt", "supplier_invoi
 /** Which toggleable module a command belongs to, or null when it is always available. */
 export function moduleOfCommand(type: string, payload: Record<string, unknown>, w: Workspace): ToggleModule | null {
   for (const item of moduleCatalogue) if (item.commands.includes(type)) return item.key;
-  if (["create_document", "submit_document", "convert_document", "return_document"].includes(type)) {
+  if (["create_document", "update_document", "cancel_document", "submit_document", "convert_document", "return_document"].includes(type)) {
     const kind = type === "create_document" ? String(payload.kind ?? "") : w.documents.find(d => d.id === payload.id)?.kind ?? "";
     if ((salesKinds as readonly string[]).includes(kind)) return "sales";
     if ((purchaseKinds as readonly string[]).includes(kind)) return "purchasing";

@@ -1,0 +1,139 @@
+'use client';
+import { useMemo, useState } from 'react';
+import { Loader2, Plus, Save, Trash2 } from 'lucide-react';
+import { Button } from './ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
+import { businessToday } from '@/modules/erp/dates';
+import { documentTitle } from '@/modules/erp/documents';
+import { D, formatMoney, money } from '@/modules/erp/money';
+import type { Actor, Document, Workspace } from '@/modules/erp/types';
+
+type Kind = 'quotation' | 'sales_order' | 'delivery' | 'sales_invoice' | 'purchase_order' | 'goods_receipt' | 'supplier_invoice';
+type LineDraft = { key: number; itemId: string; quantity: string; price: string; discount: string; taxRate: string; employeeId: string };
+type CommandResult = { ok: boolean; message: string; recordId?: string };
+export const salesKinds: Kind[] = ['quotation', 'sales_order', 'delivery', 'sales_invoice'];
+
+const addDays = (date: string, days: number) => { const d = new Date(`${date}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
+let keySeed = 1;
+const newLine = (seed: Partial<LineDraft> = {}): LineDraft => ({ key: keySeed++, itemId: '', quantity: '1', price: '', discount: '0', taxRate: '', employeeId: '', ...seed });
+
+/**
+ * Create or edit any document kind with a multi-line table. Prices prefill from the product
+ * (selling price for sales, standard cost for purchases); tax prefills from company settings.
+ */
+export function DocumentEditor({ open, kind, existing, workspace, actor, busy, onClose, command }: {
+  open: boolean;
+  kind: Kind;
+  existing?: Document | null;
+  workspace: Workspace;
+  actor: Actor;
+  busy: string;
+  onClose: () => void;
+  command: (type: string, payload: Record<string, unknown>) => Promise<CommandResult>;
+}) {
+  const sales = salesKinds.includes(kind);
+  const today = businessToday();
+  const parties = workspace.parties.filter(p => !p.archived && p.type === (sales ? 'customer' : 'supplier'));
+  const products = workspace.items.filter(i => !i.archived);
+  const warehouses = workspace.warehouses.filter(x => !actor.branchIds.length || actor.branchIds.includes(x.branchId));
+  const people = workspace.employees.filter(e => e.active);
+  const defaultTax = workspace.settings.taxRate || '0';
+
+  const [partyId, setPartyId] = useState(existing?.partyId ?? '');
+  const [warehouseId, setWarehouseId] = useState(existing?.warehouseId ?? warehouses[0]?.id ?? '');
+  const [date, setDate] = useState(existing?.date ?? today);
+  const [dueDate, setDueDate] = useState(existing?.dueDate ?? addDays(today, 30));
+  const [dueTouched, setDueTouched] = useState(!!existing);
+  const [currency, setCurrency] = useState(existing?.currency ?? (sales ? 'PKR' : 'USD'));
+  const [fxRate, setFxRate] = useState(existing?.fxRate ?? (sales ? '1' : ''));
+  const [notes, setNotes] = useState(existing?.notes ?? '');
+  const [creditOverride, setCreditOverride] = useState(existing?.creditOverride ?? '');
+  const [lines, setLines] = useState<LineDraft[]>(existing ? existing.lines.map(l => newLine({ itemId: l.itemId, quantity: D(l.quantity).toString(), price: D(l.price).toString(), discount: D(l.discount).toString(), taxRate: D(l.taxRate).toString(), employeeId: l.employeeId })) : [newLine({ taxRate: sales ? defaultTax : '0', employeeId: sales ? (actor.employeeId ?? '') : '' })]);
+  const [error, setError] = useState('');
+
+  const totals = useMemo(() => {
+    let net = D(0), tax = D(0);
+    for (const l of lines) {
+      if (!l.itemId || !l.quantity || l.price === '') continue;
+      try { const lineNet = D(l.quantity).mul(l.price).mul(D(100).minus(l.discount || 0)).div(100); net = net.plus(lineNet); tax = tax.plus(lineNet.mul(l.taxRate || 0).div(100)); } catch { /* partial input */ }
+    }
+    return { net, tax, total: net.plus(tax) };
+  }, [lines]);
+
+  function choosePartyId(id: string) {
+    setPartyId(id);
+    const party = parties.find(p => p.id === id);
+    if (party && !dueTouched) setDueDate(addDays(date, party.terms));
+  }
+  function update(key: number, patch: Partial<LineDraft>) {
+    setLines(current => current.map(l => {
+      if (l.key !== key) return l;
+      const next = { ...l, ...patch };
+      if (patch.itemId !== undefined && patch.itemId !== l.itemId) {
+        const item = products.find(i => i.id === patch.itemId);
+        if (item && (l.price === '' || l.itemId === '')) next.price = D(sales ? item.price : item.cost).toString();
+      }
+      return next;
+    }));
+  }
+  async function save() {
+    setError('');
+    const payload = {
+      kind, partyId, warehouseId, date, dueDate, currency: sales ? 'PKR' : currency, fxRate: sales ? '1' : fxRate, notes,
+      ...(creditOverride.trim() ? { creditOverride: creditOverride.trim() } : {}),
+      lines: lines.filter(l => l.itemId).map(l => ({ itemId: l.itemId, quantity: l.quantity, price: l.price || '0', discount: l.discount || '0', taxRate: l.taxRate || '0', employeeId: sales ? l.employeeId : '', splits: [] })),
+    };
+    if (!payload.lines.length) return setError('Add at least one product line.');
+    const result = existing ? await command('update_document', { id: existing.id, ...payload }) : await command('create_document', payload);
+    if (result.ok) onClose(); else setError(result.message);
+  }
+  const title = existing ? `Edit ${documentTitle(kind).toLowerCase()} ${existing.number}` : `New ${documentTitle(kind).toLowerCase()}`;
+
+  return <Dialog open={open} onOpenChange={value => { if (!value) onClose(); }}>
+    <DialogContent className="editor-dialog">
+      <DialogTitle>{title}</DialogTitle>
+      <DialogDescription>{existing ? 'Drafts can be edited until they are submitted.' : 'Saved as a draft; submit it to post stock and ledger entries.'}</DialogDescription>
+      <div className="editor-head field-grid">
+        <label>{sales ? 'Customer' : 'Supplier'}<select aria-label={sales ? 'Customer' : 'Supplier'} value={partyId} onChange={e => choosePartyId(e.target.value)} required><option value="">Select…</option>{parties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+        <label>Warehouse<select aria-label="Warehouse" value={warehouseId} onChange={e => setWarehouseId(e.target.value)}>{warehouses.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+        <label>Date<input aria-label="Document date" type="date" value={date} onChange={e => setDate(e.target.value)} required/></label>
+        <label>{kind === 'quotation' ? 'Valid until' : 'Due date'}<input aria-label="Due date" type="date" value={dueDate} onChange={e => { setDueDate(e.target.value); setDueTouched(true); }} required/></label>
+        {!sales && <><label>Currency<select aria-label="Currency" value={currency} onChange={e => { setCurrency(e.target.value as typeof currency); if (e.target.value === 'PKR') setFxRate('1'); }}><option>USD</option><option>CNY</option><option>PKR</option></select></label>
+          <label>PKR per {currency}<input aria-label="Exchange rate" type="number" step="0.0001" min="0.0001" value={fxRate} onChange={e => setFxRate(e.target.value)} disabled={currency === 'PKR'} required/></label></>}
+      </div>
+      <div className="table-scroll editor-lines"><table>
+        <thead><tr><th>Product</th><th className="num">Qty</th><th className="num">{sales ? 'Price' : 'Unit cost'}{!sales && currency !== 'PKR' ? ` (${currency})` : ''}</th><th className="num">Disc %</th><th className="num">Tax %</th>{sales && <th>Salesperson</th>}<th className="num">Line total</th><th/></tr></thead>
+        <tbody>{lines.map((l, index) => {
+          const item = products.find(i => i.id === l.itemId);
+          let lineTotal = '';
+          try { if (l.itemId && l.quantity && l.price !== '') lineTotal = money(D(l.quantity).mul(l.price).mul(D(100).minus(l.discount || 0)).div(100)); } catch { lineTotal = ''; }
+          return <tr key={l.key}>
+            <td><select aria-label={`Line ${index + 1} product`} value={l.itemId} onChange={e => update(l.key, { itemId: e.target.value })}><option value="">Select product…</option>{products.map(i => <option key={i.id} value={i.id}>{i.sku} · {i.name}</option>)}</select></td>
+            <td><input aria-label={`Line ${index + 1} quantity`} className="num" type="number" min="0.0001" step="0.0001" value={l.quantity} onChange={e => update(l.key, { quantity: e.target.value })}/>{item && <small className="field-hint">{item.unit}</small>}</td>
+            <td><input aria-label={`Line ${index + 1} price`} className="num" type="number" min="0" step="0.0001" value={l.price} onChange={e => update(l.key, { price: e.target.value })}/></td>
+            <td><input aria-label={`Line ${index + 1} discount`} className="num" type="number" min="0" max="100" step="0.01" value={l.discount} onChange={e => update(l.key, { discount: e.target.value })}/></td>
+            <td><input aria-label={`Line ${index + 1} tax`} className="num" type="number" min="0" max="100" step="0.01" value={l.taxRate} onChange={e => update(l.key, { taxRate: e.target.value })}/></td>
+            {sales && <td><select aria-label={`Line ${index + 1} salesperson`} value={l.employeeId} onChange={e => update(l.key, { employeeId: e.target.value })}><option value="">—</option>{people.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></td>}
+            <td className="num amount">{lineTotal ? formatMoney(lineTotal) : '—'}</td>
+            <td><button type="button" className="icon-button" aria-label={`Remove line ${index + 1}`} disabled={lines.length === 1} onClick={() => setLines(c => c.filter(x => x.key !== l.key))}><Trash2 size={15}/></button></td>
+          </tr>;
+        })}</tbody>
+      </table></div>
+      <div className="editor-foot">
+        <div className="editor-foot-left">
+          <Button type="button" variant="outline" onClick={() => setLines(c => [...c, newLine({ taxRate: sales ? defaultTax : '0', employeeId: sales ? (c.at(-1)?.employeeId ?? '') : '' })])}><Plus size={16}/>Add line</Button>
+          <label className="editor-notes">Notes<textarea rows={2} maxLength={2000} value={notes} onChange={e => setNotes(e.target.value)}/></label>
+          {kind === 'sales_invoice' && actor.role === 'Owner' && <label className="editor-notes">Credit-limit override reason <span className="field-optional">owner only, if the limit is exceeded</span><input value={creditOverride} onChange={e => setCreditOverride(e.target.value)} maxLength={500}/></label>}
+        </div>
+        <table className="doc-totals editor-totals"><tbody>
+          <tr><th>Net</th><td>{formatMoney(money(totals.net))}</td></tr>
+          <tr><th>Tax</th><td>{formatMoney(money(totals.tax))}</td></tr>
+          <tr className="emphasis"><th>Total{!sales && currency !== 'PKR' ? ` (${currency})` : ''}</th><td>{formatMoney(money(totals.total))}</td></tr>
+          {!sales && currency !== 'PKR' && fxRate && <tr><th>≈ PKR</th><td>{formatMoney(money(totals.total.mul(fxRate || 0)))}</td></tr>}
+        </tbody></table>
+      </div>
+      {error && <p className="error-note" role="alert">{error}</p>}
+      <div className="form-actions"><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="button" disabled={!!busy || !partyId} onClick={save}>{busy ? <Loader2 className="spin" size={16}/> : <Save size={16}/>}{existing ? 'Save changes' : 'Save draft'}</Button></div>
+    </DialogContent>
+  </Dialog>;
+}

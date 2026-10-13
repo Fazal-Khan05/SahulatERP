@@ -36,7 +36,12 @@ export async function POST(request: Request) {
     const tenantId = tenantOf(request);
     const { actor, user } = await requireMember(tenantId);
     const { workspace, revision } = await readWorkspace(tenantId!);
-    const body = await request.json() as { type?: string; payload?: Record<string, unknown>; confirmPassword?: string };
+    const text = await request.text();
+    if (!text) {
+      console.error('Empty workspace command body', { method: request.method, length: request.headers.get('content-length'), type: request.headers.get('content-type') });
+      return Response.json({ success: false, message: 'The request reached the server without its data. Please try again.' }, { status: 400 });
+    }
+    const body = JSON.parse(text) as { type?: string; payload?: Record<string, unknown>; confirmPassword?: string };
     const { confirmPassword, ...command } = body;
 
     // Hiding a module needs the member's own password; turning one on does not.

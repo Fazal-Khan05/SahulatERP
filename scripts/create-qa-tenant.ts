@@ -11,7 +11,7 @@ loadEnvConfig(process.cwd());
  */
 export const QA_TENANT = '33333333-3333-4333-8333-333333333333';
 
-async function main() {
+export async function resetQaTenant() {
   const url = process.env.MIGRATION_DATABASE_URL || process.env.DATABASE_URL;
   const ownerId = process.env.BOOTSTRAP_OWNER_ID;
   if (!url || !ownerId) throw new Error('DATABASE_URL and BOOTSTRAP_OWNER_ID are required.');
@@ -30,4 +30,4 @@ async function main() {
   } finally { await sql.end({ timeout: 3 }); }
 }
 
-if (process.argv[1]?.endsWith('create-qa-tenant.ts')) main().catch(error => { console.error(JSON.stringify({ created: false, message: error.message })); process.exitCode = 1; });
+if (process.argv[1]?.endsWith('create-qa-tenant.ts')) resetQaTenant().catch(error => { console.error(JSON.stringify({ created: false, message: error.message })); process.exitCode = 1; });

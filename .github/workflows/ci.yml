@@ -50,4 +50,4 @@ jobs:
         run: npm ci
       - if: env.BOOTSTRAP_OWNER_PASSWORD != ''
         # Ubuntu runners ship Google Chrome, which playwright.config.ts uses (channel: chrome).
-        run: npm run qa:tenant && npx playwright test owner-workspace.spec.ts qa-regression.spec.ts onboarding.spec.ts --workers=1
+        run: npm run qa:tenant && npx playwright test onboarding.spec.ts master-data.spec.ts owner-workspace.spec.ts qa-regression.spec.ts --workers=1

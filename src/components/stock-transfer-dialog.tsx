@@ -57,7 +57,7 @@ export function StockTransferDialog({ open, onClose, workspace, actor, busy, not
       <form onSubmit={submit}>
         <div className="stock-transfer-fields">
           <label className="full-width">Product<select value={item?.id || ''} onChange={event => { setItemId(event.target.value); setQuantity(''); }} required>
-            {workspace.items.map(product => <option value={product.id} key={product.id}>{product.sku} · {product.name}</option>)}
+            {workspace.items.filter(product => !product.archived).map(product => <option value={product.id} key={product.id}>{product.sku} · {product.name}</option>)}
           </select></label>
           <label>From warehouse<select value={from?.id || ''} onChange={event => { setFromId(event.target.value); setToId(''); setQuantity(''); }} required>
             {warehouses.map(warehouse => <option value={warehouse.id} key={warehouse.id}>{warehouse.name}</option>)}

@@ -1,0 +1,76 @@
+import { formatMoney } from '@/modules/erp/money';
+import type { DocumentView } from '@/modules/erp/documents';
+import type { Branding, Workspace } from '@/modules/erp/types';
+
+export type BrandingAssets = { logoUrl?: string; letterheadUrl?: string };
+
+/**
+ * The standard printable template. Pure render, no client hooks, so it serves the live
+ * preview in the browser and the server-rendered /print pages alike.
+ */
+export function DocumentPreview({ view, company, branding, assets, compact = false }: {
+  view: DocumentView;
+  company: Workspace['company'];
+  branding: Branding;
+  assets: BrandingAssets;
+  compact?: boolean;
+}) {
+  const hasLines = view.lines.some(l => l.quantity);
+  return <article className={`doc ${compact ? 'doc-compact' : ''}`} style={{ ['--doc-accent' as string]: branding.accent }}>
+    <header className="doc-header">
+      {assets.letterheadUrl
+        ? <img className="doc-letterhead" src={assets.letterheadUrl} alt={`${company.name} letterhead`}/>
+        : <div className="doc-identity">
+            {assets.logoUrl ? <img className="doc-logo" src={assets.logoUrl} alt={`${company.name} logo`}/> : <span className="doc-logo-fallback" aria-hidden="true">{company.logo}</span>}
+            <div>
+              <strong className="doc-company">{company.name}</strong>
+              {company.address && <span>{company.address}</span>}
+              <span>{[company.phone, company.email].filter(Boolean).join(' · ')}</span>
+              {company.taxId && <span>NTN / STRN: {company.taxId}</span>}
+            </div>
+          </div>}
+      <div className="doc-title">
+        {compact ? <p className="doc-title-text">{view.title}</p> : <h1>{view.title}</h1>}
+        <table className="doc-title-meta"><tbody>
+          <tr><th>Number</th><td>{view.number}</td></tr>
+          <tr><th>Date</th><td>{view.date}</td></tr>
+          {view.dueDate && <tr><th>Due</th><td>{view.dueDate}</td></tr>}
+        </tbody></table>
+      </div>
+    </header>
+
+    <section className="doc-parties">
+      <div>
+        <span className="doc-label">{view.partyLabel}</span>
+        <strong>{view.party.name}</strong>
+        {view.party.address && <span>{view.party.address}</span>}
+        {view.party.email && <span>{view.party.email}</span>}
+        {view.party.taxId && <span>NTN / STRN: {view.party.taxId}</span>}
+      </div>
+      {view.meta.length > 0 && <dl className="doc-meta">{view.meta.map(item => <div key={item.label}><dt>{item.label}</dt><dd>{item.value}</dd></div>)}</dl>}
+    </section>
+
+    <table className="doc-lines">
+      <thead><tr>
+        <th>Description</th>
+        {hasLines && <><th className="num">Qty</th><th className="num">Rate</th><th className="num">Disc.</th><th className="num">Tax</th></>}
+        <th className="num">Amount</th>
+      </tr></thead>
+      <tbody>{view.lines.map((line, index) => <tr key={index}>
+        <td><strong>{line.description}</strong>{line.detail && <small>{line.detail}</small>}</td>
+        {hasLines && <><td className="num">{line.quantity} {line.unit}</td><td className="num">{line.rate && formatMoney(line.rate)}</td><td className="num">{line.discount && `${line.discount}%`}</td><td className="num">{line.taxRate && `${line.taxRate}%`}</td></>}
+        <td className="num">{formatMoney(line.amount)}</td>
+      </tr>)}</tbody>
+    </table>
+
+    <section className="doc-bottom">
+      <div className="doc-notes">{view.notes && <><span className="doc-label">Notes</span><p>{view.notes}</p></>}</div>
+      <table className="doc-totals"><tbody>{view.totals.map(row => <tr key={row.label} className={`${row.emphasis ? 'emphasis' : ''} ${row.credit ? 'credit' : ''}`}><th>{row.label}</th><td>{row.value.startsWith('−') ? `− ${formatMoney(row.value.slice(1).trim())}` : formatMoney(row.value)}</td></tr>)}</tbody></table>
+    </section>
+
+    <footer className="doc-footer">
+      {branding.footer && <p>{branding.footer}</p>}
+      <small>Computer-generated document · {company.name} · amounts in {view.currency}</small>
+    </footer>
+  </article>;
+}

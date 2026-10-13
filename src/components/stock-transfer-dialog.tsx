@@ -16,7 +16,7 @@ export function StockTransferDialog({ open, onClose, workspace, actor, busy, not
   actor: Actor;
   busy: string;
   notice: string;
-  command: (type: string, payload: Record<string, unknown>) => Promise<void>;
+  command: (type: string, payload: Record<string, unknown>) => Promise<unknown>;
 }) {
   const warehouses = workspace.warehouses.filter(warehouse => !actor.branchIds.length || actor.branchIds.includes(warehouse.branchId));
   const [itemId, setItemId] = useState('');

@@ -12,3 +12,4 @@ playwright-report/
 supabase/.temp/
 supabase/.branches/
 .vercel
+.claude/launch.json

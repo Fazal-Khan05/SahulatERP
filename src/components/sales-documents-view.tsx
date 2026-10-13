@@ -16,7 +16,7 @@ export function SalesDocumentsView({ workspace, editable, busy, command, openNew
   workspace: Workspace;
   editable: boolean;
   busy: string;
-  command: (type: string, payload: Record<string, unknown>) => Promise<void>;
+  command: (type: string, payload: Record<string, unknown>) => Promise<unknown>;
   openNew: () => void;
 }) {
   const [query, setQuery] = useState('');
@@ -54,7 +54,7 @@ export function SalesDocumentsView({ workspace, editable, busy, command, openNew
     </div>
     <div className="table-scroll"><table><thead><tr>{['Document','Customer','Date','Type','Status','Total','Action'].map(head => <th key={head}>{head}</th>)}</tr></thead><tbody>{visible.length ? visible.map(document => <tr key={document.id}>
       <td>{document.number}</td><td>{workspace.parties.find(party => party.id === document.partyId)?.name || '—'}</td><td>{document.date}</td><td>{typeLabel[document.kind]}</td><td><span className={`badge ${document.status === 'submitted' ? 'success' : document.status === 'draft' ? 'warning' : 'info'}`}>{document.status}</span></td><td>{formatMoney(document.total)}</td>
-      <td><div className="inventory-row-actions">{document.kind === 'sales_invoice' && <Button key="view" size="sm" variant="outline" aria-label={`View invoice ${document.number}`} onClick={() => setSelectedInvoiceId(document.id)}>View</Button>}{editable && document.status === 'draft' && <Button key="submit" size="sm" disabled={!!busy} onClick={() => command('submit_document', { id: document.id })}>Submit</Button>}{document.kind !== 'sales_invoice' && (!editable || document.status !== 'draft') && <span>{document.status === 'draft' ? 'Read only' : document.status === 'cancelled' ? 'Cancelled' : 'Posted'}</span>}</div></td>
+      <td><div className="inventory-row-actions"><a className="button button-outline button-sm" href={`/print/${document.kind}/${document.id}?tenant=${workspace.tenantId}`} target="_blank" rel="noopener" aria-label={`Print ${document.number}`}>Print</a>{document.kind === 'sales_invoice' && <Button key="view" size="sm" variant="outline" aria-label={`View invoice ${document.number}`} onClick={() => setSelectedInvoiceId(document.id)}>View</Button>}{editable && document.status === 'draft' && <Button key="submit" size="sm" disabled={!!busy} onClick={() => command('submit_document', { id: document.id })}>Submit</Button>}{document.kind !== 'sales_invoice' && (!editable || document.status !== 'draft') && <span>{document.status === 'draft' ? 'Read only' : document.status === 'cancelled' ? 'Cancelled' : 'Posted'}</span>}</div></td>
     </tr>) : <tr><td colSpan={7}><div className="empty-state">No sales documents match these filters.</div></td></tr>}</tbody></table></div><p className="table-scroll-hint">Swipe sideways to see every column.</p>
     <InvoiceDetails workspace={workspace} invoiceId={selectedInvoiceId} onClose={() => setSelectedInvoiceId(null)}/>
   </section>;

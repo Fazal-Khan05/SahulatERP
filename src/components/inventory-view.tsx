@@ -13,7 +13,7 @@ export function InventoryView({ workspace, actor, busy, notice, command, openSto
   actor: Actor;
   busy: string;
   notice: string;
-  command: (type: string, payload: Record<string, unknown>) => Promise<void>;
+  command: (type: string, payload: Record<string, unknown>) => Promise<unknown>;
   openStockTransfer: () => void;
 }) {
   const [selected, setSelected] = useState<{ itemId: string; mode: 'view' | 'edit' } | null>(null);

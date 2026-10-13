@@ -1,11 +1,17 @@
 import { DEMO_TENANT, PARTNER_TENANT, type Workspace } from "./types";
+import { toggleModules } from "./modules";
 export function blankWorkspace(demo=true): Workspace {
+  // A non-demo company starts empty: the onboarding wizard collects its details, modules and first warehouse.
   return {schemaVersion:1,tenantId:demo?DEMO_TENANT:PARTNER_TENANT,revision:0,demo,
-    company:{name:demo?"Sahulat Trading Co.":"Design Partner",taxId:demo?"DEMO-7321946":"",address:"Shahrah-e-Faisal, Karachi, Pakistan",currency:"PKR",logo:"S"},
-    branches:[{id:"karachi",name:"Karachi"},{id:"lahore",name:"Lahore"}],
-    warehouses:[{id:"khi-main",name:"Karachi · Main",branchId:"karachi"},{id:"khi-port",name:"Karachi · Port",branchId:"karachi"},{id:"lhe-main",name:"Lahore · Distribution",branchId:"lahore"}],
-    parties:[],items:[],employees:[],documents:[],journals:[],stockMoves:[],receipts:[],plans:[],commissions:[],commissionMovements:[],shipments:[],payrolls:[],fbr:[],audit:[],bankLines:[],followUps:[],operations:[],periods:[],
-    settings:{taxRate:"18",employerEobi:"5",employeeEobi:"1",eobiBase:"37000",incomeTaxRate:"5",numbering:"ST",approvalLimit:"500000"}};
+    company:{name:demo?"Sahulat Trading Co.":"Design Partner",taxId:demo?"DEMO-7321946":"",address:demo?"Shahrah-e-Faisal, Karachi, Pakistan":"",phone:demo?"+92 21 3456 7890":"",email:demo?"accounts@sahulattrading.example":"",currency:"PKR",logo:demo?"S":"D"},
+    branding:{template:"standard",accent:"#087f69",footer:demo?"Bank: Demo Bank Ltd · Account 0012-3456789 · Thank you for your business.":""},
+    modules:demo?[...toggleModules]:[],
+    setup:{complete:demo,step:1,...(demo?{completedAt:"2026-09-01T00:00:00.000Z"}:{})},
+    branches:demo?[{id:"karachi",name:"Karachi"},{id:"lahore",name:"Lahore"}]:[],
+    warehouses:demo?[{id:"khi-main",name:"Karachi · Main",branchId:"karachi"},{id:"khi-port",name:"Karachi · Port",branchId:"karachi"},{id:"lhe-main",name:"Lahore · Distribution",branchId:"lahore"}]:[],
+    parties:[],items:[],employees:[],documents:[],journals:[],stockMoves:[],receipts:[],plans:[],commissions:[],commissionMovements:[],shipments:[],payrolls:[],audit:[],followUps:[],operations:[],periods:[],
+    // Statutory rates are deliberately blank for a real company; the accountant enters them (CLAUDE.md: no hard-coded rates).
+    settings:demo?{taxRate:"18",employerEobi:"5",employeeEobi:"1",eobiBase:"37000",incomeTaxRate:"5",numbering:"ST",approvalLimit:"500000"}:{taxRate:"",employerEobi:"",employeeEobi:"",eobiBase:"",incomeTaxRate:"",numbering:"DP",approvalLimit:"0"}};
 }
 export function seedMasters(): Workspace {
   const w=blankWorkspace();

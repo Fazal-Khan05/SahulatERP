@@ -107,6 +107,7 @@ test('SQA findings are fixed in the owner workspace', async ({ page, request, br
 
   // SQA-05: reset asks first (cancelled here)
   await openModule(page, 'Settings');
+  await page.getByRole('tab', { name: 'Access' }).click();
   await page.getByRole('button', { name: 'Reset demo' }).click();
   await expect(page.getByRole('dialog', { name: 'Reset the demo company?' })).toBeVisible();
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
@@ -114,6 +115,7 @@ test('SQA findings are fixed in the owner workspace', async ({ page, request, br
   // SQA-07: role preview can be exited without reloading
   for (const role of ['Salesperson', 'Recovery Officer', 'Warehouse Manager', 'Payroll Administrator']) {
     await openModule(page, 'Settings');
+    await page.getByRole('tab', { name: 'Access' }).click();
     await page.getByLabel('View as role').selectOption(role);
     await expect(page.getByText(`Previewing as ${role}`)).toBeVisible();
     await page.screenshot({ path: join(evidence, `preview-${role.toLowerCase().replaceAll(' ', '-')}.png`), fullPage: true });

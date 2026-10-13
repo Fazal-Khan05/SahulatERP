@@ -21,7 +21,6 @@ describe('role-scoped workspace reads (SQA-01)', () => {
       expect(scoped.journals, role).toEqual([]);
       expect(scoped.payrolls, role).toEqual([]);
       expect(scoped.audit, role).toEqual([]);
-      expect(scoped.bankLines, role).toEqual([]);
       expect(scoped.operations, role).toEqual([]);
       expect(scoped.employees.every(e => e.salary === '0' && e.allowance === '0'), role).toBe(true);
     }

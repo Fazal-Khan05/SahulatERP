@@ -1,6 +1,6 @@
 # Plan: Onboarding wizard, module toggles and branded documents
 
-Status: **proposed, not started**. Written 13 October 2026. Supersedes nothing; it adds to [EXECUTION-PLAN.md](../../EXECUTION-PLAN.md) and [IMPLEMENTATION-BACKLOG.md](../../IMPLEMENTATION-BACKLOG.md).
+Status: **built 14 October 2026** (branch `onboarding-modules-branding`); QA record in [reports/qa-2026-10-14/ONBOARDING_MODULES_QA.md](../../reports/qa-2026-10-14/ONBOARDING_MODULES_QA.md). Written 13 October 2026. Supersedes nothing; it adds to [EXECUTION-PLAN.md](../../EXECUTION-PLAN.md) and [IMPLEMENTATION-BACKLOG.md](../../IMPLEMENTATION-BACKLOG.md).
 
 ## 0. Decisions this plan records
 
@@ -10,7 +10,7 @@ Status: **proposed, not started**. Written 13 October 2026. Supersedes nothing; 
 | Bank reconciliation | Out of scope. `bank_import`/`bank_match` commands and `bank_statement_lines` table are removed in this slice. Cash & bank (accounts, balances, transfers, PDC status) stays on the roadmap. | Founder, 13 Oct 2026 |
 | Onboarding inputs | Company name, address, contact, and document branding only. No fiscal-year, chart-of-accounts or tax questions in the wizard. | Founder, 13 Oct 2026 |
 | Module selection | Toggle list (cards) in the wizard and again in Settings → Features. | Founder, 13 Oct 2026 |
-| Turning a module off | Allowed, hides only (never deletes), requires the owner's password. Turning on needs no password. | Founder, 13 Oct 2026 |
+| Turning a module off | Allowed for any non-Auditor member, hides only (never deletes), requires that member's own password. Turning on needs no password. | Founder, 13 Oct 2026 |
 | Invoice template | One standard template with logo, letterhead image, accent colour and footer text. Bespoke layouts are a manual onboarding service, not a product feature. | Founder, 13 Oct 2026 |
 
 Items in [IMPLEMENTATION-BACKLOG.md](../../IMPLEMENTATION-BACKLOG.md) affected: D08 and F08 (FBR) become "closed, out of scope"; T04 loses its "live tax issuance waits for compliance gate" clause; a new item **T00 Onboarding and modules** is added before T01 because every later screen depends on the module flags.
@@ -173,9 +173,9 @@ Effort is listed as small/medium per CLAUDE.md's rule that forecasts are capacit
 
 ## 9. Risks and open points
 
-- **SVG uploads** carry script risk; default to PNG/JPG and accept SVG only after sanitising. Decide: allow SVG at all in v1? Recommendation: no.
+- **SVG uploads**: decided no (13 Oct 2026). PNG/JPG only, sniffed server-side.
 - **Signed URLs in printed PDFs**: browsers embed the image at print time, so expiry is fine; emailed HTML would not be. Emailing is a later slice.
 - **Module off with drafts**: drafts in a hidden module cannot be submitted until it is back on. Message this in the dialog.
 - **Payroll defaults**: provisioning must not seed statutory rates (CLAUDE.md). The Payroll settings screen shows required blanks with hints; `create_payroll` refuses to run until they are filled.
 - **Multi-instance rate limiting** for password attempts: in-memory only for now; move to a table when there is more than one server.
-- **Accountant role** can enable modules and edit branding but cannot disable modules; confirm this is wanted.
+- **Who may change modules/branding**: decided (13 Oct 2026): any non-Auditor member, with their own password to disable.

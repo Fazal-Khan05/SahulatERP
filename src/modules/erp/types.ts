@@ -20,17 +20,20 @@ export type ShipmentCost = { id: string; label: string; amount: string; classifi
 export type Shipment = { id: string; number: string; supplierId: string; documentId: string; origin: string; port: string; container: string; gdNumber: string; eta: string; status: "in_transit" | "customs" | "received" | "costed"; costs: ShipmentCost[]; allocations: { costId: string; itemId: string; amount: string }[] };
 export type PayrollLine = { employeeId: string; basic: string; allowance: string; commission: string; deduction: string; employeeEobi: string; employerEobi: string; incomeTax: string; net: string; commissionIds: string[]; commissionAmounts: Record<string,string>; recovery?: string; recoveryAmounts?: Record<string,string> };
 export type Payroll = { id: string; number: string; month: string; date: string; status: "draft" | "reviewed" | "approved" | "paid"; lines: PayrollLine[]; total: string };
-export type Fbr = { id: string; invoiceId: string; status: "not_required" | "queued" | "validating" | "accepted" | "rejected" | "outcome_unknown" | "reconciled"; attempts: number; reference: string; response: string; date: string };
 export type Audit = { id: string; date: string; actor: string; role: string; action: string; sourceId: string; detail: string };
 export type FollowUp = { id: string; partyId: string; date: string; note: string; nextDate: string; actor: string };
-export type BankLine = { id: string; date: string; description: string; amount: string; matchedJournalId: string | null };
+export type ToggleModule = "sales" | "purchasing" | "inventory" | "imports" | "collections" | "commissions" | "payroll" | "reports";
+export type Branding = { template: "standard"; logoPath?: string; letterheadPath?: string; accent: string; footer: string };
 export type Workspace = {
   schemaVersion: 1; tenantId: string; revision: number; demo: boolean;
-  company: { name: string; taxId: string; address: string; currency: "PKR"; logo: string };
+  company: { name: string; taxId: string; address: string; phone: string; email: string; currency: "PKR"; logo: string };
+  branding: Branding;
+  modules: ToggleModule[];
+  setup: { complete: boolean; step: 1 | 2 | 3 | 4; completedAt?: string };
   branches: {id: string; name: string}[]; warehouses: {id: string; name: string; branchId: string}[];
   parties: Party[]; items: Item[]; employees: Employee[]; documents: Document[]; journals: Journal[];
   stockMoves: StockMove[]; receipts: Receipt[]; plans: CommissionPlan[]; commissions: Commission[]; commissionMovements: CommissionMovement[];
-  shipments: Shipment[]; payrolls: Payroll[]; fbr: Fbr[]; audit: Audit[]; bankLines: BankLine[]; followUps: FollowUp[];
+  shipments: Shipment[]; payrolls: Payroll[]; audit: Audit[]; followUps: FollowUp[];
   periods: {month: string; locked: boolean}[];
   settings: { taxRate: string; employerEobi: string; employeeEobi: string; eobiBase: string; incomeTaxRate: string; numbering: string; approvalLimit: string };
   operations: string[];

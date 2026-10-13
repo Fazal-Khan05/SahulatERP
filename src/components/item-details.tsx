@@ -17,7 +17,7 @@ export function ItemDetails({ workspace, actor, itemId, initialMode, onClose, co
   itemId: string | null;
   initialMode: Mode;
   onClose: () => void;
-  command: (type: string, payload: Record<string, unknown>) => Promise<void>;
+  command: (type: string, payload: Record<string, unknown>) => Promise<unknown>;
   busy: string;
   notice: string;
 }) {

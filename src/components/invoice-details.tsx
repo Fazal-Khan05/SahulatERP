@@ -29,7 +29,7 @@ export function InvoiceDetails({ workspace, invoiceId, onClose }: {
             <DialogTitle>Invoice {invoice.number}</DialogTitle>
             <DialogDescription>Issued {invoice.date} · Due {invoice.dueDate}</DialogDescription>
           </div>
-          <span className={`badge ${invoice.status === 'submitted' ? 'success' : 'warning'}`}>{label(invoice.status)}</span>
+          <div className="invoice-heading-actions"><a className="button button-outline button-sm" href={`/print/${invoice.kind}/${invoice.id}?tenant=${workspace.tenantId}`} target="_blank" rel="noopener" aria-label={`Print invoice ${invoice.number}`}>Print / PDF</a><span className={`badge ${invoice.status === 'submitted' ? 'success' : 'warning'}`}>{label(invoice.status)}</span></div>
         </div>
 
         <div className="invoice-parties">

@@ -36,6 +36,8 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.QA_SUPABASE_SERVICE_ROLE_KEY }}
       BOOTSTRAP_OWNER_EMAIL: ${{ secrets.QA_OWNER_EMAIL }}
       BOOTSTRAP_OWNER_PASSWORD: ${{ secrets.QA_OWNER_PASSWORD }}
+      BOOTSTRAP_OWNER_ID: ${{ secrets.QA_OWNER_ID }}
+      DATABASE_URL: ${{ secrets.QA_DATABASE_URL }}
     steps:
       - uses: actions/checkout@v4
         if: env.BOOTSTRAP_OWNER_PASSWORD != ''
@@ -48,4 +50,4 @@ jobs:
         run: npm ci
       - if: env.BOOTSTRAP_OWNER_PASSWORD != ''
         # Ubuntu runners ship Google Chrome, which playwright.config.ts uses (channel: chrome).
-        run: npx playwright test owner-workspace.spec.ts qa-regression.spec.ts --workers=1
+        run: npm run qa:tenant && npx playwright test owner-workspace.spec.ts qa-regression.spec.ts onboarding.spec.ts --workers=1

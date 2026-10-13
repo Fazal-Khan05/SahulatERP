@@ -1,0 +1,64 @@
+/* Standard document template: used by /print pages and the in-app branding preview. */
+@page { size: A4; margin: 14mm 14mm 16mm; }
+.print-page { background: #e9edf1; min-height: 100vh; padding: 24px; font-family: Arial, Helvetica, "Noto Naskh Arabic", sans-serif; color: #152234; }
+.print-page .doc { max-width: 210mm; margin: 0 auto; background: white; box-shadow: 0 6px 30px #0b1d2e1f; }
+.print-actions { max-width: 210mm; margin: 0 auto 14px; display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: .85rem; color: #4a5b6d; }
+.print-actions .button { display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: 7px; padding: 10px 14px; font-weight: 600; background: #07836c; color: white; cursor: pointer; }
+.print-message { min-height: 100vh; display: grid; place-content: center; gap: 10px; text-align: center; font-family: Arial, sans-serif; }
+
+.doc { --doc-accent: #087f69; padding: 14mm; font-size: 10.5pt; line-height: 1.4; color: #152234; display: flex; flex-direction: column; gap: 9mm; }
+.doc-compact { padding: 8mm; font-size: 8.5pt; gap: 6mm; }
+.doc-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 10mm; border-bottom: 2px solid var(--doc-accent); padding-bottom: 6mm; }
+.doc-letterhead { max-width: 115mm; max-height: 32mm; object-fit: contain; }
+.doc-identity { display: flex; gap: 5mm; align-items: flex-start; }
+.doc-identity > div { display: flex; flex-direction: column; gap: 1mm; font-size: .92em; color: #4a5b6d; }
+.doc-company { font-size: 1.35em; color: #152234; }
+.doc-logo { width: 22mm; height: 22mm; object-fit: contain; }
+.doc-logo-fallback { display: grid; place-items: center; width: 18mm; height: 18mm; border-radius: 4mm; background: var(--doc-accent); color: white; font-weight: 700; font-size: 1.5em; }
+.doc-title { text-align: right; }
+.doc-title h1, .doc-title-text { margin: 0 0 2mm; font-size: 1.7em; letter-spacing: .02em; color: var(--doc-accent); text-transform: uppercase; }
+.doc-title-meta { margin-left: auto; border-collapse: collapse; font-size: .92em; }
+.doc-title-meta th { text-align: left; font-weight: 500; color: #6a7889; padding: .5mm 4mm .5mm 0; }
+.doc-title-meta td { text-align: right; font-weight: 600; }
+.doc-parties { display: flex; justify-content: space-between; gap: 10mm; }
+.doc-parties > div:first-child { display: flex; flex-direction: column; gap: 1mm; color: #4a5b6d; }
+.doc-parties strong { color: #152234; font-size: 1.05em; }
+.doc-label { display: block; font-size: .72em; letter-spacing: .1em; text-transform: uppercase; color: #8290a0; margin-bottom: 1.5mm; }
+.doc-meta { display: grid; grid-template-columns: auto auto; gap: 1.5mm 6mm; margin: 0; font-size: .92em; }
+.doc-meta div { display: contents; }
+.doc-meta dt { color: #6a7889; }
+.doc-meta dd { margin: 0; font-weight: 600; text-align: right; }
+.doc-lines { width: 100%; border-collapse: collapse; }
+.doc-lines th { text-align: left; font-size: .78em; letter-spacing: .06em; text-transform: uppercase; color: white; background: var(--doc-accent); padding: 2.5mm 3mm; }
+.doc-lines td { padding: 2.5mm 3mm; border-bottom: 1px solid #e3e8ee; vertical-align: top; }
+.doc-lines td strong { display: block; font-weight: 600; }
+.doc-lines td small { display: block; color: #8290a0; margin-top: .5mm; }
+.doc-lines .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.doc-bottom { display: flex; justify-content: space-between; align-items: flex-start; gap: 10mm; }
+.doc-notes { flex: 1 1 40%; min-width: 0; color: #4a5b6d; font-size: .92em; }
+.doc-notes p { margin: 0; white-space: pre-wrap; }
+.doc-totals { flex: 0 0 auto; border-collapse: collapse; min-width: 62mm; font-size: .95em; }
+.doc-totals th { text-align: left; font-weight: 500; color: #4a5b6d; padding: 1.5mm 6mm 1.5mm 0; }
+.doc-totals td { text-align: right; padding: 1.5mm 0; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.doc-totals tr.emphasis th, .doc-totals tr.emphasis td { border-top: 1px solid #c8d1db; font-weight: 700; color: #152234; font-size: 1.05em; }
+.doc-totals tr.credit td { color: #2d5f9a; }
+.doc-footer { margin-top: auto; border-top: 1px solid #e3e8ee; padding-top: 4mm; color: #4a5b6d; font-size: .9em; }
+.doc-footer p { margin: 0 0 2mm; white-space: pre-wrap; }
+.doc-footer small { color: #8290a0; }
+
+@media (max-width: 640px) {
+  .print-page { padding: 10px; }
+  .doc { padding: 6mm; font-size: 9pt; }
+  .doc-header, .doc-parties, .doc-bottom { flex-direction: column; }
+  .doc-title { text-align: left; }
+  .doc-title-meta { margin-left: 0; }
+  .doc-totals { width: 100%; }
+}
+
+@media print {
+  .print-page { background: white; padding: 0; }
+  .print-page .doc { box-shadow: none; max-width: none; margin: 0; padding: 0; min-height: 100vh; }
+  .print-actions { display: none; }
+  .doc-lines th { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .doc-logo-fallback { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+}

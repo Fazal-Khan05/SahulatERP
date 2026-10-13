@@ -82,14 +82,6 @@ export function buildDemoWorkspace(): Workspace {
   run('allocate_shipment', { id: shipment, date: '2026-09-19' });
   run('add_shipment_cost', { id: shipment, label: 'Late port demurrage', amount: '75000', classification: 'inventory', basis: 'volume' });
 
-  run('bank_import', { lines: [
-    { date: '2026-09-18', description: 'IBFT AL-NOOR ELECTRONICS', amount: '188800' },
-    { date: '2026-09-20', description: 'ONLINE METRO HOME STORES', amount: '318600' },
-    { date: '2026-09-29', description: 'BANK SERVICE CHARGE', amount: '-3200' },
-  ] });
-  const firstBank = workspace.bankLines[0];
-  const firstReceiptJournal = workspace.journals.find(journal => journal.memo.includes('REC-0001'));
-  if (firstBank && firstReceiptJournal) run('bank_match', { id: firstBank.id, journalId: firstReceiptJournal.id });
   run('follow_up', { partyId: 'c-1', note: 'Confirm remaining balance payment plan', nextDate: '2026-10-05' });
 
   return workspace;

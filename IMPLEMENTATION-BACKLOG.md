@@ -46,7 +46,7 @@ Historical imports call the same domain operations later used by sales/collectio
 
 | ID | Task | Dependency | Acceptance |
 |---|---|---|---|
-| T00 | Onboarding wizard, module toggles, branding, printable documents — [plan](docs/plans/2026-10-13-onboarding-modules-branding.md) | F03 | Owner reaches a branded printable invoice unaided; disabled modules unreachable everywhere; FBR and bank-reconciliation code removed |
+| T00 | **Built 14 Oct 2026** — onboarding wizard, module toggles, branding, printable documents — [plan](docs/plans/2026-10-13-onboarding-modules-branding.md), [QA](reports/qa-2026-10-14/ONBOARDING_MODULES_QA.md) | F03 | Owner reaches a branded printable invoice unaided; disabled modules unreachable everywhere; FBR and bank-reconciliation code removed |
 | T01 | Parties/items/units/prices/terms/tax identities | F09 | Imports validate identifiers, units and ownership |
 | T02 | Domestic PO/receipt/bill/payment | T01, F05 | Partial receipts/bills and AP/postings reconcile |
 | T03 | Stock/reservations/costing/transfers/counts | T02 | Quantity/value, negative-stock and concurrency checks |

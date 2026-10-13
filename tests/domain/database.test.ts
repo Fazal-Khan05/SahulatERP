@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { decodeWorkspace } from '../../src/modules/erp/codec';
 import { buildDemoWorkspace } from '../../src/modules/erp/demo';
 import { execute } from '../../src/modules/erp/engine';
 import { blankWorkspace } from '../../src/modules/erp/seed';
@@ -22,6 +23,14 @@ const supabaseStubs = `
   create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
   grant usage on schema auth to authenticated;
   create table public.schema_migrations (filename text primary key);
+  -- Supabase Storage tables and helper, enough for bucket and object policies to apply.
+  create schema storage;
+  create table storage.buckets (id text primary key, name text not null, public boolean not null default false, file_size_limit bigint, allowed_mime_types text[]);
+  create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text references storage.buckets(id), name text not null, owner uuid);
+  alter table storage.objects enable row level security;
+  create function storage.foldername(name text) returns text[] language sql immutable as $$ select (string_to_array(name, '/'))[1:array_length(string_to_array(name, '/'), 1) - 1] $$;
+  grant usage on schema storage to authenticated;
+  grant select on storage.objects to authenticated;
 `;
 
 const commit = (tenant: string, expected: number, workspace: Workspace, rebuild = false) =>
@@ -38,16 +47,17 @@ beforeAll(async () => {
   await db.exec(supabaseStubs);
   const dir = resolve(__dirname, '../../supabase/migrations');
   const files = readdirSync(dir).filter(name => name.endsWith('.sql')).sort();
-  const latest = files.pop()!;
-  for (const file of files) await db.exec(readFileSync(resolve(dir, file), 'utf8'));
+  // Migrations from 202610120001 on are applied after seeding, to reproduce the hosted database's history.
+  const later = files.filter(name => name >= '202610120001');
+  for (const file of files.filter(name => name < '202610120001')) await db.exec(readFileSync(resolve(dir, file), 'utf8'));
   // Reproduce the hosted state before the latest migration: a stale-free demo snapshot with no projection,
   // and a partner snapshot stored as a double-encoded JSON string by an earlier seed.
-  const demo = buildDemoWorkspace();
+  const { modules: _m, setup: _s, branding: _b, ...demo } = buildDemoWorkspace();
   await db.query(`insert into auth.users (id) values ($1), ($2), ($3)`, [OWNER, SALES, OUTSIDER]);
   await db.query(`insert into public.tenants (id, name, is_demo) values ($1, 'Demo', true), ($2, 'Partner', false)`, [DEMO_TENANT, PARTNER_TENANT]);
   await db.query(`insert into public.memberships (tenant_id, user_id, role) values ($1, $2, 'Owner'), ($1, $3, 'Salesperson'), ($4, $5, 'Owner')`, [DEMO_TENANT, OWNER, SALES, PARTNER_TENANT, OUTSIDER]);
   await db.query(`insert into public.workspace_snapshots (tenant_id, revision, data) values ($1, $2, $3::jsonb), ($4, 0, to_jsonb($5::text))`, [DEMO_TENANT, demo.revision, JSON.stringify(demo), PARTNER_TENANT, JSON.stringify(blankWorkspace(false))]);
-  await db.exec(readFileSync(resolve(dir, latest), 'utf8'));
+  for (const file of later) await db.exec(readFileSync(resolve(dir, file), 'utf8'));
   await db.query(`update public.memberships set employee_id = 'e-4' where user_id = $1`, [SALES]);
 }, 60_000);
 
@@ -56,7 +66,7 @@ describe('transactional workspace commits', () => {
     const [{ kind }] = (await db.query<{ kind: string }>(`select jsonb_typeof(data) as kind from public.workspace_snapshots where tenant_id = $1`, [PARTNER_TENANT])).rows;
     expect(kind).toBe('object');
     expect(await count('companies', PARTNER_TENANT)).toBe(1);
-    expect(await count('warehouses', PARTNER_TENANT)).toBe(3);
+    expect(await count('warehouses', PARTNER_TENANT)).toBe(0);
   });
 
   it('projects the snapshot exactly into relational tables', async () => {
@@ -71,7 +81,7 @@ describe('transactional workspace commits', () => {
 
   it('commits a command to snapshot and projection together', async () => {
     const [{ data, revision }] = (await db.query<{ data: Workspace; revision: number }>('select data, revision from public.workspace_snapshots where tenant_id = $1', [DEMO_TENANT])).rows;
-    const result = execute(data, { type: 'create_journal', idempotencyKey: 'db-test-journal', payload: { date: '2026-10-05', memo: 'Owner top-up', lines: [{ account: '1000', debit: '500', credit: '0' }, { account: '3000', debit: '0', credit: '500' }] } }, owner);
+    const result = execute(decodeWorkspace(data), { type: 'create_journal', idempotencyKey: 'db-test-journal', payload: { date: '2026-10-05', memo: 'Owner top-up', lines: [{ account: '1000', debit: '500', credit: '0' }, { account: '3000', debit: '0', credit: '500' }] } }, owner);
     expect((await commit(DEMO_TENANT, revision, result.workspace)).rows[0].revision).toBe(revision + 1);
     expect(await count('journals')).toBe(result.workspace.journals.length);
     expect(await count('audit_events')).toBe(result.workspace.audit.length);
@@ -107,6 +117,34 @@ describe('transactional workspace commits', () => {
     await expect(commit(PARTNER_TENANT, 0, { ...partner, revision: 1 }, true)).rejects.toThrow(/Only demo/);
     await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${OWNER}', false);`);
     try { await expect(db.query(`select public.commit_workspace('${DEMO_TENANT}', 0, '{}'::jsonb)`)).rejects.toThrow(/permission denied/); }
+    finally { await db.exec('reset role;'); }
+  });
+});
+
+describe('modules and branding projection', () => {
+  it('drops the FBR and bank tables and projects company columns', async () => {
+    const tables = (await db.query<{ table_name: string }>(`select table_name from information_schema.tables where table_schema = 'public'`)).rows.map(r => r.table_name);
+    expect(tables).not.toContain('fbr_simulations');
+    expect(tables).not.toContain('bank_statement_lines');
+    // The partner snapshot predates module toggles and has not been committed since: the projection holds no modules
+    // and no setup flag, and the app fills defaults on read (decodeWorkspace).
+    const [company] = (await db.query<{ enabled_modules: string[]; setup_complete: boolean; phone: string }>(`select enabled_modules, setup_complete, phone from public.companies where tenant_id = $1`, [PARTNER_TENANT])).rows;
+    expect(company).toEqual({ enabled_modules: [], setup_complete: false, phone: '' });
+    const demo = buildDemoWorkspace();
+    const [{ revision }] = (await db.query<{ revision: number }>('select revision from public.workspace_snapshots where tenant_id = $1', [DEMO_TENANT])).rows;
+    await commit(DEMO_TENANT, revision, { ...demo, revision: revision + 1 }, true);
+    const [after] = (await db.query<{ enabled_modules: string[]; setup_complete: boolean; branding: { accent: string } }>(`select enabled_modules, setup_complete, branding from public.companies where tenant_id = $1`, [DEMO_TENANT])).rows;
+    expect(after.setup_complete).toBe(true);
+    expect(after.enabled_modules).toEqual(demo.modules);
+    expect(after.branding.accent).toBe('#087f69');
+  });
+
+  it('lets members read only their own tenant’s branding files and never write them', async () => {
+    await db.query(`insert into storage.objects (bucket_id, name) values ('branding', $1), ('branding', $2)`, [`${DEMO_TENANT}/logo.png`, `${PARTNER_TENANT}/logo.png`]);
+    expect((await asUser(SALES, `select name from storage.objects`)).map(r => (r as { name: string }).name)).toEqual([`${DEMO_TENANT}/logo.png`]);
+    expect((await asUser(OUTSIDER, `select name from storage.objects`)).map(r => (r as { name: string }).name)).toEqual([`${PARTNER_TENANT}/logo.png`]);
+    await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${OWNER}', false);`);
+    try { await expect(db.query(`insert into storage.objects (bucket_id, name) values ('branding', '${DEMO_TENANT}/x.png')`)).rejects.toThrow(/permission denied|policy/); }
     finally { await db.exec('reset role;'); }
   });
 });

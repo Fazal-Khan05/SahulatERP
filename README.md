@@ -11,6 +11,7 @@ The founder prioritizes a complete, reliable product over a fixed launch date. T
 3. Apply hosted migrations with `npm run db:migrate`.
 4. Create the configured demo owner with `npm run auth:bootstrap`.
 5. Load the resettable synthetic company with `npm run db:seed`.
+6. For browser tests of onboarding, create the disposable QA company with `npm run qa:tenant` (safe to rerun; it never touches the demo or partner companies).
 6. Start the application with `npm run dev` and open `http://127.0.0.1:3000`.
 
 The configured owner email is `owner@sahulaterp.com`. Its password exists only in `.env.local`.

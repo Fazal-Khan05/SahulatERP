@@ -65,9 +65,7 @@ export function scopeWorkspace(source: Workspace, actor: Actor): Workspace {
     shipments: role === "Warehouse Manager" || canReadLedger(role) ? source.shipments.filter(s => documentIds.has(s.documentId)) : [],
     payrolls: payRoles.includes(role) && !branchLimited ? source.payrolls : [],
     journals: canReadLedger(role) && !branchLimited ? source.journals : [],
-    bankLines: canReadLedger(role) && !branchLimited ? source.bankLines : [],
     audit: canReadLedger(role) && !branchLimited ? source.audit : [],
-    fbr: source.fbr.filter(f => documentIds.has(f.invoiceId)),
     followUps: ["Sales Manager", "Recovery Officer"].includes(role) || canReadLedger(role) ? source.followUps.filter(f => parties.some(p => p.id === f.partyId)) : [],
   };
 }
@@ -88,6 +86,5 @@ export function filterBranch(source: Workspace, branchId: string): Workspace {
     shipments: source.shipments.filter(s => documentIds.has(s.documentId)),
     commissions,
     commissionMovements: source.commissionMovements.filter(m => commissionIds.has(m.commissionId)),
-    fbr: source.fbr.filter(f => documentIds.has(f.invoiceId)),
   };
 }

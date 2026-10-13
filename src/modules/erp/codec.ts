@@ -25,5 +25,6 @@ export function decodeWorkspace(value: unknown): Workspace {
     modules: legacy ? [...toggleModules] : raw.modules!,
     setup: raw.setup ?? { complete: !!raw.demo || hasData, step: 1 },
     followUps: raw.followUps ?? [],
+    bankAccounts: raw.bankAccounts ?? [],
   };
 }

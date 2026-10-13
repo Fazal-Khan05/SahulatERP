@@ -52,7 +52,7 @@ Historical imports call the same domain operations later used by sales/collectio
 | T03 | Stock/reservations/costing/transfers/counts | T02 | Quantity/value, negative-stock and concurrency checks |
 | T04 | **Built 15 Oct 2026** — quotation → order → partial deliveries → invoices, multi-line editor, draft edit/cancel, receipts allocated across invoices — [plan](docs/plans/2026-10-15-document-cycles.md) | T03 | Local state and postings agree; printable via the standard template |
 | T05 | **Built 15 Oct 2026 (UI)** — return dialog for invoices and bills; over-return refused | T04 | Original quantity/cost/tax references; no over-return |
-| T06 | Collections/PDC/credit limits/overrides | T04, F03 | Partial allocation and bounce handled; overrides attributable |
+| T06 | **Built 15 Oct 2026 (UI)** — PDC register with deposit/clear/bounce, receipts into named bank/cash accounts, multi-invoice allocation — [plan](docs/plans/2026-10-15-cash-bank-reports.md), [QA](reports/qa-2026-10-15/CASH_BANK_REPORTS_QA.md) | T04, F03 | Partial allocation and bounce handled; overrides attributable |
 | T07 | Trading-to-commission connection | C05, T05, T06 | One event has one effect; G3 passed |
 | I01 | FX bills/payment/revaluation | T02, F05 | Accountant-approved realized/unrealized FX cases |
 | I02 | Shipment/GD/classified costs | T03, I01 | Cost versus recoverable/expense/deposit reviewed |
@@ -64,8 +64,8 @@ Historical imports call the same domain operations later used by sales/collectio
 | P01 | Employees/salaries/attendance | F03, F04 | Effective dates and access boundaries verified |
 | P02 | Applicable statutory payroll | P01 | Reviewed payroll, adjustments and historical reruns match |
 | P03 | Commission/payroll approval/payslip/export | P02, T07 | No payout enters two payrolls; GL/liabilities reconcile; G4c passed |
-| R01 | Bank-statement import/reconciliation | T06, I01 | Partial/multiple matches, fees and unmatched entries explained |
-| R02 | Financial/operating reports/close | I03, X04, P03, R01 | Subledgers and tax controls reconcile to GL |
+| R01 | ~~Bank-statement import/reconciliation~~ **Closed 13 Oct 2026: out of scope.** Cash & bank accounts, transfers, expenses and the cheque register were built 15 Oct 2026 instead — [QA](reports/qa-2026-10-15/CASH_BANK_REPORTS_QA.md) | — | — |
+| R02 | Financial/operating reports/close — **reports built 15 Oct 2026** (aged AR/AP, statements, stock valuation/movements, sales analysis, P&L, balance sheet, trial balance, general ledger, reconciliation, CSV/print); period close and tax controls remain | I03, X04, P03 | Subledgers and tax controls reconcile to GL |
 | R03 | Migration/billing/support/export tooling | R02 | Standard onboarding rehearsal, safe migration; G5 passed |
 
 The accounting posting map must prevent double recognition of commission expense when transferring an existing accrued liability into payroll.

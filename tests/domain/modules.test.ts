@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { decodeWorkspace } from '../../src/modules/erp/codec';
 import { buildDemoWorkspace } from '../../src/modules/erp/demo';
 import { execute } from '../../src/modules/erp/engine';
-import { dependentsOf, moduleEnabled, moduleOfCommand, withRequirements } from '../../src/modules/erp/modules';
+import { dependentsOf, moduleEnabled, moduleOfCommand, toggleModules, withRequirements } from '../../src/modules/erp/modules';
 import { blankWorkspace } from '../../src/modules/erp/seed';
 import type { Actor, Workspace } from '../../src/modules/erp/types';
 
@@ -107,7 +107,7 @@ describe('decodeWorkspace defaults', () => {
   it('upgrades a pre-module snapshot: all modules on, set up when it has data, FBR/bank keys dropped', () => {
     const { modules: _m, setup: _s, branding: _b, ...legacy } = buildDemoWorkspace();
     const decoded = decodeWorkspace({ ...legacy, demo: false, fbr: [{ id: 'x' }], bankLines: [] });
-    expect(decoded.modules).toHaveLength(8);
+    expect(decoded.modules).toHaveLength(toggleModules.length);
     expect(decoded.setup.complete).toBe(true);
     expect(decoded.branding.accent).toBe('#087f69');
     expect('fbr' in decoded).toBe(false);

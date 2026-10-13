@@ -5,5 +5,7 @@ export function decodeWorkspace(value: unknown): Workspace {
   if (!decoded || typeof decoded !== 'object' || !('tenantId' in decoded) || !('company' in decoded)) {
     throw new Error('The persisted workspace is invalid.');
   }
-  return decoded as Workspace;
+  // Snapshots saved before follow-ups were persisted have no followUps array.
+  const workspace = decoded as Workspace;
+  return { ...workspace, followUps: workspace.followUps ?? [] };
 }

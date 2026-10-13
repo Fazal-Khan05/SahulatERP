@@ -18,10 +18,11 @@ export type Commission = { id: string; invoiceId: string; lineId: string; employ
 export type CommissionMovement = { id: string; commissionId: string; sourceId: string; date: string; type: "accrued" | "released" | "release_reversed" | "paid" | "entitlement_adjusted" | "recovery_recorded"; amount: string; note: string };
 export type ShipmentCost = { id: string; label: string; amount: string; classification: "inventory" | "recoverable_tax" | "deposit" | "expense"; basis: "value" | "quantity" | "weight" | "volume"; allocated: boolean };
 export type Shipment = { id: string; number: string; supplierId: string; documentId: string; origin: string; port: string; container: string; gdNumber: string; eta: string; status: "in_transit" | "customs" | "received" | "costed"; costs: ShipmentCost[]; allocations: { costId: string; itemId: string; amount: string }[] };
-export type PayrollLine = { employeeId: string; basic: string; allowance: string; commission: string; deduction: string; employeeEobi: string; employerEobi: string; incomeTax: string; net: string; commissionIds: string[]; commissionAmounts: Record<string,string> };
+export type PayrollLine = { employeeId: string; basic: string; allowance: string; commission: string; deduction: string; employeeEobi: string; employerEobi: string; incomeTax: string; net: string; commissionIds: string[]; commissionAmounts: Record<string,string>; recovery?: string; recoveryAmounts?: Record<string,string> };
 export type Payroll = { id: string; number: string; month: string; date: string; status: "draft" | "reviewed" | "approved" | "paid"; lines: PayrollLine[]; total: string };
 export type Fbr = { id: string; invoiceId: string; status: "not_required" | "queued" | "validating" | "accepted" | "rejected" | "outcome_unknown" | "reconciled"; attempts: number; reference: string; response: string; date: string };
 export type Audit = { id: string; date: string; actor: string; role: string; action: string; sourceId: string; detail: string };
+export type FollowUp = { id: string; partyId: string; date: string; note: string; nextDate: string; actor: string };
 export type BankLine = { id: string; date: string; description: string; amount: string; matchedJournalId: string | null };
 export type Workspace = {
   schemaVersion: 1; tenantId: string; revision: number; demo: boolean;
@@ -29,7 +30,7 @@ export type Workspace = {
   branches: {id: string; name: string}[]; warehouses: {id: string; name: string; branchId: string}[];
   parties: Party[]; items: Item[]; employees: Employee[]; documents: Document[]; journals: Journal[];
   stockMoves: StockMove[]; receipts: Receipt[]; plans: CommissionPlan[]; commissions: Commission[]; commissionMovements: CommissionMovement[];
-  shipments: Shipment[]; payrolls: Payroll[]; fbr: Fbr[]; audit: Audit[]; bankLines: BankLine[];
+  shipments: Shipment[]; payrolls: Payroll[]; fbr: Fbr[]; audit: Audit[]; bankLines: BankLine[]; followUps: FollowUp[];
   periods: {month: string; locked: boolean}[];
   settings: { taxRate: string; employerEobi: string; employeeEobi: string; eobiBase: string; incomeTaxRate: string; numbering: string; approvalLimit: string };
   operations: string[];

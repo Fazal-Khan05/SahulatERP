@@ -1,0 +1,37 @@
+{
+  "tenants": [
+    {
+      "name": "Sahulat Trading Co.",
+      "is_demo": true,
+      "revision": 44,
+      "snapshot_documents": 9,
+      "table_documents": 8,
+      "snapshot_journals": 21,
+      "table_journals": 19,
+      "snapshot_stock_moves": 20,
+      "table_stock_moves": 18,
+      "snapshot_audit": 44,
+      "table_audit": 41
+    },
+    {
+      "name": "Design Partner",
+      "is_demo": false,
+      "revision": 0,
+      "snapshot_documents": null,
+      "table_documents": 0,
+      "snapshot_journals": null,
+      "table_journals": 0,
+      "snapshot_stock_moves": null,
+      "table_stock_moves": 0,
+      "snapshot_audit": null,
+      "table_audit": 0
+    }
+  ],
+  "policyCount": 23,
+  "policyCommands": [
+    "SELECT"
+  ],
+  "tablesWithoutForcedRls": [
+    "schema_migrations"
+  ]
+}

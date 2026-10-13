@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { ArrowRightLeft } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
+import { businessToday } from '@/modules/erp/dates';
 import { stock } from '@/modules/erp/engine';
 import { D } from '@/modules/erp/money';
 import type { Actor, Workspace } from '@/modules/erp/types';
@@ -22,7 +23,7 @@ export function StockTransferDialog({ open, onClose, workspace, actor, busy, not
   const [fromId, setFromId] = useState('');
   const [toId, setToId] = useState('');
   const [quantity, setQuantity] = useState('');
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => businessToday());
   const [error, setError] = useState('');
   useEffect(() => { if (!open) { setQuantity(''); setError(''); } }, [open]);
   const item = workspace.items.find(product => product.id === itemId) || workspace.items[0];

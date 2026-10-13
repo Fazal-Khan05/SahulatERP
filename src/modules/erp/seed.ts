@@ -4,7 +4,7 @@ export function blankWorkspace(demo=true): Workspace {
     company:{name:demo?"Sahulat Trading Co.":"Design Partner",taxId:demo?"DEMO-7321946":"",address:"Shahrah-e-Faisal, Karachi, Pakistan",currency:"PKR",logo:"S"},
     branches:[{id:"karachi",name:"Karachi"},{id:"lahore",name:"Lahore"}],
     warehouses:[{id:"khi-main",name:"Karachi · Main",branchId:"karachi"},{id:"khi-port",name:"Karachi · Port",branchId:"karachi"},{id:"lhe-main",name:"Lahore · Distribution",branchId:"lahore"}],
-    parties:[],items:[],employees:[],documents:[],journals:[],stockMoves:[],receipts:[],plans:[],commissions:[],commissionMovements:[],shipments:[],payrolls:[],fbr:[],audit:[],bankLines:[],operations:[],periods:[],
+    parties:[],items:[],employees:[],documents:[],journals:[],stockMoves:[],receipts:[],plans:[],commissions:[],commissionMovements:[],shipments:[],payrolls:[],fbr:[],audit:[],bankLines:[],followUps:[],operations:[],periods:[],
     settings:{taxRate:"18",employerEobi:"5",employeeEobi:"1",eobiBase:"37000",incomeTaxRate:"5",numbering:"ST",approvalLimit:"500000"}};
 }
 export function seedMasters(): Workspace {

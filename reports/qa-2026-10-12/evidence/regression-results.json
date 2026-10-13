@@ -1,0 +1,32 @@
+{
+  "apiBoundaries": {
+    "anonymous": 401,
+    "missingTenant": 403,
+    "nonMember": 403
+  },
+  "chartLabel": "Weekly sales and collections. 7 Sept: sales Rs 969,960, collections Rs 0; 14 Sept: sales Rs 65,490, collections Rs 507,400",
+  "headerDialogs": {
+    "Sales": "New sales invoice",
+    "Purchasing": "New purchase order",
+    "Imports & costing": null,
+    "Collections": "Record customer receipt",
+    "Commissions": null,
+    "Payroll": null,
+    "Accounting": null,
+    "Reports": null,
+    "Settings": null
+  },
+  "branchFilter": {
+    "allRows": 6,
+    "lahoreRows": 3
+  },
+  "returnedInvoiceBalance": "Customer credit\nRs 53,100",
+  "reconciliation": [
+    "Accounts receivable\tRs 474,950\tRs 474,950\treconciled",
+    "Inventory\tRs 7,545,500\tRs 7,545,500\treconciled",
+    "Commission payable\tRs 8,597.5\tRs 8,597.5\treconciled"
+  ],
+  "mobileActionColumnSticky": "sticky",
+  "mobilePageOverflow": false,
+  "browserErrors": []
+}

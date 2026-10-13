@@ -14,7 +14,8 @@ export function LoginScreen() {
     event.preventDefault(); setBusy(true); setMessage('');
     const { error } = await createBrowserSupabase().auth.signInWithPassword({ email, password });
     if (error) { setMessage(error.message); setBusy(false); return; }
-    window.location.assign('/');
+    // Stay on the requested workspace/page (e.g. /?tenant=…) rather than dropping it on sign-in.
+    window.location.assign(`${window.location.pathname}${window.location.search}`);
   }
   async function reset() {
     setBusy(true); setMessage('');

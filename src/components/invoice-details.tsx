@@ -104,7 +104,10 @@ export function InvoiceDetails({ workspace, invoiceId, onClose }: {
             <div className="invoice-total"><span>Invoice total</span><strong>{formatMoney(invoice.total)}</strong></div>
             <div><span>Cleared payments</span><strong>− {formatMoney(invoice.paid)}</strong></div>
             <div><span>Returns / credits</span><strong>− {formatMoney(invoice.returned)}</strong></div>
-            <div className="invoice-balance"><span>Balance due</span><strong>{formatMoney(outstanding(invoice))}</strong></div>
+            {/* Returns after payment can leave the customer in credit; that is owed to them, not due from them. */}
+            {D(outstanding(invoice)).lt(0)
+              ? <div className="invoice-balance credit"><span>Customer credit</span><strong>{formatMoney(D(outstanding(invoice)).negated().toString())}</strong></div>
+              : <div className="invoice-balance"><span>Balance due</span><strong>{formatMoney(outstanding(invoice))}</strong></div>}
           </div>
         </div>
       </>}

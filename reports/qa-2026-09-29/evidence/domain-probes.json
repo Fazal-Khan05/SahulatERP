@@ -1,0 +1,20 @@
+{
+  "transferSource": {
+    "quantity": "200.0000",
+    "value": "1213882.3529",
+    "average": "6069.4118"
+  },
+  "fullTransferRemainder": {
+    "quantity": "0.0000",
+    "value": "-0.0071",
+    "average": "0.0000"
+  },
+  "futureInvoiceNumber": "INV-2026-0005",
+  "futureInvoiceDate": "2027-01-05",
+  "negativeStock": "Insufficient stock for LED Panel Light · 24W in Karachi · Main. Requested: 999999, available: 400.",
+  "lockedPeriod": "Accounting period 2026-10 is locked.",
+  "roleRejected": "Your role does not permit this action.",
+  "duplicateOperationMessage": "This operation was already completed.",
+  "duplicateOperationRevision": 39,
+  "originalRevision": 39
+}

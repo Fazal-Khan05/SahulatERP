@@ -70,7 +70,7 @@ test('new company: wizard, features, branding and printing', async ({ page, requ
 
   // Step 4 — review and finish
   await expect(page.getByRole('heading', { name: 'Review' })).toBeVisible();
-  await expect(page.getByText('6 turned on')).toBeVisible();
+  await expect(page.getByText('7 turned on')).toBeVisible(); // basics preset (5, incl. Cash & bank) + Commissions with its Collections dependency
   await page.getByRole('button', { name: 'Create my workspace' }).click();
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
   await expect(page.locator('button.nav-item').filter({ hasText: 'Commissions' })).toBeVisible();

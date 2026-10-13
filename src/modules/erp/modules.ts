@@ -21,6 +21,7 @@ export const moduleCatalogue: ModuleDefinition[] = [
   { key: "inventory", label: "Inventory", description: "Stock by warehouse, transfers, counts and weighted-average valuation.", setsUp: "A first branch and warehouse if you have none, and inventory and cost-of-sales accounts.", requires: [], commands: ["stock_transfer", "stock_adjust", "set_stock_quantity", "bulk_stock_increase", "save_item", "save_branch", "save_warehouse"] },
   { key: "imports", label: "Imports & costing", description: "Shipments, customs and freight charges allocated into landed cost.", setsUp: "Shipment number series and the deposits and operating-expense accounts used for import charges.", requires: ["purchasing", "inventory"], commands: ["create_shipment", "add_shipment_cost", "allocate_shipment"] },
   { key: "collections", label: "Collections & PDCs", description: "Customer receipts, post-dated cheques and recovery follow-ups.", setsUp: "Receipt number series and the bank & cash account.", requires: ["sales"], commands: ["update_cheque", "follow_up"] },
+  { key: "cashbank", label: "Cash & bank", description: "Bank and cash accounts, balances, transfers, petty expenses and the cheque register.", setsUp: "A main bank account and a cash-in-hand account if you have none; each gets its own ledger code.", requires: [], commands: ["save_bank_account", "bank_transfer", "record_expense"] },
   { key: "commissions", label: "Commissions", description: "Salesperson entitlements that release as customers actually pay.", setsUp: "A draft commission plan to edit, and the commission expense and payable accounts.", requires: ["sales", "collections"], commands: ["save_plan", "approve_commission"] },
   { key: "payroll", label: "Payroll", description: "Monthly salary runs with attendance, deductions and commission settlement.", setsUp: "Salary, payroll-payable and statutory accounts. You enter your own EOBI and tax rates before the first run.", requires: [], commands: ["create_payroll", "update_payroll"] },
   { key: "reports", label: "Reports", description: "Sales, stock, receivables and ledger reports with reconciliation checks.", setsUp: "Nothing extra; reports read your existing records.", requires: [], commands: [] },
@@ -29,8 +30,8 @@ export const moduleCatalogue: ModuleDefinition[] = [
 export const toggleModules = moduleCatalogue.map(item => item.key);
 
 export const presets: { key: string; label: string; description: string; modules: ToggleModule[] }[] = [
-  { key: "distributor", label: "Importer-distributor", description: "Everything an importing wholesaler needs, including commissions.", modules: ["sales", "purchasing", "inventory", "imports", "collections", "commissions", "reports"] },
-  { key: "basics", label: "Just the basics", description: "Buy, stock, sell and see reports. Add the rest later.", modules: ["sales", "purchasing", "inventory", "reports"] },
+  { key: "distributor", label: "Importer-distributor", description: "Everything an importing wholesaler needs, including commissions.", modules: ["sales", "purchasing", "inventory", "imports", "collections", "cashbank", "commissions", "reports"] },
+  { key: "basics", label: "Just the basics", description: "Buy, stock, sell and see reports. Add the rest later.", modules: ["sales", "purchasing", "inventory", "cashbank", "reports"] },
 ];
 
 const byKey = new Map(moduleCatalogue.map(item => [item.key, item]));
@@ -91,6 +92,7 @@ export function moduleRecordCounts(w: Workspace, key: ToggleModule): { label: st
     case "collections": return [{ label: "receipts", count: w.receipts.length }, { label: "follow-ups", count: w.followUps.length }];
     case "commissions": return [{ label: "entitlements", count: w.commissions.length }, { label: "plans", count: w.plans.length }];
     case "payroll": return [{ label: "payroll runs", count: w.payrolls.length }, { label: "employees", count: w.employees.length }];
+    case "cashbank": return [{ label: "accounts", count: w.bankAccounts.length }];
     case "reports": return [];
   }
 }

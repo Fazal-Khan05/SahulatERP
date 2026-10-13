@@ -67,6 +67,8 @@ export function scopeWorkspace(source: Workspace, actor: Actor): Workspace {
     journals: canReadLedger(role) && !branchLimited ? source.journals : [],
     audit: canReadLedger(role) && !branchLimited ? source.audit : [],
     followUps: ["Sales Manager", "Recovery Officer"].includes(role) || canReadLedger(role) ? source.followUps.filter(f => parties.some(p => p.id === f.partyId)) : [],
+    // Account names are needed to record a receipt; balances come from journals, which are already scoped.
+    bankAccounts: source.bankAccounts,
   };
 }
 

@@ -99,6 +99,8 @@ export function PaymentDialog({ open, partyType, presetPartyId, workspace, busy,
   const [partyId, setPartyId] = useState(presetPartyId ?? '');
   const [allocations, setAllocations] = useState<Record<string, string>>({});
   const [method, setMethod] = useState<'bank' | 'cash' | 'cheque'>('bank');
+  const accounts = workspace.bankAccounts.filter(a => !a.archived);
+  const [accountId, setAccountId] = useState(accounts.find(a => a.type === 'bank')?.id ?? accounts[0]?.id ?? '');
   const [chequeNo, setChequeNo] = useState('');
   const [date, setDate] = useState(today);
   const [dueDate, setDueDate] = useState(today);
@@ -124,7 +126,7 @@ export function PaymentDialog({ open, partyType, presetPartyId, workspace, busy,
     if (!lines.length) return setError('Allocate the payment to at least one invoice.');
     for (const a of lines) { const d = openInvoices.find(x => x.id === a.invoiceId)!; if (D(a.amount).gt(balance(d))) return setError(`${d.number}: allocation exceeds its balance of ${balance(d).toString()}.`); }
     const amount = partyType === 'customer' ? money(allocated) : money(paidPkr || pkrAmount);
-    const result = await command('create_receipt', { partyId, date, amount, method, chequeNo, dueDate: method === 'cheque' ? dueDate : date, allocations: lines, employeeId: '', note: note || (partyType === 'customer' ? 'Customer collection' : 'Supplier payment') });
+    const result = await command('create_receipt', { partyId, date, amount, method, chequeNo, dueDate: method === 'cheque' ? dueDate : date, allocations: lines, employeeId: '', note: note || (partyType === 'customer' ? 'Customer collection' : 'Supplier payment'), ...(method !== 'cheque' && accountId ? { accountId } : {}) });
     if (result.ok) onClose(); else setError(result.message);
   }
   return <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
@@ -148,7 +150,8 @@ export function PaymentDialog({ open, partyType, presetPartyId, workspace, busy,
       </div>}
       <div className="field-grid" style={{ marginTop: 14 }}>
         {partyType === 'supplier' && <label>PKR actually paid<input aria-label="PKR paid" type="number" min="0" step="0.01" value={paidPkr} placeholder={pkrAmount.toFixed(2)} onChange={e => setPaidPkr(e.target.value)}/><small className="field-hint">Difference from the booked rate posts as exchange gain or loss.</small></label>}
-        <label>Method<select aria-label="Payment method" value={method} onChange={e => setMethod(e.target.value as typeof method)}><option value="bank">Bank transfer</option><option value="cash">Cash</option><option value="cheque">Cheque / PDC</option></select></label>
+        <label>Method<select aria-label="Payment method" value={method} onChange={e => { const m = e.target.value as typeof method; setMethod(m); const preferred = accounts.find(a => a.type === (m === 'cash' ? 'cash' : 'bank')); if (preferred) setAccountId(preferred.id); }}><option value="bank">Bank transfer</option><option value="cash">Cash</option><option value="cheque">Cheque / PDC</option></select></label>
+        {method !== 'cheque' && accounts.length > 0 && <label>{partyType === 'customer' ? 'Into account' : 'From account'}<select aria-label={partyType === 'customer' ? 'Into account' : 'From account'} value={accountId} onChange={e => setAccountId(e.target.value)}>{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
         <label>Date<input aria-label="Payment date" type="date" value={date} onChange={e => setDate(e.target.value)}/></label>
         {method === 'cheque' && <><label>Cheque number<input aria-label="Cheque number" value={chequeNo} onChange={e => setChequeNo(e.target.value)} required/></label><label>Cheque date<input aria-label="Cheque date" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}/></label></>}
         <label className="full-width">Note<input aria-label="Payment note" value={note} onChange={e => setNote(e.target.value)} maxLength={1000}/></label>

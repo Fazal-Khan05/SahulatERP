@@ -9,7 +9,7 @@ export function blankWorkspace(demo=true): Workspace {
     setup:{complete:demo,step:1,...(demo?{completedAt:"2026-09-01T00:00:00.000Z"}:{})},
     branches:demo?[{id:"karachi",name:"Karachi"},{id:"lahore",name:"Lahore"}]:[],
     warehouses:demo?[{id:"khi-main",name:"Karachi · Main",branchId:"karachi"},{id:"khi-port",name:"Karachi · Port",branchId:"karachi"},{id:"lhe-main",name:"Lahore · Distribution",branchId:"lahore"}]:[],
-    parties:[],items:[],employees:[],documents:[],journals:[],stockMoves:[],receipts:[],plans:[],commissions:[],commissionMovements:[],shipments:[],payrolls:[],audit:[],followUps:[],operations:[],periods:[],
+    parties:[],items:[],employees:[],documents:[],journals:[],stockMoves:[],receipts:[],plans:[],commissions:[],commissionMovements:[],shipments:[],payrolls:[],audit:[],followUps:[],bankAccounts:demo?[{id:"main-bank",code:"1001",name:"Main bank account",type:"bank",details:"Demo Bank Ltd · 0012-3456789"},{id:"cash",code:"1002",name:"Cash in hand",type:"cash",details:""}]:[],operations:[],periods:[],
     // Statutory rates are deliberately blank for a real company; the accountant enters them (CLAUDE.md: no hard-coded rates).
     settings:demo?{taxRate:"18",employerEobi:"5",employeeEobi:"1",eobiBase:"37000",incomeTaxRate:"5",numbering:"ST",approvalLimit:"500000"}:{taxRate:"",employerEobi:"",employeeEobi:"",eobiBase:"",incomeTaxRate:"",numbering:"DP",approvalLimit:"0"}};
 }

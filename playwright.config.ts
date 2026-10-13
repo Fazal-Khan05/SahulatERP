@@ -5,6 +5,7 @@ loadEnvConfig(process.cwd());
 
 export default defineConfig({
   testDir: './tests/e2e',
+  globalSetup: './tests/e2e/global-setup.ts',
   timeout: 90_000,
   expect: { timeout: 20_000 },
   use: { baseURL: 'http://127.0.0.1:3000', channel: 'chrome', trace: 'retain-on-failure' },

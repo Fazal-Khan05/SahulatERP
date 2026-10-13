@@ -18,7 +18,7 @@ export type ModuleDefinition = {
 export const moduleCatalogue: ModuleDefinition[] = [
   { key: "sales", label: "Sales", description: "Quotations, orders, deliveries, invoices and returns for your customers.", setsUp: "Customer list, sales number series (QUO, SO, DN, INV, CN) and receivable, revenue and output-tax accounts.", requires: [], commands: [] },
   { key: "purchasing", label: "Purchasing", description: "Supplier orders, goods receipts, bills and supplier returns.", setsUp: "Supplier list, purchase number series (PO, GRN, BILL, PR) and payable and input-tax accounts.", requires: [], commands: [] },
-  { key: "inventory", label: "Inventory", description: "Stock by warehouse, transfers, counts and weighted-average valuation.", setsUp: "A first branch and warehouse if you have none, and inventory and cost-of-sales accounts.", requires: [], commands: ["stock_transfer", "stock_adjust", "set_stock_quantity", "bulk_stock_increase", "save_item"] },
+  { key: "inventory", label: "Inventory", description: "Stock by warehouse, transfers, counts and weighted-average valuation.", setsUp: "A first branch and warehouse if you have none, and inventory and cost-of-sales accounts.", requires: [], commands: ["stock_transfer", "stock_adjust", "set_stock_quantity", "bulk_stock_increase", "save_item", "save_branch", "save_warehouse"] },
   { key: "imports", label: "Imports & costing", description: "Shipments, customs and freight charges allocated into landed cost.", setsUp: "Shipment number series and the deposits and operating-expense accounts used for import charges.", requires: ["purchasing", "inventory"], commands: ["create_shipment", "add_shipment_cost", "allocate_shipment"] },
   { key: "collections", label: "Collections & PDCs", description: "Customer receipts, post-dated cheques and recovery follow-ups.", setsUp: "Receipt number series and the bank & cash account.", requires: ["sales"], commands: ["update_cheque", "follow_up"] },
   { key: "commissions", label: "Commissions", description: "Salesperson entitlements that release as customers actually pay.", setsUp: "A draft commission plan to edit, and the commission expense and payable accounts.", requires: ["sales", "collections"], commands: ["save_plan", "approve_commission"] },
@@ -74,8 +74,9 @@ export function moduleOfCommand(type: string, payload: Record<string, unknown>, 
   }
   if (type === "create_receipt") return w.parties.find(p => p.id === payload.partyId)?.type === "supplier" ? "purchasing" : "collections";
   if (type === "save_party") return payload.type === "supplier" ? "purchasing" : "sales";
+  if (type === "set_archived") return payload.kind === "item" ? "inventory" : w.parties.find(p => p.id === payload.id)?.type === "supplier" ? "purchasing" : "sales";
   if (type === "save_employee") return w.modules.includes("payroll") ? "payroll" : "commissions";
-  if (type === "import_records") return payload.kind === "attendance" ? "payroll" : payload.kind === "items" ? "inventory" : payload.kind === "suppliers" ? "purchasing" : "sales";
+  if (type === "import_records") return payload.kind === "attendance" ? "payroll" : payload.kind === "employees" ? (w.modules.includes("payroll") ? "payroll" : "commissions") : payload.kind === "items" ? "inventory" : payload.kind === "suppliers" ? "purchasing" : "sales";
   return null;
 }
 

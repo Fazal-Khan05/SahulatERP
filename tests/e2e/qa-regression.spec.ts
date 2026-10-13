@@ -75,7 +75,7 @@ test('SQA findings are fixed in the owner workspace', async ({ page, request, br
   await openModule(page, 'Sales');
   await page.locator('.heading-actions .button-primary').click();
   const karachiToday = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi' }).format(new Date());
-  await expect(page.getByRole('dialog').getByLabel('Posting date')).toHaveValue(karachiToday);
+  await expect(page.getByRole('dialog').getByLabel('Document date')).toHaveValue(karachiToday);
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
 
   // SQA-08: branch filter changes the data shown

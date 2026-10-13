@@ -66,7 +66,7 @@ test('master data: forms, archive, CSV import and export', async ({ page }) => {
   await expect(page.locator('tbody tr').filter({ hasText: `Form Customer ${stamp}` })).toHaveCount(0);
   await page.getByRole('tab', { name: 'Documents' }).click();
   await page.getByRole('button', { name: 'New invoice' }).click();
-  await expect(page.getByRole('dialog').getByLabel('Party').locator('option', { hasText: `Form Customer ${stamp}` })).toHaveCount(0);
+  await expect(page.getByRole('dialog').getByLabel('Customer').locator('option', { hasText: `Form Customer ${stamp}` })).toHaveCount(0);
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
   await page.getByRole('tab', { name: 'Customers' }).click();
   await page.getByLabel('Record status').selectOption('archived');

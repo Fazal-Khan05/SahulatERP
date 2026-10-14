@@ -52,8 +52,25 @@ test('sales and purchase cycles with partial conversions, payments and returns',
   await page.reload();
   await page.waitForLoadState('networkidle');
 
-  // ---- Sales: two-line quotation through the editor ----
+  // ---- A brand-new customer typed straight into an invoice is confirmed, then created ----
   await openModule(page, 'Sales');
+  await page.getByRole('button', { name: 'New invoice' }).first().click();
+  const walkIn = page.getByRole('dialog', { name: 'New sales invoice' });
+  await walkIn.getByLabel('Customer').fill(`Walk-in ${stamp}`);
+  await expect(walkIn.getByText(/New customer — will be created/)).toBeVisible();
+  await walkIn.getByLabel('New customer city').fill('Hyderabad');
+  await walkIn.getByLabel('Line 1 product').selectOption(itemB);
+  await walkIn.getByRole('button', { name: 'Save draft' }).click();
+  const confirmCustomer = page.getByRole('dialog', { name: 'Save customer?' });
+  await expect(confirmCustomer).toContainText(`Walk-in ${stamp}`);
+  await confirmCustomer.getByRole('button', { name: 'Save customer' }).click();
+  await expect(walkIn).toHaveCount(0);
+  await expect(page.locator('tbody tr').filter({ hasText: `Walk-in ${stamp}` }).first()).toContainText('draft');
+  await page.getByRole('tab', { name: 'Customers' }).click();
+  await expect(page.locator('tbody tr').filter({ hasText: `Walk-in ${stamp}` }).first()).toContainText('Hyderabad');
+  await page.getByRole('tab', { name: 'Documents' }).click();
+
+  // ---- Sales: two-line quotation through the editor ----
   await page.getByRole('button', { name: 'New quotation' }).click();
   const editor = page.getByRole('dialog', { name: 'New quotation' });
   await editor.getByLabel('Customer').fill(`Cycle Customer ${stamp}`);

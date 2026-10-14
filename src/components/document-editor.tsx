@@ -55,6 +55,7 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
   const [creditOverride, setCreditOverride] = useState(existing?.creditOverride ?? '');
   const [lines, setLines] = useState<LineDraft[]>(existing ? existing.lines.map(l => newLine({ itemId: l.itemId, quantity: D(l.quantity).toString(), price: D(l.price).toString(), discount: D(l.discount).toString(), taxRate: D(l.taxRate).toString(), employeeId: l.employeeId })) : [newLine({ taxRate: sales ? defaultTax : '0', employeeId: sales ? (actor.employeeId ?? '') : '' })]);
   const [error, setError] = useState('');
+  const [confirmingParty, setConfirmingParty] = useState(false);
 
   const matchedParty = useMemo(() => { const needle = partyName.trim().toLowerCase(); return needle ? parties.find(p => p.name.trim().toLowerCase() === needle) : undefined; }, [partyName, parties]);
   const isNewParty = partyName.trim().length >= 2 && !matchedParty;
@@ -84,7 +85,15 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
       return next;
     }));
   }
+  // A new name is confirmed with the user before a customer/supplier record is created alongside the document.
+  function requestSave() {
+    setError('');
+    if (partyName.trim().length < 2) return setError(`Enter the ${partyType}'s name.`);
+    if (!lines.some(l => l.itemId)) return setError('Add at least one product line.');
+    if (isNewParty) setConfirmingParty(true); else void save();
+  }
   async function save() {
+    setConfirmingParty(false);
     setError('');
     const name = partyName.trim();
     if (name.length < 2) return setError(`Enter the ${partyType}'s name.`);
@@ -155,7 +164,14 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
         </tbody></table>
       </div>
       {error && <p className="error-note" role="alert">{error}</p>}
-      <div className="form-actions"><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="button" disabled={!!busy || partyName.trim().length < 2} onClick={save}>{busy ? <Loader2 className="spin" size={16}/> : <Save size={16}/>}{existing ? 'Save changes' : 'Save draft'}</Button></div>
+      <div className="form-actions"><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="button" disabled={!!busy || partyName.trim().length < 2} onClick={requestSave}>{busy ? <Loader2 className="spin" size={16}/> : <Save size={16}/>}{existing ? 'Save changes' : 'Save draft'}</Button></div>
     </DialogContent>
+    <Dialog open={confirmingParty} onOpenChange={v => { if (!v) setConfirmingParty(false); }}>
+      <DialogContent className="confirm-dialog">
+        <DialogTitle>Save {partyType}?</DialogTitle>
+        <DialogDescription>“{partyName.trim()}” is not in your {partyType} list yet. Saving this {documentTitle(kind).toLowerCase()} will also add them as a {partyType}{newCity.trim() || newPhone.trim() ? ` (${[newCity.trim(), newPhone.trim()].filter(Boolean).join(' · ')})` : ''}, so you can reuse them next time.</DialogDescription>
+        <div className="form-actions"><Button type="button" variant="outline" onClick={() => setConfirmingParty(false)}>Cancel</Button><Button type="button" disabled={!!busy} onClick={save}>{busy ? <Loader2 className="spin" size={16}/> : <UserPlus size={16}/>}Save {partyType}</Button></div>
+      </DialogContent>
+    </Dialog>
   </Dialog>;
 }

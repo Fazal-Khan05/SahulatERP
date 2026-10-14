@@ -10,13 +10,13 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ t
   if (!context) return <LoginScreen/>;
   const { supabase, memberships, actorFor } = context;
   const requestedTenant = (await searchParams).tenant;
-  const membership = memberships.find(item => item.tenantId === requestedTenant) || memberships[0];
+  const { data: tenants } = await supabase.from('tenants').select('id,name,is_demo').in('id', memberships.map(item => item.tenantId));
+  // Without an explicit ?tenant, land on the member's own company rather than a demo/sample one.
+  const isDemo = (tenantId: string) => tenants?.find(t => t.id === tenantId)?.is_demo ?? false;
+  const membership = memberships.find(item => item.tenantId === requestedTenant) || memberships.find(item => !isDemo(item.tenantId)) || memberships[0];
   if (!membership) return <main className="loading-screen"><h1>No workspace assigned</h1><p>Ask an owner to invite you to a company workspace.</p><form action="/auth/signout" method="post"><button>Sign out</button></form></main>;
   const actor = actorFor(membership);
-  const [snapshot, { data: tenants }] = await Promise.all([
-    readWorkspace(membership.tenantId).catch(() => null),
-    supabase.from('tenants').select('id,name,is_demo').in('id', memberships.map(item => item.tenantId)),
-  ]);
+  const snapshot = await readWorkspace(membership.tenantId).catch(() => null);
   if (!snapshot) return <main className="loading-screen"><h1>Workspace unavailable</h1><p>No company data found.</p></main>;
   const workspace = scopeWorkspace(snapshot.workspace, actor);
   return <Workbench initialWorkspace={workspace} actor={actor} memberships={memberships.map(item => {

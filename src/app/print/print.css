@@ -30,7 +30,7 @@
 .doc-meta dd { margin: 0; font-weight: 600; text-align: right; }
 .doc-lines { width: 100%; border-collapse: collapse; }
 .doc-lines th { text-align: left; font-size: .78em; letter-spacing: .06em; text-transform: uppercase; color: white; background: var(--doc-accent); padding: 2.5mm 3mm; }
-.doc-lines td { padding: 2.5mm 3mm; border-bottom: 1px solid #e3e8ee; vertical-align: top; }
+.doc-lines td { padding: 2.5mm 3mm; border-bottom: 1px solid #cfd7e0; vertical-align: top; }
 .doc-lines td strong { display: block; font-weight: 600; }
 .doc-lines td small { display: block; color: #8290a0; margin-top: .5mm; }
 .doc-lines .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -40,9 +40,9 @@
 .doc-totals { flex: 0 0 auto; border-collapse: collapse; min-width: 62mm; font-size: .95em; }
 .doc-totals th { text-align: left; font-weight: 500; color: #4a5b6d; padding: 1.5mm 6mm 1.5mm 0; }
 .doc-totals td { text-align: right; padding: 1.5mm 0; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.doc-totals tr.emphasis th, .doc-totals tr.emphasis td { border-top: 1px solid #c8d1db; font-weight: 700; color: #152234; font-size: 1.05em; }
+.doc-totals tr.emphasis th, .doc-totals tr.emphasis td { border-top: 1px solid #aab6c3; font-weight: 700; color: #152234; font-size: 1.05em; }
 .doc-totals tr.credit td { color: #2d5f9a; }
-.doc-footer { margin-top: auto; border-top: 1px solid #e3e8ee; padding-top: 4mm; color: #4a5b6d; font-size: .9em; }
+.doc-footer { margin-top: auto; border-top: 1px solid #cfd7e0; padding-top: 4mm; color: #4a5b6d; font-size: .9em; }
 .doc-footer p { margin: 0 0 2mm; white-space: pre-wrap; }
 .doc-footer small { color: #8290a0; }
 

@@ -15,7 +15,7 @@ export async function memberContext() {
   if (error) throw error;
   const memberships: Membership[] = (data || []).map(row => ({ tenantId: row.tenant_id, role: row.role as Role, branchIds: row.branch_ids || [], employeeId: row.employee_id }));
   const actorFor = (membership: Membership): Actor => ({
-    id: user.id, name: user.user_metadata.display_name || user.email || 'User', role: membership.role,
+    id: user.id, name: user.user_metadata.display_name || user.email || 'User', role: membership.role, ...(user.email ? { email: user.email } : {}),
     branchIds: membership.branchIds, ...(membership.employeeId ? { employeeId: membership.employeeId } : {}),
   });
   return { supabase, user, memberships, actorFor };

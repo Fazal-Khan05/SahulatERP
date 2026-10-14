@@ -293,3 +293,6 @@
 .row-selected td{background:#f3faf7}
 @media(max-width:900px){.reports-layout{grid-template-columns:1fr}.reports-menu{position:static;display:flex;flex-wrap:wrap;gap:4px}.reports-menu .nav-label{width:100%}.report-link{width:auto}}
 @media print{.no-print,.reports-menu,.list-filters,.table-scroll-hint{display:none!important}.reports-layout{display:block}.report-card{border:0;box-shadow:none}.report-table th,.report-table td{padding:6px 8px;font-size:9.5pt}}
+
+.party-new{color:#0b5c4c;display:inline-flex;align-items:center;gap:5px}
+.editor-head label input[list]{margin-top:0}

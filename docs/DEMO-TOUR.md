@@ -9,7 +9,7 @@ Demo account: `khanfazal3368@gmail.com` (password you set). It owns one empty co
 - Have a small CSV ready to import products (headers: `sku,name,category,unit,price,cost`) — 5–10 rows. Or use "Download template" inside the import dialog and fill it.
 - Keep the storyline simple: **buy goods → stock them → sell them → get paid → see the numbers**.
 - Things that will bite you if you forget them (all by design):
-  - A new company has **no default sales-tax rate** and **no credit limits**. When you create a customer, set the credit limit to a big number (e.g. 10,000,000) or the invoice will refuse to submit without an owner override reason. Type the tax % on invoice lines (e.g. 18) if you want tax shown.
+  - A new company has **no default sales-tax rate**: type the tax % on invoice lines (e.g. 18) if you want tax shown. Credit limits are off until you set one on a customer.
   - **Payroll needs statutory rates (EOBI, tax) and there is no settings screen for them yet**, so leave Payroll switched off in the wizard and mention it as the next module.
   - **Cheques only post when cleared.** Record → Deposit → Cleared is the story.
 
@@ -25,7 +25,7 @@ Demo account: `khanfazal3368@gmail.com` (password you set). It owns one empty co
 7. **Inventory → Products → Import CSV.** Choose your CSV. Point out the column matching ("it recognised 'Item Code' as the SKU"). Click Import. Say: "If one row were wrong, nothing would import and it would tell me exactly which row."
 8. Open **Products → New product** to show the form quickly (SKU, name, unit, price, cost, reorder level). Cancel.
 9. **Inventory → Warehouses:** show the branch and warehouse; add a second warehouse ("Lahore godown"). Say: "Stock is tracked per warehouse."
-10. **Sales → Customers → New customer:** name, city, phone, terms 30 days, **credit limit 10,000,000**. Save. Say: "The credit limit stops staff over-selling to a customer who owes too much; the owner can override with a reason."
+10. **Sales → Customers → New customer:** name, city, phone, terms 30 days. Save. Say: "You can also type a brand-new customer straight into an invoice — it gets created on the spot. A credit limit, if you set one, stops staff over-selling; the owner can override with a reason."
 11. **Purchasing → Suppliers → New supplier:** a Chinese supplier, terms 60 days.
 
 ## Part 3 — Buying stock (≈4 min)
@@ -36,7 +36,7 @@ Demo account: `khanfazal3368@gmail.com` (password you set). It owns one empty co
 16. **Purchasing → Supplier payments → Record payment:** choose the supplier, type the USD amount in "Amount received" (it allocates to the bill), then in **PKR actually paid** type a slightly higher figure (rate moved). Save. Say: "The difference is booked automatically as an exchange loss — nobody has to work it out."
 
 ## Part 4 — Selling (≈5 min)
-17. **Sales → New quotation:** customer, two products (prices prefill from the product), quantity, a 10% discount on one line, tax 18 on both. Watch totals update. Save draft, **Submit**.
+17. **Sales → New quotation:** type the customer's name (it suggests existing ones; a new name creates the customer), two products (prices prefill from the product), quantity, a 10% discount on one line, tax 18 on both. Watch totals update. Save draft, **Submit**.
 18. Press **Convert** → sales order → submit. Press **Deliver** → deliver only part of one line → submit the delivery note. Say: "Stock leaves the warehouse now, at today's average cost; the invoice comes next."
 19. Press **Invoice** on the delivery → submit. Open the invoice (**View**): show the **document chain** (quotation → order → delivery → invoice), the lines and totals. Click **Print / PDF**: the branded invoice opens with the logo and footer you set in the wizard. Say: "Save as PDF and WhatsApp it."
 20. Back on the invoice, press **Return**: return 1 unit, reason "damaged" → **Post return**. Show the credit note in the list and the invoice balance dropping.

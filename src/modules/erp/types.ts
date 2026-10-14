@@ -39,7 +39,7 @@ export type Workspace = {
   settings: { taxRate: string; employerEobi: string; employeeEobi: string; eobiBase: string; incomeTaxRate: string; numbering: string; approvalLimit: string };
   operations: string[];
 };
-export type Actor = { id: string; name: string; role: Role; employeeId?: string; branchIds: string[] };
+export type Actor = { id: string; name: string; role: Role; employeeId?: string; branchIds: string[]; email?: string };
 export const DEMO_TENANT = "11111111-1111-4111-8111-111111111111";
 export const PARTNER_TENANT = "22222222-2222-4222-8222-222222222222";
 export const accountNames: Record<string,string> = {

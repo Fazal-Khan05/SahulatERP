@@ -1,6 +1,6 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { Loader2, Plus, Save, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Save, Trash2, UserPlus } from 'lucide-react';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
 import { businessToday } from '@/modules/erp/dates';
@@ -18,8 +18,9 @@ let keySeed = 1;
 const newLine = (seed: Partial<LineDraft> = {}): LineDraft => ({ key: keySeed++, itemId: '', quantity: '1', price: '', discount: '0', taxRate: '', employeeId: '', ...seed });
 
 /**
- * Create or edit any document kind with a multi-line table. Prices prefill from the product
- * (selling price for sales, standard cost for purchases); tax prefills from company settings.
+ * Create or edit any document kind with a multi-line table. The customer/supplier is typed by
+ * name: an existing name is matched, a new name is created on the spot. Prices prefill from the
+ * product (selling price for sales, standard cost for purchases); tax prefills from settings.
  */
 export function DocumentEditor({ open, kind, existing, workspace, actor, busy, onClose, command }: {
   open: boolean;
@@ -33,13 +34,17 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
 }) {
   const sales = salesKinds.includes(kind);
   const today = businessToday();
-  const parties = workspace.parties.filter(p => !p.archived && p.type === (sales ? 'customer' : 'supplier'));
+  const partyType = sales ? 'customer' : 'supplier';
+  const parties = workspace.parties.filter(p => !p.archived && p.type === partyType);
   const products = workspace.items.filter(i => !i.archived);
   const warehouses = workspace.warehouses.filter(x => !actor.branchIds.length || actor.branchIds.includes(x.branchId));
+  const singleLocation = workspace.warehouses.length <= 1;
   const people = workspace.employees.filter(e => e.active);
   const defaultTax = workspace.settings.taxRate || '0';
 
-  const [partyId, setPartyId] = useState(existing?.partyId ?? '');
+  const [partyName, setPartyName] = useState(existing ? (workspace.parties.find(p => p.id === existing.partyId)?.name ?? '') : '');
+  const [newCity, setNewCity] = useState('');
+  const [newPhone, setNewPhone] = useState('');
   const [warehouseId, setWarehouseId] = useState(existing?.warehouseId ?? warehouses[0]?.id ?? '');
   const [date, setDate] = useState(existing?.date ?? today);
   const [dueDate, setDueDate] = useState(existing?.dueDate ?? addDays(today, 30));
@@ -51,6 +56,9 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
   const [lines, setLines] = useState<LineDraft[]>(existing ? existing.lines.map(l => newLine({ itemId: l.itemId, quantity: D(l.quantity).toString(), price: D(l.price).toString(), discount: D(l.discount).toString(), taxRate: D(l.taxRate).toString(), employeeId: l.employeeId })) : [newLine({ taxRate: sales ? defaultTax : '0', employeeId: sales ? (actor.employeeId ?? '') : '' })]);
   const [error, setError] = useState('');
 
+  const matchedParty = useMemo(() => { const needle = partyName.trim().toLowerCase(); return needle ? parties.find(p => p.name.trim().toLowerCase() === needle) : undefined; }, [partyName, parties]);
+  const isNewParty = partyName.trim().length >= 2 && !matchedParty;
+
   const totals = useMemo(() => {
     let net = D(0), tax = D(0);
     for (const l of lines) {
@@ -60,9 +68,9 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
     return { net, tax, total: net.plus(tax) };
   }, [lines]);
 
-  function choosePartyId(id: string) {
-    setPartyId(id);
-    const party = parties.find(p => p.id === id);
+  function changePartyName(value: string) {
+    setPartyName(value);
+    const party = parties.find(p => p.name.trim().toLowerCase() === value.trim().toLowerCase());
     if (party && !dueTouched) setDueDate(addDays(date, party.terms));
   }
   function update(key: number, patch: Partial<LineDraft>) {
@@ -78,24 +86,38 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
   }
   async function save() {
     setError('');
-    const payload = {
-      kind, partyId, warehouseId, date, dueDate, currency: sales ? 'PKR' : currency, fxRate: sales ? '1' : fxRate, notes,
-      ...(creditOverride.trim() ? { creditOverride: creditOverride.trim() } : {}),
-      lines: lines.filter(l => l.itemId).map(l => ({ itemId: l.itemId, quantity: l.quantity, price: l.price || '0', discount: l.discount || '0', taxRate: l.taxRate || '0', employeeId: sales ? l.employeeId : '', splits: [] })),
-    };
-    if (!payload.lines.length) return setError('Add at least one product line.');
+    const name = partyName.trim();
+    if (name.length < 2) return setError(`Enter the ${partyType}'s name.`);
+    const payloadLines = lines.filter(l => l.itemId).map(l => ({ itemId: l.itemId, quantity: l.quantity, price: l.price || '0', discount: l.discount || '0', taxRate: l.taxRate || '0', employeeId: sales ? l.employeeId : '', splits: [] }));
+    if (!payloadLines.length) return setError('Add at least one product line.');
+    let partyId = matchedParty?.id;
+    if (!partyId) {
+      // New name: create the party with plain defaults (no credit limit, 30-day terms); details can be completed later.
+      const created = await command('save_party', { name, type: partyType, city: newCity.trim(), phone: newPhone.trim(), email: '', taxId: '', registered: false, creditLimit: '0', terms: 30, customerClass: sales ? 'Retailer' : 'Importer' });
+      if (!created.ok || !created.recordId) return setError(created.message);
+      partyId = created.recordId;
+    }
+    const payload = { kind, partyId, warehouseId, date, dueDate, currency: sales ? 'PKR' : currency, fxRate: sales ? '1' : fxRate, notes, ...(creditOverride.trim() ? { creditOverride: creditOverride.trim() } : {}), lines: payloadLines };
     const result = existing ? await command('update_document', { id: existing.id, ...payload }) : await command('create_document', payload);
     if (result.ok) onClose(); else setError(result.message);
   }
   const title = existing ? `Edit ${documentTitle(kind).toLowerCase()} ${existing.number}` : `New ${documentTitle(kind).toLowerCase()}`;
+  const partyLabel = sales ? 'Customer' : 'Supplier';
+  const listId = `party-options-${kind}`;
 
   return <Dialog open={open} onOpenChange={value => { if (!value) onClose(); }}>
     <DialogContent className="editor-dialog">
       <DialogTitle>{title}</DialogTitle>
       <DialogDescription>{existing ? 'Drafts can be edited until they are submitted.' : 'Saved as a draft; submit it to post stock and ledger entries.'}</DialogDescription>
       <div className="editor-head field-grid">
-        <label>{sales ? 'Customer' : 'Supplier'}<select aria-label={sales ? 'Customer' : 'Supplier'} value={partyId} onChange={e => choosePartyId(e.target.value)} required><option value="">Select…</option>{parties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
-        <label>Warehouse<select aria-label="Warehouse" value={warehouseId} onChange={e => setWarehouseId(e.target.value)}>{warehouses.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+        <label className={singleLocation ? 'full-width' : undefined}>{partyLabel}
+          <input aria-label={partyLabel} list={listId} value={partyName} onChange={e => changePartyName(e.target.value)} placeholder={`Type a name — existing ${partyType}s are suggested`} autoComplete="off" required/>
+          <datalist id={listId}>{parties.map(p => <option key={p.id} value={p.name}>{[p.city, p.phone].filter(Boolean).join(' · ')}</option>)}</datalist>
+          {isNewParty && <small className="field-hint party-new"><UserPlus size={13}/> New {partyType} — will be created when you save.</small>}
+          {matchedParty && <small className="field-hint">{[matchedParty.city, matchedParty.phone, matchedParty.terms ? `${matchedParty.terms}-day terms` : ''].filter(Boolean).join(' · ') || 'Existing ' + partyType}</small>}
+        </label>
+        {!singleLocation && <label>Warehouse<select aria-label="Warehouse" value={warehouseId} onChange={e => setWarehouseId(e.target.value)}>{warehouses.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>}
+        {isNewParty && <><label>City <span className="field-optional">optional</span><input aria-label={`New ${partyType} city`} value={newCity} onChange={e => setNewCity(e.target.value)} maxLength={120}/></label><label>Phone <span className="field-optional">optional</span><input aria-label={`New ${partyType} phone`} value={newPhone} onChange={e => setNewPhone(e.target.value)} maxLength={40} placeholder="+92 …"/></label></>}
         <label>Date<input aria-label="Document date" type="date" value={date} onChange={e => setDate(e.target.value)} required/></label>
         <label>{kind === 'quotation' ? 'Valid until' : 'Due date'}<input aria-label="Due date" type="date" value={dueDate} onChange={e => { setDueDate(e.target.value); setDueTouched(true); }} required/></label>
         {!sales && <><label>Currency<select aria-label="Currency" value={currency} onChange={e => { setCurrency(e.target.value as typeof currency); if (e.target.value === 'PKR') setFxRate('1'); }}><option>USD</option><option>CNY</option><option>PKR</option></select></label>
@@ -123,7 +145,7 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
         <div className="editor-foot-left">
           <Button type="button" variant="outline" onClick={() => setLines(c => [...c, newLine({ taxRate: sales ? defaultTax : '0', employeeId: sales ? (c.at(-1)?.employeeId ?? '') : '' })])}><Plus size={16}/>Add line</Button>
           <label className="editor-notes">Notes<textarea rows={2} maxLength={2000} value={notes} onChange={e => setNotes(e.target.value)}/></label>
-          {kind === 'sales_invoice' && actor.role === 'Owner' && <label className="editor-notes">Credit-limit override reason <span className="field-optional">owner only, if the limit is exceeded</span><input value={creditOverride} onChange={e => setCreditOverride(e.target.value)} maxLength={500}/></label>}
+          {kind === 'sales_invoice' && actor.role === 'Owner' && matchedParty && D(matchedParty.creditLimit).gt(0) && <label className="editor-notes">Credit-limit override reason <span className="field-optional">owner only, if the limit is exceeded</span><input value={creditOverride} onChange={e => setCreditOverride(e.target.value)} maxLength={500}/></label>}
         </div>
         <table className="doc-totals editor-totals"><tbody>
           <tr><th>Net</th><td>{formatMoney(money(totals.net))}</td></tr>
@@ -133,7 +155,7 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
         </tbody></table>
       </div>
       {error && <p className="error-note" role="alert">{error}</p>}
-      <div className="form-actions"><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="button" disabled={!!busy || !partyId} onClick={save}>{busy ? <Loader2 className="spin" size={16}/> : <Save size={16}/>}{existing ? 'Save changes' : 'Save draft'}</Button></div>
+      <div className="form-actions"><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="button" disabled={!!busy || partyName.trim().length < 2} onClick={save}>{busy ? <Loader2 className="spin" size={16}/> : <Save size={16}/>}{existing ? 'Save changes' : 'Save draft'}</Button></div>
     </DialogContent>
   </Dialog>;
 }

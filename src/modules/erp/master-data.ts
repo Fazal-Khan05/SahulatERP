@@ -41,7 +41,7 @@ const partyFields = (type: "customer" | "supplier"): FieldSpec[] => [
   { key: "taxId", label: "NTN / STRN", type: "text" },
   { key: "registered", label: "Sales-tax registered", type: "checkbox", hint: "Affects tax treatment on documents" },
   { key: "customerClass", label: type === "customer" ? "Customer class" : "Supplier class", type: "text", hint: type === "customer" ? "e.g. Distributor, Retailer; used by commission plans" : "e.g. Importer, Domestic" },
-  { key: "creditLimit", label: "Credit limit (PKR)", type: "money", hint: "0 means no credit; an owner can override on a document" },
+  { key: "creditLimit", label: "Credit limit (PKR)", type: "money", hint: "0 means no limit; a positive limit blocks invoices beyond it unless an owner overrides" },
   { key: "terms", label: "Payment terms (days)", type: "number" },
 ];
 

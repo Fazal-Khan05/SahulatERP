@@ -23,6 +23,7 @@ export function ItemDetails({ workspace, actor, itemId, initialMode, onClose, co
 }) {
   const item = workspace.items.find(product => product.id === itemId);
   const canEdit = ['Owner', 'Accountant', 'Warehouse Manager'].includes(actor.role);
+  const singleLocation = workspace.warehouses.length <= 1;
   const editableWarehouses = workspace.warehouses.filter(warehouse => !actor.branchIds.length || actor.branchIds.includes(warehouse.branchId));
   const [mode, setMode] = useState<Mode>(initialMode);
   const [warehouseId, setWarehouseId] = useState(editableWarehouses[0]?.id || '');
@@ -79,18 +80,18 @@ export function ItemDetails({ workspace, actor, itemId, initialMode, onClose, co
           <div><span>Average cost</span><strong>{formatMoney(total.average)}</strong></div>
           <div><span>Selling price</span><strong>{formatMoney(item.price)}</strong></div>
         </div>
-        <section className="item-details-section"><h3>Stock by warehouse</h3><p>Sales invoices use the quantity in their selected warehouse.</p>
+        {!singleLocation && <section className="item-details-section"><h3>Stock by warehouse</h3><p>Sales invoices use the quantity in their selected warehouse.</p>
           <div className="table-scroll"><table><thead><tr><th>Warehouse</th><th>Branch</th><th>Quantity</th><th>Average cost</th><th>Value</th></tr></thead><tbody>{workspace.warehouses.map(location => {
             const level = stock(workspace, item.id, location.id);
             return <tr key={location.id}><td><strong>{location.name}</strong></td><td>{workspace.branches.find(branch => branch.id === location.branchId)?.name || '—'}</td><td>{D(level.quantity).toString()} {item.unit}</td><td>{formatMoney(level.average)}</td><td>{formatMoney(level.value)}</td></tr>;
           })}</tbody></table></div>
-        </section>
+        </section>}
         <section className="item-details-section"><h3>Item information</h3><div className="item-details-facts"><div><span>SKU</span><strong>{item.sku}</strong></div><div><span>Category</span><strong>{item.category}</strong></div><div><span>Reorder level</span><strong>{item.reorderLevel} {item.unit}</strong></div><div><span>Default unit cost</span><strong>{formatMoney(item.cost)}</strong></div><div><span>Weight</span><strong>{item.weight}</strong></div><div><span>Volume</span><strong>{item.volume}</strong></div></div></section>
-        <section className="item-details-section"><h3>Recent stock movements</h3><div className="table-scroll"><table><thead><tr><th>Date</th><th>Warehouse</th><th>Type</th><th>Quantity change</th><th>Value change</th></tr></thead><tbody>{movements.length ? movements.map(move => <tr key={move.id}><td>{move.date}</td><td>{workspace.warehouses.find(location => location.id === move.warehouseId)?.name || '—'}</td><td>{move.type.replaceAll('_', ' ')}</td><td>{D(move.quantity).gt(0) ? '+' : ''}{D(move.quantity).toString()} {item.unit}</td><td>{formatMoney(move.value)}</td></tr>) : <tr><td colSpan={5}>No stock movements yet.</td></tr>}</tbody></table></div></section>
+        <section className="item-details-section"><h3>Recent stock movements</h3><div className="table-scroll"><table><thead><tr><th>Date</th>{!singleLocation && <th>Warehouse</th>}<th>Type</th><th>Quantity change</th><th>Value change</th></tr></thead><tbody>{movements.length ? movements.map(move => <tr key={move.id}><td>{move.date}</td>{!singleLocation && <td>{workspace.warehouses.find(location => location.id === move.warehouseId)?.name || '—'}</td>}<td>{move.type.replaceAll('_', ' ')}</td><td>{D(move.quantity).gt(0) ? '+' : ''}{D(move.quantity).toString()} {item.unit}</td><td>{formatMoney(move.value)}</td></tr>) : <tr><td colSpan={5}>No stock movements yet.</td></tr>}</tbody></table></div></section>
       </> : <form onSubmit={save} className="item-details-edit">
-        <p>Set the counted quantity for one warehouse. This posts the difference to stock and the accounting ledger; it does not move stock between warehouses.</p>
+        <p>{singleLocation ? 'Set the counted quantity. This posts the difference to stock and the accounting ledger.' : 'Set the counted quantity for one warehouse. This posts the difference to stock and the accounting ledger; it does not move stock between warehouses.'}</p>
         <div className="field-grid">
-          <label>Warehouse<select value={warehouse?.id || ''} onChange={event => { const next = workspace.warehouses.find(location => location.id === event.target.value); const level = next ? stock(workspace, item.id, next.id) : null; setWarehouseId(event.target.value); setTargetQuantity(level?.quantity || ''); setCost(level && D(level.average).gt(0) ? level.average : item.cost); }} required>{editableWarehouses.map(location => <option key={location.id} value={location.id}>{location.name}</option>)}</select></label>
+          {!singleLocation && <label>Warehouse<select value={warehouse?.id || ''} onChange={event => { const next = workspace.warehouses.find(location => location.id === event.target.value); const level = next ? stock(workspace, item.id, next.id) : null; setWarehouseId(event.target.value); setTargetQuantity(level?.quantity || ''); setCost(level && D(level.average).gt(0) ? level.average : item.cost); }} required>{editableWarehouses.map(location => <option key={location.id} value={location.id}>{location.name}</option>)}</select></label>}
           <label>Count date<input type="date" value={date} onChange={event => setDate(event.target.value)} required/></label>
           <label>Current quantity<input value={current ? `${D(current.quantity).toString()} ${item.unit}` : '—'} readOnly/></label>
           <label>New quantity<input aria-label="New quantity" type="number" min="0" step="0.0001" value={targetQuantity} onChange={event => setTargetQuantity(event.target.value)} required/></label>
@@ -98,7 +99,7 @@ export function ItemDetails({ workspace, actor, itemId, initialMode, onClose, co
           <label className="full-width">Reason for adjustment<input value={reason} onChange={event => setReason(event.target.value)} maxLength={2000} placeholder="Explain the counted difference" required/></label>
         </div>
         <div className="item-details-change"><span>Quantity change</span><strong>{difference.gt(0) ? '+' : ''}{difference.toString()} {item.unit}</strong></div>
-        <p className="item-details-hint">For stock already held in another warehouse, use Transfer stock instead. Purchases should be recorded in Purchasing.</p>
+        <p className="item-details-hint">{singleLocation ? 'Purchases should be recorded in Purchasing.' : 'For stock already held in another warehouse, use Transfer stock instead. Purchases should be recorded in Purchasing.'}</p>
         {notice && <div className="error-note" role="alert">{notice}</div>}
         <div className="form-actions"><Button type="button" variant="outline" onClick={() => setMode('view')}>Cancel</Button><Button type="submit" disabled={!!busy || !warehouse || difference.isZero()}>{busy ? 'Saving…' : 'Save quantity'}</Button></div>
       </form>}

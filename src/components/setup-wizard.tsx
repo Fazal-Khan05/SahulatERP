@@ -72,7 +72,7 @@ export function SetupWizard({ workspace, actor, memberships, onWorkspace, comman
       <div className="wizard-side-note"><p>Setting up <strong>{workspace.company.name}</strong> as {actor.name}. Everything here can be changed later in Settings.</p>{memberships.filter(m => m.tenantId !== workspace.tenantId).map(m => <a key={m.tenantId} href={`/?tenant=${encodeURIComponent(m.tenantId)}`}>Switch to {m.name}</a>)}<form action="/auth/signout" method="post"><button type="submit" className="text-button">Sign out</button></form></div>
     </aside>
     <section className="wizard-main">
-      <header className="wizard-heading"><span className="eyebrow">STEP {step} OF 4</span><h1>{steps[step - 1].title}</h1><p>{steps[step - 1].hint}</p></header>
+      <header className="wizard-heading"><h1>{steps[step - 1].title}</h1><p>Step {step} of 4. {steps[step - 1].hint}</p></header>
       {step === 1 && <form ref={companyForm} onSubmit={event => { event.preventDefault(); next(); }}><CompanyForm value={company} onChange={setCompany} disabled={busy}/></form>}
       {step === 2 && <BrandingForm workspace={workspace} company={company} value={branding} onChange={setBranding} onWorkspace={onWorkspace} disabled={busy}/>}
       {step === 3 && <ModulePicker selected={modules} onChange={setModules} disabled={busy}/>}

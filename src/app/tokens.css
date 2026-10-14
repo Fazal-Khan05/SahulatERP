@@ -1,0 +1,141 @@
+/* SahulatERP design tokens: primitive → semantic → component. Components reference semantic/component tokens only. */
+:root {
+  /* ---- Primitive: warm neutral scale ---- */
+  --gray-0: #ffffff;
+  --gray-25: #fbfbfa;
+  --gray-50: #f7f6f3;
+  --gray-100: #efeeea;
+  --gray-150: #e6e4df;
+  --gray-200: #d9d6d0;
+  --gray-300: #c4c1ba;
+  --gray-400: #a8a59e;
+  --gray-500: #6b6965;  /* 5.2:1 on white, 4.8:1 on the page background */
+  --gray-600: #5b5a56;
+  --gray-700: #44433f;
+  --gray-800: #2f3437;
+  --gray-900: #1f2224;
+
+  /* ---- Primitive: brand green (desaturated) and spot pastels ---- */
+  --green-50: #edf3ec;
+  --green-100: #dbe9df;
+  --green-500: #1c8a6e;
+  --green-600: #117a60;
+  --green-700: #0c5e4a;
+  --green-800: #094a3b;
+  --red-50: #fdebec;
+  --red-600: #9f2f2d;
+  --red-700: #8a2624;
+  --blue-50: #e1f3fe;
+  --blue-600: #1f6c9f;
+  --amber-50: #fbf3db;
+  --amber-600: #956400;
+
+  /* ---- Primitive: typography ---- */
+  --font-sans: var(--font-geist-sans, "Geist"), "SF Pro Display", "Helvetica Neue", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono, "Geist Mono"), "SF Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 0.72rem;
+  --text-sm: 0.8rem;
+  --text-base: 0.875rem;
+  --text-md: 0.95rem;
+  --text-lg: 1.05rem;
+  --text-xl: 1.35rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2.25rem;
+  --leading-tight: 1.15;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.6;
+  --tracking-tight: -0.02em;
+  --tracking-wide: 0.06em;
+
+  /* ---- Primitive: spacing (4px base) ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ---- Primitive: shape and elevation (one radius scale for the whole app) ---- */
+  --radius-sm: 6px;   /* controls: buttons, inputs, badges */
+  --radius-md: 10px;  /* containers: cards, menus */
+  --radius-lg: 14px;  /* dialogs */
+  --shadow-none: 0 0 0 rgba(31, 34, 36, 0);
+  --shadow-xs: 0 1px 2px rgba(31, 34, 36, 0.04);
+  --shadow-sm: 0 2px 8px rgba(31, 34, 36, 0.05);
+  --shadow-md: 0 8px 24px rgba(31, 34, 36, 0.08);
+  --shadow-lg: 0 24px 64px rgba(31, 34, 36, 0.14);
+
+  /* ---- Primitive: motion ---- */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);      /* strong ease-out for UI entrances */
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);  /* on-screen movement */
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);   /* drawer slide */
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+
+  /* ---- Primitive: layers ---- */
+  --z-sidebar: 20;
+  --z-menu: 100;
+  --z-overlay: 60;
+  --z-dialog: 61;
+
+  /* ---- Semantic: surfaces and text ---- */
+  --background: var(--gray-50);
+  --surface: var(--gray-0);
+  --surface-muted: var(--gray-25);
+  --surface-sunken: var(--gray-100);
+  --border: var(--gray-150);
+  --border-strong: var(--gray-200);
+  --foreground: var(--gray-800);
+  --text: var(--gray-800);
+  --text-muted: var(--gray-500);
+  --text-subtle: var(--gray-500); /* small labels and placeholders still need 4.5:1 */
+  --muted: var(--gray-500);
+
+  /* ---- Semantic: accent and status ---- */
+  --accent: var(--green-600);
+  --accent-hover: var(--green-700);
+  --accent-active: var(--green-800);
+  --accent-soft: var(--green-50);
+  --accent-soft-border: var(--green-100);
+  --accent-text: var(--green-700);
+  --primary: var(--accent);
+  --primary-foreground: var(--gray-0);
+  --danger: var(--red-600);
+  --danger-hover: var(--red-700);
+  --danger-soft: var(--red-50);
+  --info-soft: var(--blue-50);
+  --info-text: var(--blue-600);
+  --warning-soft: var(--amber-50);
+  --warning-text: var(--amber-600);
+  --success-soft: var(--green-50);
+  --success-text: var(--green-700);
+  --focus-ring: 0 0 0 3px rgba(17, 122, 96, 0.22);
+
+  /* ---- Component ---- */
+  --button-radius: var(--radius-sm);
+  --button-height: 38px;
+  --button-height-sm: 30px;
+  --input-radius: var(--radius-sm);
+  --input-height: 40px;
+  --input-border: var(--border-strong);
+  --card-radius: var(--radius-md);
+  --card-border: var(--border);
+  --card-bg: var(--surface);
+  --dialog-radius: var(--radius-lg);
+  --sidebar-width: 244px;
+  --sidebar-bg: var(--surface);
+  --sidebar-text: var(--text-muted);
+  --sidebar-active-bg: var(--accent-soft);
+  --sidebar-active-text: var(--accent-text);
+  --topbar-height: 64px;
+  --radius: var(--radius-md);
+  --card: var(--surface);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --duration-fast: 0ms; --duration-base: 0ms; --duration-slow: 0ms; }
+}

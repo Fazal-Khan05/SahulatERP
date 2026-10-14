@@ -15,7 +15,9 @@ export const salesKinds: Kind[] = ['quotation', 'sales_order', 'delivery', 'sale
 
 const addDays = (date: string, days: number) => { const d = new Date(`${date}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
 let keySeed = 1;
-const newLine = (seed: Partial<LineDraft> = {}): LineDraft => ({ key: keySeed++, itemId: '', quantity: '1', price: '', discount: '0', taxRate: '', employeeId: '', ...seed });
+const newLine = (seed: Partial<LineDraft> = {}): LineDraft => ({ key: keySeed++, itemId: '', quantity: '', price: '', discount: '', taxRate: '', employeeId: '', ...seed });
+/** Stored decimals ('2400.0000') shown as typed values ('2400'); zero shows as an empty field with its placeholder. */
+const plain = (value: string) => { const d = D(value || '0'); return d.isZero() ? '' : d.toString(); };
 
 /**
  * Create or edit any document kind with a multi-line table. The customer/supplier is typed by
@@ -53,7 +55,7 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
   const [fxRate, setFxRate] = useState(existing?.fxRate ?? (sales ? '1' : ''));
   const [notes, setNotes] = useState(existing?.notes ?? '');
   const [creditOverride, setCreditOverride] = useState(existing?.creditOverride ?? '');
-  const [lines, setLines] = useState<LineDraft[]>(existing ? existing.lines.map(l => newLine({ itemId: l.itemId, quantity: D(l.quantity).toString(), price: D(l.price).toString(), discount: D(l.discount).toString(), taxRate: D(l.taxRate).toString(), employeeId: l.employeeId })) : [newLine({ taxRate: sales ? defaultTax : '0', employeeId: sales ? (actor.employeeId ?? '') : '' })]);
+  const [lines, setLines] = useState<LineDraft[]>(existing ? existing.lines.map(l => newLine({ itemId: l.itemId, quantity: plain(l.quantity), price: plain(l.price), discount: plain(l.discount), taxRate: plain(l.taxRate), employeeId: l.employeeId })) : [newLine({ taxRate: sales ? plain(defaultTax) : '', employeeId: sales ? (actor.employeeId ?? '') : '' })]);
   const [error, setError] = useState('');
   const [confirmingParty, setConfirmingParty] = useState(false);
 
@@ -80,7 +82,7 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
       const next = { ...l, ...patch };
       if (patch.itemId !== undefined && patch.itemId !== l.itemId) {
         const item = products.find(i => i.id === patch.itemId);
-        if (item && (l.price === '' || l.itemId === '')) next.price = D(sales ? item.price : item.cost).toString();
+        if (item && (l.price === '' || l.itemId === '')) next.price = plain(sales ? item.price : item.cost);
       }
       return next;
     }));
@@ -97,6 +99,8 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
     setError('');
     const name = partyName.trim();
     if (name.length < 2) return setError(`Enter the ${partyType}'s name.`);
+    const missing = lines.findIndex(l => l.itemId && !(Number(l.quantity) > 0));
+    if (missing >= 0) return setError(`Enter a quantity on line ${missing + 1}.`);
     const payloadLines = lines.filter(l => l.itemId).map(l => ({ itemId: l.itemId, quantity: l.quantity, price: l.price || '0', discount: l.discount || '0', taxRate: l.taxRate || '0', employeeId: sales ? l.employeeId : '', splits: [] }));
     if (!payloadLines.length) return setError('Add at least one product line.');
     let partyId = matchedParty?.id;
@@ -130,7 +134,7 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
         <label>Date<input aria-label="Document date" type="date" value={date} onChange={e => setDate(e.target.value)} required/></label>
         <label>{kind === 'quotation' ? 'Valid until' : 'Due date'}<input aria-label="Due date" type="date" value={dueDate} onChange={e => { setDueDate(e.target.value); setDueTouched(true); }} required/></label>
         {!sales && <><label>Currency<select aria-label="Currency" value={currency} onChange={e => { setCurrency(e.target.value as typeof currency); if (e.target.value === 'PKR') setFxRate('1'); }}><option>USD</option><option>CNY</option><option>PKR</option></select></label>
-          <label>PKR per {currency}<input aria-label="Exchange rate" type="number" step="0.0001" min="0.0001" value={fxRate} onChange={e => setFxRate(e.target.value)} disabled={currency === 'PKR'} required/></label></>}
+          <label>PKR per {currency}<input aria-label="Exchange rate" type="number" step="0.0001" min="0.0001" placeholder="e.g. 280" value={fxRate} onChange={e => setFxRate(e.target.value)} disabled={currency === 'PKR'} required/></label></>}
       </div>
       <div className="table-scroll editor-lines"><table>
         <thead><tr><th>Product</th><th className="num">Qty</th><th className="num">{sales ? 'Price' : 'Unit cost'}{!sales && currency !== 'PKR' ? ` (${currency})` : ''}</th><th className="num">Disc %</th><th className="num">Tax %</th>{sales && <th>Salesperson</th>}<th className="num">Line total</th><th/></tr></thead>
@@ -140,10 +144,10 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
           try { if (l.itemId && l.quantity && l.price !== '') lineTotal = money(D(l.quantity).mul(l.price).mul(D(100).minus(l.discount || 0)).div(100)); } catch { lineTotal = ''; }
           return <tr key={l.key}>
             <td><select aria-label={`Line ${index + 1} product`} value={l.itemId} onChange={e => update(l.key, { itemId: e.target.value })}><option value="">Select product…</option>{products.map(i => <option key={i.id} value={i.id}>{i.sku} · {i.name}</option>)}</select></td>
-            <td><input aria-label={`Line ${index + 1} quantity`} className="num" type="number" min="0.0001" step="0.0001" value={l.quantity} onChange={e => update(l.key, { quantity: e.target.value })}/>{item && <small className="field-hint">{item.unit}</small>}</td>
-            <td><input aria-label={`Line ${index + 1} price`} className="num" type="number" min="0" step="0.0001" value={l.price} onChange={e => update(l.key, { price: e.target.value })}/></td>
-            <td><input aria-label={`Line ${index + 1} discount`} className="num" type="number" min="0" max="100" step="0.01" value={l.discount} onChange={e => update(l.key, { discount: e.target.value })}/></td>
-            <td><input aria-label={`Line ${index + 1} tax`} className="num" type="number" min="0" max="100" step="0.01" value={l.taxRate} onChange={e => update(l.key, { taxRate: e.target.value })}/></td>
+            <td><input aria-label={`Line ${index + 1} quantity`} className="num" type="number" min="0.0001" step="0.0001" placeholder="Qty" value={l.quantity} onChange={e => update(l.key, { quantity: e.target.value })}/>{item && <small className="field-hint">{item.unit}</small>}</td>
+            <td><input aria-label={`Line ${index + 1} price`} className="num" type="number" min="0" step="0.0001" placeholder="0.00" value={l.price} onChange={e => update(l.key, { price: e.target.value })}/></td>
+            <td><input aria-label={`Line ${index + 1} discount`} className="num" type="number" min="0" max="100" step="0.01" placeholder="0" value={l.discount} onChange={e => update(l.key, { discount: e.target.value })}/></td>
+            <td><input aria-label={`Line ${index + 1} tax`} className="num" type="number" min="0" max="100" step="0.01" placeholder="0" value={l.taxRate} onChange={e => update(l.key, { taxRate: e.target.value })}/></td>
             {sales && <td><select aria-label={`Line ${index + 1} salesperson`} value={l.employeeId} onChange={e => update(l.key, { employeeId: e.target.value })}><option value="">—</option>{people.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></td>}
             <td className="num amount">{lineTotal ? formatMoney(lineTotal) : '—'}</td>
             <td><button type="button" className="icon-button" aria-label={`Remove line ${index + 1}`} disabled={lines.length === 1} onClick={() => setLines(c => c.filter(x => x.key !== l.key))}><Trash2 size={15}/></button></td>

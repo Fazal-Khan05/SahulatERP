@@ -60,6 +60,7 @@ test('sales and purchase cycles with partial conversions, payments and returns',
   await expect(walkIn.getByText(/New customer — will be created/)).toBeVisible();
   await walkIn.getByLabel('New customer city').fill('Hyderabad');
   await walkIn.getByLabel('Line 1 product').selectOption(itemB);
+  await walkIn.getByLabel('Line 1 quantity').fill('1');
   await walkIn.getByRole('button', { name: 'Save draft' }).click();
   const confirmCustomer = page.getByRole('dialog', { name: 'Save customer?' });
   await expect(confirmCustomer).toContainText(`Walk-in ${stamp}`);

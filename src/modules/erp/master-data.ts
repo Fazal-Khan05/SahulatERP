@@ -10,10 +10,14 @@ export type FieldSpec = {
   label: string;
   type: FieldType;
   required?: boolean;
+  step?: string;        // input step for number fields (default 1)
   hint?: string;
   options?: { value: string; label: string }[] | ((w: Workspace) => { value: string; label: string }[]);
   csv?: boolean;        // included in import/export (default true for non-pairs fields)
   full?: boolean;       // spans both columns in the form
+  newOnly?: boolean;    // shown only when creating a record
+  section?: string;     // heading rendered above this field in the form
+  hidden?: (w: Workspace) => boolean;
 };
 export type EntitySpec<T extends { id: string } = { id: string }> = {
   key: "customers" | "suppliers" | "items" | "employees" | "warehouses" | "plans";
@@ -71,16 +75,19 @@ export const items: EntitySpec<Item> = {
     { key: "name", label: "Product name", type: "text", required: true },
     { key: "category", label: "Category", type: "text", hint: "Used by category-based commission plans" },
     { key: "unit", label: "Unit", type: "text", hint: "pcs, box, kg…" },
-    { key: "price", label: "Selling price (PKR)", type: "money" },
+    { key: "price", label: "Selling price (PKR)", type: "money", required: true },
     { key: "cost", label: "Standard cost (PKR)", type: "money", hint: "Used only when there is no stock history" },
     { key: "hsCode", label: "HS code", type: "text", hint: "For imports and customs" },
     { key: "reorderLevel", label: "Reorder level", type: "number" },
     { key: "weight", label: "Weight (kg)", type: "number", hint: "Landed-cost allocation by weight" },
     { key: "volume", label: "Volume (m³)", type: "number", hint: "Landed-cost allocation by volume" },
+    { key: "openingQuantity", label: "Quantity in stock now", type: "number", step: "0.0001", csv: false, newOnly: true, section: "Opening stock", hint: "Leave at 0 if you have none yet" },
+    { key: "openingCost", label: "Cost per unit (PKR)", type: "money", csv: false, newOnly: true, hint: "What one unit cost you; values your stock" },
+    { key: "openingWarehouseId", label: "Warehouse", type: "select", csv: false, newOnly: true, options: w => w.warehouses.map(x => ({ value: x.id, label: x.name })), hidden: w => w.warehouses.length <= 1 },
   ],
   columns: [{ key: "sku", label: "SKU" }, { key: "name", label: "Product" }, { key: "category", label: "Category" }, { key: "unit", label: "Unit" }, { key: "price", label: "Price" }, { key: "cost", label: "Cost" }, { key: "reorderLevel", label: "Reorder" }],
   records: w => w.items,
-  blank: () => ({ sku: "", name: "", category: "General", unit: "pcs", price: "0", cost: "0", hsCode: "", reorderLevel: 0, weight: "1", volume: "1" }),
+  blank: w => ({ sku: "", name: "", category: "General", unit: "pcs", price: "", cost: "0", hsCode: "", reorderLevel: 0, weight: "1", volume: "1", openingQuantity: 0, openingCost: "", openingWarehouseId: w.warehouses[0]?.id ?? "" }),
   toPayload: i => ({ id: i.id, sku: i.sku, name: i.name, category: i.category, hsCode: i.hsCode, unit: i.unit, price: i.price, cost: i.cost, weight: i.weight, volume: i.volume, reorderLevel: i.reorderLevel }),
   isArchived: r => !!r.archived, searchText: r => `${r.sku} ${r.name} ${r.category} ${r.hsCode}`,
 };

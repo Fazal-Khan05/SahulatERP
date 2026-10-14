@@ -1,34 +1,52 @@
 /* SahulatERP design tokens: primitive → semantic → component. Components reference semantic/component tokens only. */
 :root {
-  /* ---- Primitive: warm neutral scale ---- */
+  /* ---- Primitive: cool neutral scale (purple reads muddy on warm grey) ---- */
   --gray-0: #ffffff;
-  --gray-25: #fbfbfa;
-  --gray-50: #f7f6f3;
-  --gray-100: #efeeea;
-  --gray-150: #e6e4df;
-  --gray-200: #d9d6d0;
-  --gray-300: #c4c1ba;
-  --gray-400: #a8a59e;
-  --gray-500: #6b6965;  /* 5.2:1 on white, 4.8:1 on the page background */
-  --gray-600: #5b5a56;
-  --gray-700: #44433f;
-  --gray-800: #2f3437;
-  --gray-900: #1f2224;
+  --gray-25: #fbfbfd;
+  --gray-50: #f6f7fb;
+  --gray-100: #eef0f5;
+  --gray-150: #e4e7ee;
+  --gray-200: #d6dae3;
+  --gray-300: #c0c5d1;
+  --gray-400: #9aa0ad;
+  --gray-500: #646464;  /* 5.9:1 on white, 5.4:1 on the page background */
+  --gray-600: #4f535b;
+  --gray-700: #3a3e46;
+  --gray-800: #292d34;  /* graphite */
+  --gray-900: #202020;
 
-  /* ---- Primitive: brand green (desaturated) and spot pastels ---- */
-  --green-50: #edf3ec;
-  --green-100: #dbe9df;
-  --green-500: #1c8a6e;
-  --green-600: #117a60;
-  --green-700: #0c5e4a;
-  --green-800: #094a3b;
-  --red-50: #fdebec;
-  --red-600: #9f2f2d;
-  --red-700: #8a2624;
-  --blue-50: #e1f3fe;
-  --blue-600: #1f6c9f;
-  --amber-50: #fbf3db;
-  --amber-600: #956400;
+  /* ---- Primitive: brand violet, cyan and pink; semantic hues ---- */
+  --violet-50: #f3effe;
+  --violet-100: #e6dcfd;
+  --violet-200: #cdb8fb;
+  --violet-500: #7c4dff;
+  --violet-600: #6b3df5;
+  --violet-700: #5a2fd6;
+  --violet-800: #4a25b3;
+  --cyan-50: #e3f8fe;
+  --cyan-100: #bfeefc;
+  --cyan-500: #12d0fa;
+  --cyan-600: #0891b2;
+  --cyan-700: #0e7490;
+  --pink-500: #fa12e3;
+  --pink-50: #fee8fb;
+  --green-50: #e5f6ec;
+  --green-100: #c6ecd5;
+  --green-500: #0da04a;
+  --green-600: #078d3b;
+  --green-700: #06702f;
+  --green-800: #055a26;
+  --red-50: #fee9e7;
+  --red-600: #d92d20;
+  --red-700: #b42318;
+  --blue-50: #e3f8fe;
+  --blue-600: #0e7490;
+  --amber-50: #fff4dc;
+  --amber-600: #a35a00;
+
+  /* ---- Primitive: the brand gradient, reserved for a few big moments ---- */
+  --gradient-brand: linear-gradient(263deg, var(--pink-500) -35%, var(--violet-600) 41%, var(--cyan-500) 135%);
+  --gradient-brand-soft: linear-gradient(263deg, rgba(250, 18, 227, 0.10) -35%, rgba(107, 61, 245, 0.12) 41%, rgba(18, 208, 250, 0.14) 135%);
 
   /* ---- Primitive: typography ---- */
   --font-sans: var(--font-geist-sans, "Geist"), "SF Pro Display", "Helvetica Neue", ui-sans-serif, system-ui, sans-serif;
@@ -62,11 +80,12 @@
   --radius-sm: 6px;   /* controls: buttons, inputs, badges */
   --radius-md: 10px;  /* containers: cards, menus */
   --radius-lg: 14px;  /* dialogs */
-  --shadow-none: 0 0 0 rgba(31, 34, 36, 0);
-  --shadow-xs: 0 1px 2px rgba(31, 34, 36, 0.04);
-  --shadow-sm: 0 2px 8px rgba(31, 34, 36, 0.05);
-  --shadow-md: 0 8px 24px rgba(31, 34, 36, 0.08);
-  --shadow-lg: 0 24px 64px rgba(31, 34, 36, 0.14);
+  --shadow-none: 0 0 0 rgba(18, 43, 165, 0);
+  --shadow-xs: 0 1px 2px rgba(18, 43, 165, 0.05);
+  --shadow-sm: 0 4px 12px rgba(18, 43, 165, 0.07);
+  --shadow-md: 0 10px 25px rgba(18, 43, 165, 0.10);
+  --shadow-lg: 0 20px 60px rgba(18, 43, 165, 0.16);
+  --shadow-xl: 0 34px 54px rgba(18, 43, 165, 0.20);
 
   /* ---- Primitive: motion ---- */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);      /* strong ease-out for UI entrances */
@@ -93,27 +112,33 @@
   --text: var(--gray-800);
   --text-muted: var(--gray-500);
   --text-subtle: var(--gray-500); /* small labels and placeholders still need 4.5:1 */
+  --ink: var(--gray-800);
   --muted: var(--gray-500);
 
   /* ---- Semantic: accent and status ---- */
-  --accent: var(--green-600);
-  --accent-hover: var(--green-700);
-  --accent-active: var(--green-800);
-  --accent-soft: var(--green-50);
-  --accent-soft-border: var(--green-100);
-  --accent-text: var(--green-700);
+  --accent: var(--violet-600);
+  --accent-hover: var(--violet-700);
+  --accent-active: var(--violet-800);
+  --accent-soft: var(--violet-50);
+  --accent-soft-border: var(--violet-100);
+  --accent-text: var(--violet-700);
+  --accent-2: var(--cyan-500);
+  --accent-2-soft: var(--cyan-50);
+  --accent-2-text: var(--cyan-700);
   --primary: var(--accent);
   --primary-foreground: var(--gray-0);
   --danger: var(--red-600);
   --danger-hover: var(--red-700);
   --danger-soft: var(--red-50);
-  --info-soft: var(--blue-50);
-  --info-text: var(--blue-600);
+  --info-soft: var(--cyan-50);
+  --info-text: var(--cyan-700);
   --warning-soft: var(--amber-50);
   --warning-text: var(--amber-600);
   --success-soft: var(--green-50);
   --success-text: var(--green-700);
-  --focus-ring: 0 0 0 3px rgba(17, 122, 96, 0.22);
+  --draft-soft: var(--violet-50);
+  --draft-text: var(--violet-700);
+  --focus-ring: 0 0 0 3px rgba(107, 61, 245, 0.25);
 
   /* ---- Component ---- */
   --button-radius: var(--radius-sm);
@@ -139,3 +164,17 @@
 @media (prefers-reduced-motion: reduce) {
   :root { --duration-fast: 0ms; --duration-base: 0ms; --duration-slow: 0ms; }
 }
+
+/* ---- Component: module tiles (sidebar icons and feature-picker tiles share one colour per module) ---- */
+[data-module="dashboard"] { --tile-bg: var(--violet-100); --tile-fg: var(--violet-700); }
+[data-module="sales"] { --tile-bg: var(--violet-100); --tile-fg: var(--violet-700); }
+[data-module="purchasing"] { --tile-bg: var(--cyan-100); --tile-fg: var(--cyan-700); }
+[data-module="inventory"] { --tile-bg: #ffecc7; --tile-fg: #9a5200; }
+[data-module="imports"] { --tile-bg: #dbe7fe; --tile-fg: #1d4ed8; }
+[data-module="collections"] { --tile-bg: var(--green-100); --tile-fg: var(--green-700); }
+[data-module="cashbank"] { --tile-bg: #ccf5ec; --tile-fg: #0f766e; }
+[data-module="commissions"] { --tile-bg: var(--pink-50); --tile-fg: #a21caf; }
+[data-module="payroll"] { --tile-bg: #ffe3d1; --tile-fg: #c2410c; }
+[data-module="accounting"] { --tile-bg: #e0e4ff; --tile-fg: #3730a3; }
+[data-module="reports"] { --tile-bg: var(--gray-150); --tile-fg: var(--gray-700); }
+[data-module="settings"] { --tile-bg: var(--gray-150); --tile-fg: var(--gray-700); }

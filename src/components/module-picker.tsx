@@ -1,5 +1,6 @@
 'use client';
 import { Check, Link2 } from 'lucide-react';
+import { moduleBenefits, moduleIcons } from './module-icons';
 import { moduleCatalogue, moduleRecordCounts, presets, withRequirements, dependentsOf } from '@/modules/erp/modules';
 import type { ToggleModule, Workspace } from '@/modules/erp/types';
 
@@ -27,7 +28,7 @@ export function ModulePicker({ selected, onChange, workspace, disabled = false, 
       {presets.map(preset => {
         const active = preset.modules.length === selected.length && preset.modules.every(key => on.has(key));
         return <button key={preset.key} type="button" className={`module-preset ${active ? 'active' : ''}`} disabled={disabled} onClick={() => onChange(withRequirements(preset.modules))}>
-          <strong>{preset.label}</strong><small>{preset.description}</small>
+          {active && <Check size={14}/>}<strong>{preset.label}</strong><small>{preset.description}</small>
         </button>;
       })}
     </div>}
@@ -37,9 +38,11 @@ export function ModulePicker({ selected, onChange, workspace, disabled = false, 
         const missing = item.requires.filter(dep => !on.has(dep));
         const dependents = enabled ? dependentsOf(item.key, selected) : [];
         const counts = workspace && enabled ? moduleRecordCounts(workspace, item.key).filter(c => c.count > 0) : [];
-        return <label key={item.key} className={`module-card ${enabled ? 'enabled' : ''}`}>
+        const Icon = moduleIcons[item.key];
+        return <label key={item.key} data-module={item.key} className={`module-card ${enabled ? 'enabled' : ''}`}>
           <div className="module-card-head">
-            <span className="module-card-title">{item.label}</span>
+            <span className="module-tile"><Icon size={18}/></span>
+            <span className="module-card-title">{item.label}<small>{moduleBenefits[item.key]}</small></span>
             <span className="switch">
               <input type="checkbox" role="switch" aria-label={`${item.label} module`} checked={enabled} disabled={disabled} onChange={() => toggle(item.key)}/>
               <span className="switch-track"><span className="switch-thumb">{enabled && <Check size={11}/>}</span></span>

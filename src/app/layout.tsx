@@ -9,7 +9,7 @@ const mono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono", dis
 
 export const metadata: Metadata = { title: "SahulatERP · Your business, connected", description: "The working ERP for Pakistani importers and distributors.", icons: { icon: "/favicon.svg" } };
 // Light-only product today: theme-color matches the top bar; keyboard resizes the layout viewport on Android.
-export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", interactiveWidget: "resizes-content", colorScheme: "light", themeColor: "#f7f6f3" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", interactiveWidget: "resizes-content", colorScheme: "light", themeColor: "#f6f7fb" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return <html lang="en" className={`${sans.variable} ${mono.variable}`}><body>{children}</body></html>;

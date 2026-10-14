@@ -15,3 +15,8 @@ supabase/.branches/
 .claude/launch.json
 reports/qa-run/vitest.json
 reports/qa-run/playwright.json
+reports/qa-run/*.json
+reports/qa-run/*.log
+reports/qa-run/evidence/
+reports/qa-run/.toc-pages.json
+reports/qa-run/*.html

@@ -1,6 +1,6 @@
 # SahulatERP SQA run — results
 
-Generated 2026-10-14 14:46 UTC from `npm run test:qa` and the QA browser pass.
+Generated 2026-10-14 15:03 UTC from `npm run test:qa` and the QA browser pass.
 
 | Area | Cases | Pass | Fail | Browser not yet run | Manual only | Missing |
 |---|---|---|---|---|---|---|
@@ -442,7 +442,7 @@ Generated 2026-10-14 14:46 UTC from `npm run test:qa` and the QA browser pass.
 - DAT-063: [documented: future dates are accepted]
 - DAT-074: [documented: not normalised; NFC and NFD forms are distinct]
 - DAT-081: [documented: not normalised; insertion order from the engine]
-- DAT-088: [documented: re-runs this pack's UI file and then its print file, each alone in a child Playwright run (the reverse of the default 16 → 19 order), and compares every outcome with its tag: [defect]
+- DAT-088: [documented: re-runs this pack's UI file and then its print file, each alone in a child Playwright run (the reverse of the default 16 → 19 order), and compares every outcome with its tag: defect-tagged tests fail, manual-tagged tests skip, the rest pass]
 - DAT-089: [documented: the server under test is a production build, so there is no on-demand compile to provoke; the warm-up is wired in the config and every route it touches answers below 500]
 - DAT-091: [documented: a 4xx whose body is not JSON is retried once]
 - DAT-094: [documented: the server re-reads the latest snapshot on every POST, so the command applies on top without a conflict]

@@ -2,7 +2,7 @@
 
 Live site: https://sahulaterp.vercel.app · Use Chrome on a laptop; zoom the browser to 110–125% for a room.
 
-Demo account: `khanfazal3368@gmail.com` (password you set). It owns an empty company called **My Company** (so the audience sees the setup wizard) and also has access to the sample company **Sahulat Trading Co.** (populated; use it for dashboards and reports).
+Demo account: `khanfazal3368@gmail.com` (password you set). It owns one empty company, **My Company** — a clean slate. Everything the audience sees is created during the demo.
 
 ## Before you start (5 minutes)
 - Have a PNG logo ready on the desktop (any image under 1 MB).
@@ -10,7 +10,7 @@ Demo account: `khanfazal3368@gmail.com` (password you set). It owns an empty com
 - Keep the storyline simple: **buy goods → stock them → sell them → get paid → see the numbers**.
 - Things that will bite you if you forget them (all by design):
   - A new company has **no default sales-tax rate** and **no credit limits**. When you create a customer, set the credit limit to a big number (e.g. 10,000,000) or the invoice will refuse to submit without an owner override reason. Type the tax % on invoice lines (e.g. 18) if you want tax shown.
-  - **Payroll won't run until EOBI/tax rates are entered** in Payroll settings. Don't open Payroll in the empty company; show it in the sample company.
+  - **Payroll needs statutory rates (EOBI, tax) and there is no settings screen for them yet**, so leave Payroll switched off in the wizard and mention it as the next module.
   - **Cheques only post when cleared.** Record → Deposit → Cleared is the story.
 
 ## Part 1 — Signing in and setting up a company (≈4 min)
@@ -18,7 +18,7 @@ Demo account: `khanfazal3368@gmail.com` (password you set). It owns an empty com
 2. Sign in. You land in the **setup wizard** because this company is new.
 3. **Step 1 Company:** type the company name, address, phone, email. Say: "Whatever you type here appears on every invoice you print."
 4. **Step 2 Documents:** upload the logo, click a colour, type a footer line like "Bank: HBL · Account 1234". Point at the live invoice preview on the right updating as you type.
-5. **Step 3 Features:** click **Importer-distributor**. Say: "You switch on only what you need. Turn off Commissions — see how it asks nothing now; later we'll see turning things off needs your password so nobody hides data by accident." Turn it back on.
+5. **Step 3 Features:** click **Importer-distributor** (Payroll stays off). Say: "You switch on only what you need. Turn off Commissions — see how it asks nothing now; later we'll see turning things off needs your password so nobody hides data by accident." Turn it back on.
 6. **Step 4 Review** → **Create my workspace**. You're on the Overview; it's empty because there's no data yet. Say: "Everything you see from here on is built from the transactions we enter."
 
 ## Part 2 — Products and customers (≈4 min)
@@ -53,13 +53,13 @@ Demo account: `khanfazal3368@gmail.com` (password you set). It owns an empty com
 27. **Reports:** run **Aged receivables** ("who owes me, and how old is it"), a **Customer statement** (choose the customer — every invoice, return and receipt with a running balance; print it), **Sales analysis** by salesperson, **Profit & loss**, **Balance sheet** (point at "Assets − liabilities − equity = 0: the books balance"), **Control reconciliation** (all "reconciled"). Press **Export CSV** on one to show Excel works.
 28. **Accounting:** show that every action above created a numbered journal entry automatically; the trial balance balances. Say: "Your accountant gets proper books without anyone doing double entry."
 
-## Part 7 — Commissions and payroll (use the sample company) (≈4 min)
-29. Open the company switcher (top-left) → **Sahulat Trading Co.** Say: "This is a sample company with a month of activity so you can see it populated."
-30. **Overview:** the real chart, the "needs attention" queues (cheques due, approvals, follow-ups), recent sales.
-31. **Commissions:** entitlements per salesperson — earned, released (as customers paid), paid. Point at an invoice that was partly collected: commission released in proportion. Point at a bounced cheque: release reversed. **Plans:** show the plan types (flat, by category, by customer class, tiered, targets).
-32. **Payroll:** runs with salary, attendance, commission settlement, EOBI and tax, approve → paid; note "Commission recovered" for a cheque that bounced after payout. **Employees** tab for the staff list.
-33. **Settings → Features:** turn off Payroll — it asks for your password; cancel. Say: "Nothing is ever deleted; it's hidden and comes back exactly as it was." **Company & documents:** change the accent colour and watch the invoice preview.
-34. **Settings → Access → View as role:** pick **Salesperson** — the sidebar shrinks and the data narrows to that person's own sales; press **Exit preview**. Say: "Each user only sees what their job needs; salaries never leave the server for a salesperson."
+## Part 7 — Commissions and settings (≈4 min)
+To show commissions from your own data, add these two things in Part 2: **Commissions → Salespeople → New employee** (e.g. "Hamza, Order Booker") and **Commissions → Plans**: edit the provisioned "Standard plan", type **flat**, rate **2**. Then in Part 4 pick Hamza as the salesperson on each invoice line.
+29. **Commissions → Entitlements:** after the invoice is submitted the entitlement is **earned** but not released. After the cash receipt in Part 5 it shows **released** in proportion to what was collected; after the cheque clears, more releases. Say: "Commission follows the cash, not the invoice — nobody pays commission on money that never arrived."
+30. Press **Approve** on a released entitlement: "ready for payroll."
+31. **Settings → Features:** turn off Commissions — it asks for your password; cancel. Say: "Nothing is ever deleted; it's hidden and comes back exactly as it was."
+32. **Settings → Company & documents:** change the accent colour and watch the invoice preview update; **Save changes**.
+33. **Settings → Access → View as role** is available only in sample companies, so skip it; say instead: "Each user is given a role — a salesperson sees only their own sales, never salaries or the ledger."
 
 ## Closing line
 "Every number you saw came from the transactions we entered in the last twenty minutes — the invoice, the cheque, the stock, the exchange loss, the commission. One system, and it never lets the books go out of balance."

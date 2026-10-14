@@ -31,7 +31,7 @@ export function ResetPassword() {
 
   return <main className="login-shell reset-shell"><section className="login-panel">
     <div className="login-brand"><span className="brand-mark">S</span><span>Sahulat<strong>ERP</strong></span></div>
-    <div className="login-copy"><span className="eyebrow">ACCOUNT RECOVERY</span><h1>Set a new password</h1></div>
+    <div className="login-copy"><h1>Set a new password</h1><p>Choose a password of at least 8 characters.</p></div>
     {state === 'checking' && <p className="form-note"><Loader2 className="spin" size={16}/> Checking your reset link…</p>}
     {state === 'expired' && <div className="login-form"><p className="error-note">This reset link has expired or was already used. Request a new one from the sign-in page.</p><a className="button button-primary" href="/">Back to sign in</a></div>}
     {state === 'saved' && <div className="login-form"><p className="form-note"><CheckCircle2 size={16}/> Your password was changed.</p><a className="button button-primary" href="/">Continue to SahulatERP</a></div>}

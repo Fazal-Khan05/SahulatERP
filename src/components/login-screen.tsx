@@ -33,6 +33,5 @@ export function LoginScreen() {
       <Button type="submit" disabled={busy}>{busy?<Loader2 className="spin" size={17}/>:<ShieldCheck size={17}/>}Sign in securely</Button>
       <button type="button" className="text-button" onClick={reset} disabled={busy}>Forgot your password?</button>
     </form>
-    <div className="simulation-note"><ShieldCheck size={18}/><span><strong>Working prototype</strong> External payments and customs lookups are simulated.</span></div>
   </section><aside className="login-visual"><div><h2>Your entire trading operation, one clear view.</h2><p>From imported stock to cleared collections and payroll, every number remains connected to its source.</p><ul className="login-points"><li>Sales, stock, purchases and cash in one place</li><li>Commission that follows the money actually collected</li><li>Every entry posted to proper books automatically</li></ul></div></aside></main>;
 }

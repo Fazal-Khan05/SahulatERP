@@ -13,3 +13,5 @@ supabase/.temp/
 supabase/.branches/
 .vercel
 .claude/launch.json
+reports/qa-run/vitest.json
+reports/qa-run/playwright.json

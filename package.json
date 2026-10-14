@@ -3,7 +3,7 @@
   "scripts": {
     "dev": "next dev --webpack --hostname 127.0.0.1",
     "build": "next build --webpack", "start": "next start --hostname 127.0.0.1",
-    "typecheck": "tsc --noEmit", "test": "vitest run", "test:e2e": "playwright test", "test:qa": "vitest run --config vitest.qa.config.ts",
+    "typecheck": "tsc --noEmit", "test": "vitest run", "test:e2e": "playwright test", "test:qa": "vitest run --config vitest.qa.config.ts", "test:qa:browser": "playwright test --config playwright.qa.config.ts", "qa:report": "tsx scripts/qa-report.ts",
     "db:check": "tsx scripts/check-database.ts", "db:migrate": "tsx scripts/apply-migrations.ts", "db:generate": "drizzle-kit generate",
     "db:seed": "tsx scripts/seed-hosted.ts", "auth:bootstrap": "tsx scripts/bootstrap-owner.ts", "qa:tenant": "tsx scripts/create-qa-tenant.ts", "member:create": "tsx scripts/create-member.ts", "company:reset": "tsx scripts/reset-company.ts"
   },

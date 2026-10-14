@@ -1,6 +1,6 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { Loader2, Plus, Save, Trash2, UserPlus } from 'lucide-react';
+import { Loader2, Plus, Save, Send, Trash2, UserPlus } from 'lucide-react';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
 import { businessToday } from '@/modules/erp/dates';
@@ -57,6 +57,9 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
   const [creditOverride, setCreditOverride] = useState(existing?.creditOverride ?? '');
   const [lines, setLines] = useState<LineDraft[]>(existing ? existing.lines.map(l => newLine({ itemId: l.itemId, quantity: plain(l.quantity), price: plain(l.price), discount: plain(l.discount), taxRate: plain(l.taxRate), employeeId: l.employeeId })) : [newLine({ taxRate: sales ? plain(defaultTax) : '', employeeId: sales ? (actor.employeeId ?? '') : '' })]);
   const [error, setError] = useState('');
+  // Once a draft exists (opened for editing, or created by a failed submit) later saves update it instead of creating another.
+  const [draftId, setDraftId] = useState<string | null>(existing?.id ?? null);
+  const [mode, setMode] = useState<'draft' | 'submit'>('submit');
   const [confirmingParty, setConfirmingParty] = useState(false);
 
   const matchedParty = useMemo(() => { const needle = partyName.trim().toLowerCase(); return needle ? parties.find(p => p.name.trim().toLowerCase() === needle) : undefined; }, [partyName, parties]);
@@ -88,13 +91,13 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
     }));
   }
   // A new name is confirmed with the user before a customer/supplier record is created alongside the document.
-  function requestSave() {
-    setError('');
+  function requestSave(next: 'draft' | 'submit') {
+    setError(''); setMode(next);
     if (partyName.trim().length < 2) return setError(`Enter the ${partyType}'s name.`);
     if (!lines.some(l => l.itemId)) return setError('Add at least one product line.');
-    if (isNewParty) setConfirmingParty(true); else void save();
+    if (isNewParty) setConfirmingParty(true); else void save(next);
   }
-  async function save() {
+  async function save(next: 'draft' | 'submit' = mode) {
     setConfirmingParty(false);
     setError('');
     const name = partyName.trim();
@@ -111,8 +114,14 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
       partyId = created.recordId;
     }
     const payload = { kind, partyId, warehouseId, date, dueDate, currency: sales ? 'PKR' : currency, fxRate: sales ? '1' : fxRate, notes, ...(creditOverride.trim() ? { creditOverride: creditOverride.trim() } : {}), lines: payloadLines };
-    const result = existing ? await command('update_document', { id: existing.id, ...payload }) : await command('create_document', payload);
-    if (result.ok) onClose(); else setError(result.message);
+    const result = draftId ? await command('update_document', { id: draftId, ...payload }) : await command('create_document', payload);
+    if (!result.ok) return setError(result.message);
+    const id = draftId ?? result.recordId ?? null;
+    if (next === 'draft' || !id) return onClose();
+    // One step for the merchant: the draft is posted straight away. If posting fails the draft is kept and the reason shown here.
+    setDraftId(id);
+    const posted = await command('submit_document', { id });
+    if (posted.ok) onClose(); else setError(`Saved as a draft but not submitted. ${posted.message}`);
   }
   const title = existing ? `Edit ${documentTitle(kind).toLowerCase()} ${existing.number}` : `New ${documentTitle(kind).toLowerCase()}`;
   const partyLabel = sales ? 'Customer' : 'Supplier';
@@ -121,7 +130,7 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
   return <Dialog open={open} onOpenChange={value => { if (!value) onClose(); }}>
     <DialogContent className="editor-dialog">
       <DialogTitle>{title}</DialogTitle>
-      <DialogDescription>{existing ? 'Drafts can be edited until they are submitted.' : 'Saved as a draft; submit it to post stock and ledger entries.'}</DialogDescription>
+      <DialogDescription>{existing ? 'Drafts can be edited until they are submitted.' : `Submit posts it straight away${sales ? ' and moves the stock' : ''}. Save draft to finish later.`}</DialogDescription>
       <div className="editor-head field-grid">
         <label className={singleLocation ? 'full-width' : undefined}>{partyLabel}
           <input aria-label={partyLabel} list={listId} value={partyName} onChange={e => changePartyName(e.target.value)} placeholder={`Type a name — existing ${partyType}s are suggested`} autoComplete="off" required/>
@@ -168,13 +177,13 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
         </tbody></table>
       </div>
       {error && <p className="error-note" role="alert">{error}</p>}
-      <div className="form-actions"><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="button" disabled={!!busy || partyName.trim().length < 2} onClick={requestSave}>{busy ? <Loader2 className="spin" size={16}/> : <Save size={16}/>}{existing ? 'Save changes' : 'Save draft'}</Button></div>
+      <div className="form-actions"><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="button" variant="outline" disabled={!!busy || partyName.trim().length < 2} onClick={() => requestSave('draft')}>{busy && mode === 'draft' ? <Loader2 className="spin" size={16}/> : <Save size={16}/>}{existing ? 'Save changes' : 'Save draft'}</Button><Button type="button" disabled={!!busy || partyName.trim().length < 2} onClick={() => requestSave('submit')}>{busy && mode === 'submit' ? <Loader2 className="spin" size={16}/> : <Send size={16}/>}{existing ? 'Save and submit' : `Submit ${documentTitle(kind).toLowerCase()}`}</Button></div>
     </DialogContent>
     <Dialog open={confirmingParty} onOpenChange={v => { if (!v) setConfirmingParty(false); }}>
       <DialogContent className="confirm-dialog">
         <DialogTitle>Save {partyType}?</DialogTitle>
         <DialogDescription>“{partyName.trim()}” is not in your {partyType} list yet. Saving this {documentTitle(kind).toLowerCase()} will also add them as a {partyType}{newCity.trim() || newPhone.trim() ? ` (${[newCity.trim(), newPhone.trim()].filter(Boolean).join(' · ')})` : ''}, so you can reuse them next time.</DialogDescription>
-        <div className="form-actions"><Button type="button" variant="outline" onClick={() => setConfirmingParty(false)}>Cancel</Button><Button type="button" disabled={!!busy} onClick={save}>{busy ? <Loader2 className="spin" size={16}/> : <UserPlus size={16}/>}Save {partyType}</Button></div>
+        <div className="form-actions"><Button type="button" variant="outline" onClick={() => setConfirmingParty(false)}>Cancel</Button><Button type="button" disabled={!!busy} onClick={() => save()}>{busy ? <Loader2 className="spin" size={16}/> : <UserPlus size={16}/>}Save {partyType}</Button></div>
       </DialogContent>
     </Dialog>
   </Dialog>;

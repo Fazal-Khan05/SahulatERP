@@ -94,7 +94,8 @@ function WorkspaceSwitcher({workspace,memberships}:{workspace:Workspace;membersh
 function BranchPicker({workspace,branch,setBranch,allowed}:{workspace:Workspace;branch:string;setBranch:(id:string)=>void;allowed:string[]}){
   const options=workspace.branches.filter(item=>!allowed.length||allowed.includes(item.id));
   const current=options.find(item=>item.id===branch);
-  if(options.length<2)return current||options[0]?<Button variant="outline" disabled><Globe2 size={16}/>{(current||options[0]).name}</Button>:null;
+  // One branch means nothing to filter: show nothing rather than a dead "Main branch" button.
+  if(options.length<2)return null;
   return <DropdownMenu.Root><DropdownMenu.Trigger asChild><Button variant="outline" aria-label={`Branch filter, showing ${current?.name||'all branches'}`}><Globe2 size={16}/>{current?.name||'All branches'}<ChevronDown size={14}/></Button></DropdownMenu.Trigger>
     <DropdownMenu.Portal><DropdownMenu.Content className="workspace-menu light-menu" align="end" sideOffset={6}>
       {[{id:'',name:'All branches'},...options].map(item=><DropdownMenu.Item key={item.id||'all'} className="workspace-menu-item compact" onSelect={()=>setBranch(item.id)}><span className="workspace-menu-name"><strong>{item.name}</strong></span>{branch===item.id&&<Check size={15}/>}</DropdownMenu.Item>)}

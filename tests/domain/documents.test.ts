@@ -115,3 +115,15 @@ describe('returns', () => {
     expect(ok.workspace.documents.find(d => d.kind === 'credit_note' && d.parentId === invoice.id)!.lines[0].quantity).toBe('2');
   });
 });
+
+describe('credit limits', () => {
+  it('treats a zero limit as no limit and enforces a positive one', () => {
+    let w = run(buildDemoWorkspace(), 'save_party', { name: 'Walk-in Buyer', type: 'customer', city: '', email: '', taxId: '', registered: false, creditLimit: '0', terms: 0, customerClass: 'Retailer' }).workspace;
+    const buyer = w.parties.find(p => p.name === 'Walk-in Buyer')!.id;
+    const big = run(w, 'create_document', { kind: 'sales_invoice', partyId: buyer, warehouseId: 'khi-main', date: '2026-10-15', dueDate: '2026-10-15', lines: [line('i-1', '100', '2400')] });
+    expect(() => run(big.workspace, 'submit_document', { id: big.recordId })).not.toThrow();
+    w = run(w, 'save_party', { ...w.parties.find(p => p.id === buyer)!, creditLimit: '1000' }).workspace;
+    const capped = run(w, 'create_document', { kind: 'sales_invoice', partyId: buyer, warehouseId: 'khi-main', date: '2026-10-15', dueDate: '2026-10-15', lines: [line('i-1', '1', '2400')] });
+    expect(() => run(capped.workspace, 'submit_document', { id: capped.recordId })).toThrow(/credit limit exceeded/);
+  });
+});

@@ -56,7 +56,7 @@ test('sales and purchase cycles with partial conversions, payments and returns',
   await openModule(page, 'Sales');
   await page.getByRole('button', { name: 'New quotation' }).click();
   const editor = page.getByRole('dialog', { name: 'New quotation' });
-  await editor.getByLabel('Customer').selectOption(customer);
+  await editor.getByLabel('Customer').fill(`Cycle Customer ${stamp}`);
   await expect(editor.getByLabel('Due date')).toHaveValue(/\d{4}-\d{2}-\d{2}/);
   await editor.getByLabel('Line 1 product').selectOption(itemA);
   await expect(editor.getByLabel('Line 1 price')).toHaveValue('1000');
@@ -112,7 +112,7 @@ test('sales and purchase cycles with partial conversions, payments and returns',
   // ---- Receipt allocated across two invoices (this one and a direct second invoice) ----
   await page.getByRole('button', { name: 'New invoice' }).click();
   const inv2 = page.getByRole('dialog', { name: 'New sales invoice' });
-  await inv2.getByLabel('Customer').selectOption(customer);
+  await inv2.getByLabel('Customer').fill(`Cycle Customer ${stamp}`);
   await inv2.getByLabel('Line 1 product').selectOption(itemB);
   await inv2.getByLabel('Line 1 quantity').fill('2');
   await inv2.getByRole('button', { name: 'Save draft' }).click();
@@ -148,7 +148,7 @@ test('sales and purchase cycles with partial conversions, payments and returns',
   await openModule(page, 'Purchasing');
   await page.getByRole('button', { name: 'New purchase order' }).first().click();
   const po = page.getByRole('dialog', { name: 'New purchase order' });
-  await po.getByLabel('Supplier').selectOption(supplier);
+  await po.getByLabel('Supplier').fill(`Cycle Supplier ${stamp}`);
   await po.getByLabel('Exchange rate').fill('280');
   await po.getByLabel('Line 1 product').selectOption(itemA);
   await expect(po.getByLabel('Line 1 price')).toHaveValue('600');

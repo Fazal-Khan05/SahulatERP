@@ -30,7 +30,8 @@ export function SetupWizard({ workspace, actor, memberships, onWorkspace, comman
   command: (type: string, payload: Record<string, unknown>) => Promise<CommandResult>;
 }) {
   const [step, setStep] = useState<Step>(workspace.setup.step);
-  const [company, setCompany] = useState<CompanyDraft>({ name: workspace.company.name, address: workspace.company.address, phone: workspace.company.phone, email: workspace.company.email, taxId: workspace.company.taxId });
+  // The signed-in email is the natural default for the company's contact email.
+  const [company, setCompany] = useState<CompanyDraft>({ name: workspace.company.name, address: workspace.company.address, phone: workspace.company.phone, email: workspace.company.email || actor.email || '', taxId: workspace.company.taxId });
   const [branding, setBranding] = useState<BrandingDraft>({ accent: workspace.branding.accent, footer: workspace.branding.footer });
   const [modules, setModules] = useState<ToggleModule[]>(workspace.modules.length ? workspace.modules : withRequirements(presets[0].modules));
   const [busy, setBusy] = useState(false);

@@ -55,7 +55,7 @@ export function documentView(w: Workspace, doc: Document): DocumentView {
     totals.push(balance.lt(0) ? { label: doc.kind === "sales_invoice" ? "Customer credit" : "Credit with supplier", value: money(balance.negated()), emphasis: true, credit: true } : { label: "Balance due", value: money(balance), emphasis: true });
   }
   const meta: DocumentView["meta"] = [];
-  if (warehouse) meta.push({ label: "Warehouse", value: warehouse.name });
+  if (warehouse && w.warehouses.length > 1) meta.push({ label: "Warehouse", value: warehouse.name });
   if (party) meta.push({ label: "Terms", value: `${party.terms} days` });
   if (salesperson) meta.push({ label: "Salesperson", value: salesperson });
   if (source) meta.push({ label: "Reference", value: source.number });
@@ -89,7 +89,7 @@ export function sampleInvoiceView(): DocumentView {
   return {
     kind: "sales_invoice", title: "Sales invoice", number: "INV-2026-0001", date: "2026-10-14", dueDate: "2026-11-13", status: "submitted", partyLabel: "Bill to",
     party: { name: "Al-Noor Electronics", address: "Karachi", taxId: "1234567-8", email: "accounts@alnoor.example" },
-    meta: [{ label: "Warehouse", value: "Main store" }, { label: "Terms", value: "30 days" }, { label: "Salesperson", value: "Hamza Khan" }],
+    meta: [{ label: "Terms", value: "30 days" }, { label: "Salesperson", value: "Hamza Khan" }],
     lines: [
       { description: "LED Panel Light · 24W", detail: "EL-001", quantity: "100", unit: "pcs", rate: "2400.0000", discount: "0", taxRate: "18", amount: "240000.0000" },
       { description: "Smart Extension Board", detail: "EL-002", quantity: "50", unit: "pcs", rate: "3200.0000", discount: "0", taxRate: "18", amount: "160000.0000" },

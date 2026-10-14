@@ -5,7 +5,7 @@ import { Button } from './ui/button';
 import { DocumentDetails } from './document-details';
 import { DocumentEditor } from './document-editor';
 import { ConvertDialog, nextKind, remainingLines } from './document-dialogs';
-import { documentTitle } from '@/modules/erp/documents';
+import { documentTitle, documentPartyName } from '@/modules/erp/documents';
 import { formatMoney } from '@/modules/erp/money';
 import type { Actor, Document, Workspace } from '@/modules/erp/types';
 
@@ -32,8 +32,7 @@ export function DocumentsList({ side, workspace, actor, editable, busy, command 
   const all = workspace.documents.filter(d => kinds.includes(d.kind));
   const needle = query.trim().toLocaleLowerCase();
   const visible = all.filter(d => {
-    const party = workspace.parties.find(p => p.id === d.partyId);
-    return (!needle || `${d.number} ${party?.name ?? ''}`.toLocaleLowerCase().includes(needle)) && (!kind || d.kind === kind) && (!status || d.status === status) && (!partyId || d.partyId === partyId) && (!fromDate || d.date >= fromDate) && (!toDate || d.date <= toDate);
+    return (!needle || `${d.number} ${documentPartyName(workspace, d)}`.toLocaleLowerCase().includes(needle)) && (!kind || d.kind === kind) && (!status || d.status === status) && (!partyId || d.partyId === partyId) && (!fromDate || d.date >= fromDate) && (!toDate || d.date <= toDate);
   }).slice().reverse();
   const filtered = !!(query || kind || status || partyId || fromDate || toDate);
   const clear = () => { setQuery(''); setKind(''); setStatus(''); setPartyId(''); setFromDate(''); setToDate(''); };
@@ -53,7 +52,7 @@ export function DocumentsList({ side, workspace, actor, editable, busy, command 
       {filtered && <button className="list-filter-clear" type="button" onClick={clear}>Clear filters</button>}
     </div>
     <div className="table-scroll"><table><thead><tr>{['Document', partyType === 'customer' ? 'Customer' : 'Supplier', 'Date', 'Type', 'Status', 'Total', 'Action'].map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>{visible.length ? visible.map(d => <tr key={d.id}>
-      <td>{d.number}</td><td>{workspace.parties.find(p => p.id === d.partyId)?.name ?? '—'}</td><td>{d.date}</td><td>{documentTitle(d.kind)}</td><td><span className={`badge ${d.status === 'submitted' ? 'success' : d.status === 'draft' ? 'warning' : 'info'}`}>{d.status}</span></td><td>{formatMoney(d.total)}{d.currency !== 'PKR' ? ` ${d.currency}` : ''}</td>
+      <td>{d.number}</td><td>{documentPartyName(workspace, d)}</td><td>{d.date}</td><td>{documentTitle(d.kind)}</td><td><span className={`badge ${d.status === 'submitted' ? 'success' : d.status === 'draft' ? 'warning' : 'info'}`}>{d.status}</span></td><td>{formatMoney(d.total)}{d.currency !== 'PKR' ? ` ${d.currency}` : ''}</td>
       <td><div className="inventory-row-actions">
         <Button size="sm" variant="outline" aria-label={`View ${d.kind === 'sales_invoice' ? 'invoice' : documentTitle(d.kind).toLowerCase()} ${d.number}`} onClick={() => setSelectedId(d.id)}>View</Button>
         {editable && d.status === 'draft' && <Button size="sm" disabled={!!busy} onClick={() => command('submit_document', { id: d.id })}>Submit</Button>}

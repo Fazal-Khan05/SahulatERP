@@ -57,18 +57,33 @@ test('sales and purchase cycles with partial conversions, payments and returns',
   await page.getByRole('button', { name: 'New invoice' }).first().click();
   const walkIn = page.getByRole('dialog', { name: 'New sales invoice' });
   await walkIn.getByLabel('Customer').fill(`Walk-in ${stamp}`);
-  await expect(walkIn.getByText(/New customer — will be created/)).toBeVisible();
+  await expect(walkIn.getByText(/New customer\. You can choose whether to save them/)).toBeVisible();
   await walkIn.getByLabel('New customer city').fill('Hyderabad');
   await walkIn.getByLabel('Line 1 product').selectOption(itemB);
   await walkIn.getByLabel('Line 1 quantity').fill('1');
   await walkIn.getByRole('button', { name: 'Save draft' }).click();
   const confirmCustomer = page.getByRole('dialog', { name: 'Save customer?' });
   await expect(confirmCustomer).toContainText(`Walk-in ${stamp}`);
-  await confirmCustomer.getByRole('button', { name: 'Save customer' }).click();
+  await confirmCustomer.getByRole('button', { name: 'Yes, save customer' }).click();
   await expect(walkIn).toHaveCount(0);
   await expect(page.locator('tbody tr').filter({ hasText: `Walk-in ${stamp}` }).first()).toContainText('draft');
   await page.getByRole('tab', { name: 'Customers' }).click();
   await expect(page.locator('tbody tr').filter({ hasText: `Walk-in ${stamp}` }).first()).toContainText('Hyderabad');
+  await page.getByRole('tab', { name: 'Documents' }).click();
+
+  // Choosing not to save the customer still saves the invoice under the shared walk-in account, showing the typed name.
+  await page.getByRole('button', { name: 'New invoice' }).first().click();
+  const oneOff = page.getByRole('dialog', { name: 'New sales invoice' });
+  await oneOff.getByLabel('Customer').fill(`Counter sale ${stamp}`);
+  await oneOff.getByLabel('Line 1 product').selectOption(itemB);
+  await oneOff.getByLabel('Line 1 quantity').fill('1');
+  await oneOff.getByRole('button', { name: 'Save draft' }).click();
+  await page.getByRole('dialog', { name: 'Save customer?' }).getByRole('button', { name: 'No, don’t save' }).click();
+  await expect(oneOff).toHaveCount(0);
+  await expect(page.locator('tbody tr').filter({ hasText: `Counter sale ${stamp}` }).first()).toContainText('draft');
+  await page.getByRole('tab', { name: 'Customers' }).click();
+  await expect(page.locator('tbody tr').filter({ hasText: `Counter sale ${stamp}` })).toHaveCount(0);
+  await expect(page.locator('tbody tr').filter({ hasText: 'Walk-in customer' }).first()).toBeVisible();
   await page.getByRole('tab', { name: 'Documents' }).click();
 
   // ---- Sales: two-line quotation through the editor ----

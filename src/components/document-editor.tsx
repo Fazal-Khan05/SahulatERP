@@ -4,7 +4,7 @@ import { Loader2, Plus, Save, Send, Trash2, UserPlus } from 'lucide-react';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
 import { businessToday } from '@/modules/erp/dates';
-import { documentTitle } from '@/modules/erp/documents';
+import { documentTitle, walkInName } from '@/modules/erp/documents';
 import { D, formatMoney, money } from '@/modules/erp/money';
 import type { Actor, Document, Workspace } from '@/modules/erp/types';
 
@@ -44,7 +44,9 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
   const people = workspace.employees.filter(e => e.active);
   const defaultTax = workspace.settings.taxRate || '0';
 
-  const [partyName, setPartyName] = useState(existing ? (workspace.parties.find(p => p.id === existing.partyId)?.name ?? '') : '');
+  const [partyName, setPartyName] = useState(existing ? (existing.partyName || workspace.parties.find(p => p.id === existing.partyId)?.name || '') : '');
+  // For a name that is not a saved party: 'save' creates the customer/supplier, 'skip' books to the shared walk-in account.
+  const [partyDecision, setPartyDecision] = useState<'save' | 'skip' | null>(existing?.partyName ? 'skip' : null);
   const [newCity, setNewCity] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [warehouseId, setWarehouseId] = useState(existing?.warehouseId ?? warehouses[0]?.id ?? '');
@@ -75,6 +77,7 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
   }, [lines]);
 
   function changePartyName(value: string) {
+    setPartyDecision(null);
     setPartyName(value);
     const party = parties.find(p => p.name.trim().toLowerCase() === value.trim().toLowerCase());
     if (party && !dueTouched) setDueDate(addDays(date, party.terms));
@@ -95,10 +98,11 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
     setError(''); setMode(next);
     if (partyName.trim().length < 2) return setError(`Enter the ${partyType}'s name.`);
     if (!lines.some(l => l.itemId)) return setError('Add at least one product line.');
-    if (isNewParty) setConfirmingParty(true); else void save(next);
+    if (isNewParty && !partyDecision) setConfirmingParty(true); else void save(next);
   }
-  async function save(next: 'draft' | 'submit' = mode) {
+  async function save(next: 'draft' | 'submit' = mode, decision: 'save' | 'skip' | null = partyDecision) {
     setConfirmingParty(false);
+    if (decision) setPartyDecision(decision);
     setError('');
     const name = partyName.trim();
     if (name.length < 2) return setError(`Enter the ${partyType}'s name.`);
@@ -107,13 +111,23 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
     const payloadLines = lines.filter(l => l.itemId).map(l => ({ itemId: l.itemId, quantity: l.quantity, price: l.price || '0', discount: l.discount || '0', taxRate: l.taxRate || '0', employeeId: sales ? l.employeeId : '', splits: [] }));
     if (!payloadLines.length) return setError('Add at least one product line.');
     let partyId = matchedParty?.id;
-    if (!partyId) {
-      // New name: create the party with plain defaults (no credit limit, 30-day terms); details can be completed later.
-      const created = await command('save_party', { name, type: partyType, city: newCity.trim(), phone: newPhone.trim(), email: '', taxId: '', registered: false, creditLimit: '0', terms: 30, customerClass: sales ? 'Retailer' : 'Importer' });
+    let printedName: string | undefined;
+    const newParty = (partyName: string, city = '', phone = '') => command('save_party', { name: partyName, type: partyType, city, phone, email: '', taxId: '', registered: false, creditLimit: '0', terms: 30, customerClass: sales ? 'Retailer' : 'Importer' });
+    if (!partyId && decision === 'save') {
+      // New name the user chose to keep: create the party with plain defaults (no credit limit, 30-day terms).
+      const created = await newParty(name, newCity.trim(), newPhone.trim());
       if (!created.ok || !created.recordId) return setError(created.message);
       partyId = created.recordId;
+    } else if (!partyId) {
+      // Not saved: book to one shared walk-in account and print the typed name on the document.
+      const walkIn = walkInName(partyType);
+      const shared = workspace.parties.find(p => p.type === partyType && p.name.trim().toLowerCase() === walkIn.toLowerCase());
+      if (shared?.archived) return setError(`${walkIn} is archived. Restore it in ${sales ? 'Sales → Customers' : 'Purchasing → Suppliers'} first.`);
+      if (shared) partyId = shared.id;
+      else { const created = await newParty(walkIn); if (!created.ok || !created.recordId) return setError(created.message); partyId = created.recordId; }
+      printedName = name;
     }
-    const payload = { kind, partyId, warehouseId, date, dueDate, currency: sales ? 'PKR' : currency, fxRate: sales ? '1' : fxRate, notes, ...(creditOverride.trim() ? { creditOverride: creditOverride.trim() } : {}), lines: payloadLines };
+    const payload = { kind, partyId, ...(printedName ? { partyName: printedName } : {}), warehouseId, date, dueDate, currency: sales ? 'PKR' : currency, fxRate: sales ? '1' : fxRate, notes, ...(creditOverride.trim() ? { creditOverride: creditOverride.trim() } : {}), lines: payloadLines };
     const result = draftId ? await command('update_document', { id: draftId, ...payload }) : await command('create_document', payload);
     if (!result.ok) return setError(result.message);
     const id = draftId ?? result.recordId ?? null;
@@ -135,7 +149,7 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
         <label className={singleLocation ? 'full-width' : undefined}>{partyLabel}
           <input aria-label={partyLabel} list={listId} value={partyName} onChange={e => changePartyName(e.target.value)} placeholder={`Type a name — existing ${partyType}s are suggested`} autoComplete="off" required/>
           <datalist id={listId}>{parties.map(p => <option key={p.id} value={p.name}>{[p.city, p.phone].filter(Boolean).join(' · ')}</option>)}</datalist>
-          {isNewParty && <small className="field-hint party-new"><UserPlus size={13}/> New {partyType} — will be created when you save.</small>}
+          {isNewParty && <small className="field-hint party-new"><UserPlus size={13}/> New {partyType}. You can choose whether to save them.</small>}
           {matchedParty && <small className="field-hint">{[matchedParty.city, matchedParty.phone, matchedParty.terms ? `${matchedParty.terms}-day terms` : ''].filter(Boolean).join(' · ') || 'Existing ' + partyType}</small>}
         </label>
         {!singleLocation && <label>Warehouse<select aria-label="Warehouse" value={warehouseId} onChange={e => setWarehouseId(e.target.value)}>{warehouses.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>}
@@ -182,8 +196,8 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
     <Dialog open={confirmingParty} onOpenChange={v => { if (!v) setConfirmingParty(false); }}>
       <DialogContent className="confirm-dialog">
         <DialogTitle>Save {partyType}?</DialogTitle>
-        <DialogDescription>“{partyName.trim()}” is not in your {partyType} list yet. Saving this {documentTitle(kind).toLowerCase()} will also add them as a {partyType}{newCity.trim() || newPhone.trim() ? ` (${[newCity.trim(), newPhone.trim()].filter(Boolean).join(' · ')})` : ''}, so you can reuse them next time.</DialogDescription>
-        <div className="form-actions"><Button type="button" variant="outline" onClick={() => setConfirmingParty(false)}>Cancel</Button><Button type="button" disabled={!!busy} onClick={() => save()}>{busy ? <Loader2 className="spin" size={16}/> : <UserPlus size={16}/>}Save {partyType}</Button></div>
+        <DialogDescription>“{partyName.trim()}” is not in your {partyType} list. Save them so you can pick them next time{newCity.trim() || newPhone.trim() ? ` (${[newCity.trim(), newPhone.trim()].filter(Boolean).join(' · ')})` : ''}? If not, this {documentTitle(kind).toLowerCase()} still shows their name and is kept under {walkInName(partyType)}.</DialogDescription>
+        <div className="form-actions"><Button type="button" variant="outline" disabled={!!busy} onClick={() => save(mode, 'skip')}>No, don’t save</Button><Button type="button" disabled={!!busy} onClick={() => save(mode, 'save')}>{busy ? <Loader2 className="spin" size={16}/> : <UserPlus size={16}/>}Yes, save {partyType}</Button></div>
       </DialogContent>
     </Dialog>
   </Dialog>;

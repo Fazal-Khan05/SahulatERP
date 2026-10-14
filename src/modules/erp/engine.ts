@@ -57,13 +57,15 @@ function lineTotal(l:Line){return D(l.quantity).mul(l.price).mul(D(100).minus(l.
 const lineInput=z.object({itemId:z.string(),quantity:pos,price:nonneg,discount:pct.default("0"),taxRate:pct.default("18"),employeeId:z.string().default(""),splits:z.array(z.object({employeeId:z.string(),share:pct})).default([])});
 const kinds=["quotation","sales_order","delivery","sales_invoice","purchase_order","goods_receipt","supplier_invoice"] as const;
 function createDocument(w:Workspace,p:Record<string,unknown>,a:Actor,existing?:Document){
- const input=z.object({kind:z.enum(kinds),partyId:z.string(),warehouseId:z.string(),date:z.iso.date(),dueDate:z.iso.date(),currency:z.enum(["PKR","USD","CNY"]).default("PKR"),fxRate:pos.default("1"),lines:z.array(lineInput).min(1).max(100),notes:z.string().max(2000).default(""),parentId:z.string().optional(),creditOverride:z.string().max(500).optional()}).parse(p);
+ const input=z.object({kind:z.enum(kinds),partyId:z.string(),warehouseId:z.string(),date:z.iso.date(),dueDate:z.iso.date(),currency:z.enum(["PKR","USD","CNY"]).default("PKR"),fxRate:pos.default("1"),lines:z.array(lineInput).min(1).max(100),notes:z.string().max(2000).default(""),parentId:z.string().optional(),creditOverride:z.string().max(500).optional(),partyName:z.string().trim().max(120).optional()}).parse(p);
  const sales=["quotation","sales_order","delivery","sales_invoice"].includes(input.kind);
  if(["Salesperson","Sales Manager"].includes(a.role)&&!sales)throw new Error("Your role cannot create purchase documents.");
  if(a.role==="Warehouse Manager"&&!["delivery","goods_receipt"].includes(input.kind))throw new Error("Warehouse users can create receipts and deliveries only.");
  if(input.currency!=="PKR"&&sales)throw new Error("Sales use the company's PKR base currency.");
  if(input.currency==="PKR"&&!D(input.fxRate).eq(1))throw new Error("PKR exchange rate must be 1.");
  const partyRecord=found(w.parties,input.partyId,"Party");if(partyRecord.type!==(sales?"customer":"supplier"))throw new Error("Select the appropriate customer or supplier.");if(partyRecord.archived)throw new Error(`${partyRecord.name} is archived. Restore it first.`);
+ // A display name only matters when it differs from the account it is booked to.
+ if(!input.partyName||input.partyName.toLowerCase()===partyRecord.name.trim().toLowerCase())delete input.partyName;
  warehouseAccess(w,a,input.warehouseId);requireOpen(w,input.date);
  if(new Set(input.lines.map(l=>l.itemId)).size!==input.lines.length)throw new Error("Use one line per product.");
  const lines=input.lines.map(l=>{const itemRecord=found(w.items,l.itemId,"Product");if(itemRecord.archived)throw new Error(`${itemRecord.name} is archived. Restore it first.`);if(sales&&l.employeeId)found(w.employees,l.employeeId,"Employee");if(a.role==="Salesperson"&&l.employeeId!==a.employeeId)throw new Error("Salespeople can create their own sales only.");if(l.splits.length){if(!sum(l.splits.map(x=>x.share)).eq(100))throw new Error("Commission splits must total 100%.");l.splits.forEach(x=>found(w.employees,x.employeeId,"Employee"));}return {...l,id:id(),cost:"0.0000",returned:"0.0000"};});

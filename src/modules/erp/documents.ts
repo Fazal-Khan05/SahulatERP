@@ -27,6 +27,10 @@ const titles: Record<string, string> = {
   purchase_order: "Purchase order", goods_receipt: "Goods receipt note", supplier_invoice: "Supplier bill", supplier_return: "Supplier return", receipt: "Receipt",
 };
 export const documentTitle = (kind: string) => titles[kind] ?? kind.replaceAll("_", " ");
+/** The name a document shows: the typed name for walk-in sales/purchases, otherwise the saved party's name. */
+export const documentPartyName = (w: Pick<Workspace, "parties">, doc: Pick<Document, "partyId" | "partyName">) => doc.partyName || w.parties.find(p => p.id === doc.partyId)?.name || "—";
+/** Shared accounts that take documents for people the user chose not to save. */
+export const walkInName = (type: "customer" | "supplier") => type === "customer" ? "Walk-in customer" : "Walk-in supplier";
 
 const isSales = (kind: string) => ["quotation", "sales_order", "delivery", "sales_invoice", "credit_note"].includes(kind);
 
@@ -63,7 +67,7 @@ export function documentView(w: Workspace, doc: Document): DocumentView {
   return {
     kind: doc.kind, title: documentTitle(doc.kind), number: doc.number, date: doc.date, dueDate: doc.dueDate, status: doc.status,
     partyLabel: isSales(doc.kind) ? "Bill to" : "Supplier",
-    party: { name: party?.name ?? "—", address: party?.city ?? "", taxId: party?.taxId ?? "", email: party?.email ?? "" },
+    party: doc.partyName ? { name: doc.partyName, address: "", taxId: "", email: "" } : { name: party?.name ?? "—", address: party?.city ?? "", taxId: party?.taxId ?? "", email: party?.email ?? "" },
     meta, lines, totals, notes: doc.notes, currency: doc.currency,
   };
 }

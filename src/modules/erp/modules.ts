@@ -30,6 +30,7 @@ export const moduleCatalogue: ModuleDefinition[] = [
 export const toggleModules = moduleCatalogue.map(item => item.key);
 
 export const presets: { key: string; label: string; description: string; modules: ToggleModule[] }[] = [
+  { key: "all", label: "All features", description: "Every module, including payroll.", modules: moduleCatalogue.map(item => item.key) },
   { key: "distributor", label: "Importer-distributor", description: "Everything an importing wholesaler needs, including commissions.", modules: ["sales", "purchasing", "inventory", "imports", "collections", "cashbank", "commissions", "reports"] },
   { key: "basics", label: "Just the basics", description: "Buy, stock, sell and see reports. Add the rest later.", modules: ["sales", "purchasing", "inventory", "cashbank", "reports"] },
 ];

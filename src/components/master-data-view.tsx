@@ -8,7 +8,7 @@ import { csvFields, toCsv, type EntitySpec } from '@/modules/erp/master-data';
 import { formatMoney } from '@/modules/erp/money';
 import type { Workspace } from '@/modules/erp/types';
 
-type CommandFn = (type: string, payload: Record<string, unknown>) => Promise<{ ok: boolean; message: string }>;
+type CommandFn = (type: string, payload: Record<string, unknown>) => Promise<{ ok: boolean; message: string; recordId?: string }>;
 type AnyRecord = { id: string } & Record<string, unknown>;
 
 /** List, search, create/edit, archive and CSV import/export for one master-data entity. */
@@ -37,8 +37,17 @@ export function MasterDataView({ spec, workspace, editable, busy, command }: {
     const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${spec.key}-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(url);
   }
   async function save(payload: Record<string, unknown>) {
-    const result = await command(spec.saveCommand, payload);
-    if (result.ok) setEditing(null);
+    const { openingQuantity, openingCost, openingWarehouseId, ...record } = payload;
+    const result = await command(spec.saveCommand, record);
+    if (!result.ok) return result;
+    // A new product can start with stock on hand; it is booked as opening stock at the cost given.
+    const quantity = Number(openingQuantity ?? 0);
+    if (spec.key === 'items' && !record.id && quantity > 0 && result.recordId) {
+      const warehouseId = String(openingWarehouseId || workspace.warehouses[0]?.id || '');
+      const stock = await command('bulk_stock_increase', { warehouseId, date: new Date().toISOString().slice(0, 10), purpose: 'opening_stock', reason: `Opening stock for ${String(record.sku ?? record.name)}`, lines: [{ itemId: result.recordId, quantity: String(quantity), cost: String(openingCost || '') }] });
+      if (!stock.ok) return { ok: false, message: `Product saved, but the opening stock was not booked: ${stock.message} Open the product and set its quantity.` };
+    }
+    setEditing(null);
     return result;
   }
   async function archive(record: AnyRecord, archived: boolean) {

@@ -23,12 +23,14 @@ type CommandResult = { ok: boolean; message: string; workspace?: Workspace };
  * from the first minute. Each step is saved as it is completed so a closed tab resumes where it
  * stopped. Finishing provisions the chosen modules and reveals the workspace behind the card.
  */
-export function SetupWizard({ workspace, actor, memberships, onWorkspace, command }: {
+export function SetupWizard({ workspace, actor, memberships, onWorkspace, command, onProvisioning }: {
   workspace: Workspace;
   actor: Actor;
   memberships: { tenantId: string; name: string }[];
   onWorkspace: (next: Workspace) => void;
   command: (type: string, payload: Record<string, unknown>) => Promise<CommandResult>;
+  /** Keeps the card mounted while the provisioning screen plays; the parent reveals the workspace when it ends. */
+  onProvisioning?: (active: boolean) => void;
 }) {
   const [step, setStep] = useState<Step>(workspace.setup.step);
   const [direction, setDirection] = useState<'forward' | 'back'>('forward');
@@ -46,6 +48,7 @@ export function SetupWizard({ workspace, actor, memberships, onWorkspace, comman
   // Each step starts at the top of the card, which scrolls on short screens.
   useEffect(() => { card.current?.scrollTo({ top: 0 }); }, [step]);
 
+  const labelOf = (key: ToggleModule) => moduleCatalogue.find(item => item.key === key)!.label;
   async function run(type: string, payload: Record<string, unknown>) {
     const result = await command(type, payload);
     if (!result.ok) throw new Error(result.message);
@@ -64,12 +67,15 @@ export function SetupWizard({ workspace, actor, memberships, onWorkspace, comman
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not save this step.'); }
     finally { setBusy(false); }
   }
+  const [finishing, setFinishing] = useState(false);
   async function finish() {
-    setBusy(true); setError('');
-    try { await run('complete_setup', {}); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Could not finish setup.'); setBusy(false); }
+    setBusy(true); setError(''); setFinishing(true); onProvisioning?.(true);
+    // The provisioning screen stays up long enough to read even when the server answers instantly.
+    const pause = new Promise(resolve => setTimeout(resolve, 2600));
+    try { await Promise.all([run('complete_setup', {}), pause]); onProvisioning?.(false); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Could not finish setup.'); setBusy(false); setFinishing(false); onProvisioning?.(false); }
   }
-  const labelOf = (key: ToggleModule) => moduleCatalogue.find(item => item.key === key)!.label;
+  const provisionLines = [...modules.map(key => `Setting up ${labelOf(key)}`), 'Opening your books', 'Preparing your workspace'];
   const others = memberships.filter(m => m.tenantId !== workspace.tenantId);
 
   return <div className="setup-layer" role="dialog" aria-modal="true" aria-labelledby="setup-title">
@@ -79,7 +85,12 @@ export function SetupWizard({ workspace, actor, memberships, onWorkspace, comman
         <div className="login-brand"><span className="brand-mark">S</span><span>Sahulat<strong>ERP</strong></span></div>
         <ol className="setup-steps">{steps.map(item => <li key={item.step} className={item.step === step ? 'current' : item.step < step ? 'done' : ''} aria-current={item.step === step ? 'step' : undefined}><span className="setup-step-index">{item.step < step ? <Check size={12}/> : item.step}</span><span className="setup-step-title">{item.title}</span></li>)}</ol>
       </header>
-      <div key={step} className={`setup-body step-${direction}`}>
+      {finishing ? <div className="setup-provisioning" role="status" aria-live="polite">
+        <span className="provision-ring" aria-hidden="true"/>
+        <h1 id="setup-title">Setting up {company.name || workspace.company.name}</h1>
+        <p>Creating your lists, number series and accounts. This takes a few seconds.</p>
+        <ul className="provision-lines">{provisionLines.map((line, index) => <li key={line} style={{ '--i': index } as React.CSSProperties}><span className="provision-check"><Check size={12}/></span>{line}</li>)}</ul>
+      </div> : <div key={step} className={`setup-body step-${direction}`}>
         <div className="wizard-heading"><h1 id="setup-title">{steps[step - 1].title}</h1><p>Step {step} of 4. {steps[step - 1].hint}</p></div>
         {step === 1 && <form ref={companyForm} onSubmit={event => { event.preventDefault(); next(); }}><CompanyForm value={company} onChange={setCompany} disabled={busy}/></form>}
         {step === 2 && <BrandingForm workspace={workspace} company={company} value={branding} onChange={setBranding} onWorkspace={onWorkspace} disabled={busy}/>}
@@ -90,13 +101,13 @@ export function SetupWizard({ workspace, actor, memberships, onWorkspace, comman
           <section className="card"><div className="card-heading"><div><h2>Features</h2><p>{modules.length} turned on</p></div><Button variant="ghost" onClick={() => goTo(3)}>Edit</Button></div><ul className="review-modules">{modules.map(key => <li key={key}><Check size={14}/>{labelOf(key)}</li>)}</ul></section>
         </div>}
         {error && <p className="error-note" role="alert">{error}</p>}
-      </div>
-      <footer className="wizard-actions setup-actions">
+      </div>}
+      {!finishing && <footer className="wizard-actions setup-actions">
         {step > 1 ? <Button variant="outline" disabled={busy} onClick={() => goTo((step - 1) as Step)}><ArrowLeft size={16}/>Back</Button> : <span/>}
         {step < 4
           ? <Button disabled={busy || !ready} onClick={next}>{busy ? <Loader2 className="spin" size={16}/> : null}Continue<ArrowRight size={16}/></Button>
           : <Button className="button-gradient" disabled={busy || !ready} onClick={finish}>{busy ? <Loader2 className="spin" size={16}/> : <Sparkles size={16}/>}Create my workspace</Button>}
-      </footer>
+      </footer>}
     </div>
     <div className="setup-foot">Setting up <strong>{workspace.company.name}</strong> as {actor.name}. Everything here can be changed later in Settings.{others.map(m => <a key={m.tenantId} href={`/?tenant=${encodeURIComponent(m.tenantId)}`}>Switch to {m.name}</a>)}<form action="/auth/signout" method="post"><button type="submit" className="text-button">Sign out</button></form></div>
   </div>;

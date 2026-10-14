@@ -1,5 +1,5 @@
 'use client';
-import { useState, type FormEvent } from 'react';
+import { Fragment, useState, type FormEvent } from 'react';
 import { Loader2, Save } from 'lucide-react';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
@@ -32,7 +32,16 @@ export function RecordForm({ spec, workspace, initial, open, busy, onClose, onSa
 }) {
   const [error, setError] = useState('');
   const isNew = !initial?.id;
-  const fields = spec.fields as FieldSpec[];
+  const fields = (spec.fields as FieldSpec[]).filter(field => (isNew || !field.newOnly) && !(field.hidden && field.hidden(workspace)));
+  // New records show numeric defaults as placeholders, so typing replaces nothing; an empty field saves the default.
+  const defaults = spec.blank(workspace);
+  const numericType = (field: FieldSpec) => field.type === 'number' || field.type === 'money' || field.type === 'percent';
+  const shown = (field: FieldSpec, value: unknown) => {
+    if (!numericType(field)) return String(value ?? '');
+    if (isNew) return '';
+    const text = String(value ?? '');
+    return /^-?\d+\.\d*0$/.test(text) ? text.replace(/\.?0+$/, '') : text;
+  };
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError('');
@@ -42,7 +51,8 @@ export function RecordForm({ spec, workspace, initial, open, busy, onClose, onSa
       const raw = data.get(field.key);
       if (field.type === 'checkbox') payload[field.key] = data.get(field.key) === 'on';
       else if (field.type === 'pairs') payload[field.key] = textToPairs(String(raw ?? ''), field.key);
-      else if (field.type === 'number') payload[field.key] = String(raw ?? '').trim() === '' ? 0 : Number(raw);
+      else if (field.type === 'number') payload[field.key] = String(raw ?? '').trim() === '' ? Number(defaults[field.key] ?? 0) : Number(raw);
+      else if (field.type === 'money' || field.type === 'percent') payload[field.key] = String(raw ?? '').trim() === '' ? String(defaults[field.key] || '0') : String(raw).trim();
       else if (field.type === 'select' && String(raw ?? '') === '') delete payload[field.key];
       else payload[field.key] = String(raw ?? '').trim();
     }
@@ -61,12 +71,13 @@ export function RecordForm({ spec, workspace, initial, open, busy, onClose, onSa
           const label = <span className="record-label">{field.label}{field.required && <span aria-hidden="true" className="record-required">*</span>}</span>;
           const hint = field.hint && <small className="field-hint">{field.hint}</small>;
           const className = field.full ? 'full-width' : undefined;
+          const section = field.section && <h3 key={`${field.key}-section`} className="record-section full-width">{field.section}</h3>;
           if (field.type === 'checkbox') return <label key={field.key} className={`${className ?? ''} record-checkbox`}><input type="checkbox" name={field.key} defaultChecked={!!value}/> {field.label}{hint}</label>;
           if (field.type === 'select') return <label key={field.key} className={className}>{label}<select name={field.key} defaultValue={String(value ?? '')} required={field.required}>{options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>{hint}</label>;
           if (field.type === 'pairs') return <label key={field.key} className={className}>{label}<textarea name={field.key} rows={3} defaultValue={pairsToText(value, field.key)} placeholder={field.key === 'tiers' ? '0 = 2\n500000 = 3' : 'Lighting = 2.5'}/>{hint}</label>;
           if (field.type === 'textarea') return <label key={field.key} className={className}>{label}<textarea name={field.key} rows={2} defaultValue={String(value ?? '')}/>{hint}</label>;
           const numeric = field.type === 'number' || field.type === 'money' || field.type === 'percent';
-          return <label key={field.key} className={className}>{label}<input name={field.key} type={numeric ? 'number' : 'text'} step={field.type === 'number' ? '1' : '0.0001'} min={numeric ? '0' : undefined} max={field.type === 'percent' ? '100' : undefined} defaultValue={String(value ?? '')} required={field.required} autoFocus={field === fields[0]}/>{hint}</label>;
+          return <Fragment key={field.key}>{section}<label className={className}>{label}<input name={field.key} type={numeric ? 'number' : 'text'} step={field.type === 'number' ? field.step ?? '1' : '0.0001'} min={numeric ? '0' : undefined} max={field.type === 'percent' ? '100' : undefined} placeholder={numeric && isNew ? String(defaults[field.key] ?? '0') || '0' : undefined} defaultValue={shown(field, value)} required={field.required} autoFocus={field === fields[0]}/>{hint}</label></Fragment>;
         })}
         {error && <p className="error-note full-width" role="alert">{error}</p>}
         <div className="form-actions full-width"><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? <Loader2 className="spin" size={16}/> : <Save size={16}/>}{isNew ? `Add ${spec.singular}` : 'Save changes'}</Button></div>

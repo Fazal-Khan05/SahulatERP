@@ -750,3 +750,17 @@ button,a,[role=button],[role=tab],[role=switch],.nav-item,.tab,.chip,.badge,.swa
   .setup-reveal{animation:none;filter:none}
   .nav-item:hover .nav-icon{transform:none}
 }
+
+/* Record form sections (opening stock on a new product) */
+.record-section{margin:10px 0 -6px;font-size:var(--text-sm);font-weight:600;color:var(--text);padding-top:12px;border-top:1px solid var(--border)}
+/* Setup: provisioning screen shown while the workspace is created */
+.setup-provisioning{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;padding:40px 28px 36px;animation:overlay-in var(--duration-base) var(--ease-out) both}
+.setup-provisioning h1{font-size:var(--text-2xl);margin:6px 0 0}
+.setup-provisioning p{margin:0;color:var(--text-muted);max-width:44ch}
+.provision-ring{width:56px;height:56px;border-radius:50%;background:conic-gradient(from 0deg,var(--pink-500),var(--violet-600),var(--cyan-500),var(--pink-500));-webkit-mask:radial-gradient(circle,transparent 58%,#000 60%);mask:radial-gradient(circle,transparent 58%,#000 60%);animation:provision-spin 1.1s linear infinite}
+@keyframes provision-spin{to{transform:rotate(360deg)}}
+.provision-lines{list-style:none;margin:16px 0 0;padding:0;display:flex;flex-direction:column;gap:8px;text-align:left;min-width:min(320px,100%)}
+.provision-lines li{display:flex;align-items:center;gap:10px;font-size:var(--text-base);color:var(--text);opacity:0;transform:translateY(6px);animation:provision-in var(--duration-slow) var(--ease-out) forwards;animation-delay:calc(var(--i,0) * 230ms)}
+@keyframes provision-in{to{opacity:1;transform:none}}
+.provision-check{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--success-soft);color:var(--success-text);flex-shrink:0}
+@media(prefers-reduced-motion:reduce){.provision-ring{animation-duration:3s}.provision-lines li{animation:provision-in 150ms var(--ease-out) forwards;animation-delay:0s}}

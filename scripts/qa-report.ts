@@ -42,9 +42,8 @@ if (existsSync(vitestPath)) {
 }
 
 type PwSuite = { title: string; specs?: { title: string; tests: { results: { status: string; error?: { message?: string } }[]; annotations?: { type: string }[] }[] }[]; suites?: PwSuite[] };
-const pwPath = join(outDir, 'playwright.json');
-if (existsSync(pwPath)) {
-  const p = JSON.parse(readFileSync(pwPath, 'utf8')) as { suites: PwSuite[] };
+for (const pwFile of readdirSync(outDir).filter(f => /^playwright.*\.json$/.test(f))) {
+  const p = JSON.parse(readFileSync(join(outDir, pwFile), 'utf8')) as { suites: PwSuite[] };
   const walk = (s: PwSuite) => {
     for (const spec of s.specs ?? []) {
       const id = idOf(spec.title); if (!id) continue;
@@ -65,6 +64,8 @@ const final = cases.map(c => {
   const executed = rs.filter(r => r.status === 'pass' || r.status === 'fail');
   if (executed.some(r => r.status === 'fail')) status = 'fail';
   else if (executed.length) status = 'pass';
+  // The browser pass has the final word on cases the engine pass deferred to it.
+  else if (rs.some(r => r.layer === 'browser' && r.status === 'manual')) status = 'manual';
   else if (rs.some(r => r.status === 'browser-todo')) status = 'browser-todo';
   else if (rs.some(r => r.status === 'manual')) status = 'manual';
   const tags = [...new Set(rs.flatMap(r => r.tags))];

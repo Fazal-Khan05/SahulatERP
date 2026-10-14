@@ -127,3 +127,25 @@ describe('credit limits', () => {
     expect(() => run(capped.workspace, 'submit_document', { id: capped.recordId })).toThrow(/credit limit exceeded/);
   });
 });
+
+describe('unsaved customer name (walk-in)', () => {
+  it('prints the typed name, books to the chosen account, and carries the name to conversions and returns', () => {
+    let w = buildDemoWorkspace();
+    const walkIn = run(w, 'save_party', { name: 'Walk-in customer', type: 'customer', city: '', phone: '', email: '', taxId: '', registered: false, creditLimit: '0', terms: 30, customerClass: 'Retailer' });
+    w = walkIn.workspace;
+    const order = run(w, 'create_document', { kind: 'sales_order', partyId: walkIn.recordId, partyName: '  Bilal Traders ', warehouseId: 'khi-main', date: '2026-10-15', dueDate: '2026-11-14', lines: [line('i-1', '2', '2400')] });
+    expect(docOf(order.workspace, order.recordId).partyName).toBe('Bilal Traders');
+    expect(docOf(order.workspace, order.recordId).partyId).toBe(walkIn.recordId);
+    w = run(order.workspace, 'submit_document', { id: order.recordId }).workspace;
+    const delivery = run(w, 'convert_document', { id: order.recordId, date: '2026-10-16' });
+    expect(docOf(delivery.workspace, delivery.recordId).partyName).toBe('Bilal Traders');
+    expect(w.parties.some(p => p.name === 'Bilal Traders')).toBe(false);
+  });
+
+  it('drops a display name that matches the account it is booked to', () => {
+    const w = buildDemoWorkspace();
+    const party = w.parties.find(p => p.id === 'c-1')!;
+    const created = run(w, 'create_document', { kind: 'sales_invoice', partyId: 'c-1', partyName: party.name.toUpperCase(), warehouseId: 'khi-main', date: '2026-10-15', dueDate: '2026-11-14', lines: [line('i-1', '1', '2400')] });
+    expect(docOf(created.workspace, created.recordId).partyName).toBeUndefined();
+  });
+});

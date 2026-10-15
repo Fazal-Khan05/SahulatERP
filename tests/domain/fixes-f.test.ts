@@ -67,4 +67,9 @@ describe('agent F shell fixes', () => {
     expect(css).toContain('.workspace-picker>span:not(.company-icon){min-width:0;flex:1}');
     expect(css).toContain('.workspace-picker strong,.workspace-picker small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}');
   });
+  it('D-56 each metric card carries its stagger index', () => {
+    const wb = readFileSync(resolve(root, 'src/components/workbench.tsx'), 'utf8');
+    expect(wb).toContain("<section className=\"metric-card\" key={name} style={{'--i':index} as CSSProperties}>");
+    expect(css).toContain('animation-delay:calc(var(--i,0) * 40ms)');
+  });
 });

@@ -223,7 +223,7 @@ describe('19 ui accessibility', () => {
   it('UIX-052 search dialog has no animation', () => {
     expect(css).toContain('.search-dialog[data-state=open],.search-dialog[data-state=closed]{animation:none}');
   });
-  it('UIX-053 metric cards stagger by 40 ms [defect: no card sets --i, so all delays are 0]', () => {
+  it('UIX-053 metric cards stagger by 40 ms', () => {
     expect(css).toContain('animation-delay:calc(var(--i,0) * 40ms)');
     expect(demoHtml).toMatch(/class="metric-card" style="--i:\d"/);
   });

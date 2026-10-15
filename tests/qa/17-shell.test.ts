@@ -141,7 +141,7 @@ describe('17 shell', () => {
     const values = [...owner.matchAll(/<div class="metric-label">([^<]+)<span[\s\S]*?<\/span><\/div><strong>([^<]+)<\/strong>/g)].map(m => [m[1], m[2]]);
     expect(values).toEqual([['Total sales', formatMoney(s.sales)], ['Collections', formatMoney(s.collections)], ['Outstanding receivables', formatMoney(s.receivables)], ['Inventory value', formatMoney(s.inventory)]]);
   });
-  it('NAV-037 metric cards stagger in by 40ms; reduced motion has no stagger [defect: cards never set --i, so every delay is 0]', () => {
+  it('NAV-037 metric cards stagger in by 40ms; reduced motion has no stagger', () => {
     expect(css).toContain('.metric-grid>.metric-card{animation:view-in var(--duration-slow) var(--ease-out) backwards;animation-delay:calc(var(--i,0) * 40ms)}');
     expect(owner).toMatch(/class="metric-card" style="--i:1"/);
   });

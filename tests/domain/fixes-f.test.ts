@@ -4,7 +4,28 @@
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { buildDemoWorkspace } from '../../src/modules/erp/demo';
+import { scopeWorkspace } from '../../src/modules/erp/access';
+import type { Actor, Workspace } from '../../src/modules/erp/types';
+
+// The domain vitest config has no "@/" alias; point the Workbench imports at the sources.
+vi.mock('@/lib/utils', () => import('../../src/lib/utils'));
+vi.mock('@/lib/supabase/client', () => ({ createBrowserSupabase: () => ({ auth: {} }) }));
+vi.mock('@/modules/erp/access', () => import('../../src/modules/erp/access'));
+vi.mock('@/modules/erp/dates', () => import('../../src/modules/erp/dates'));
+vi.mock('@/modules/erp/demo', () => import('../../src/modules/erp/demo'));
+vi.mock('@/modules/erp/documents', () => import('../../src/modules/erp/documents'));
+vi.mock('@/modules/erp/engine', () => import('../../src/modules/erp/engine'));
+vi.mock('@/modules/erp/master-data', () => import('../../src/modules/erp/master-data'));
+vi.mock('@/modules/erp/modules', () => import('../../src/modules/erp/modules'));
+vi.mock('@/modules/erp/money', () => import('../../src/modules/erp/money'));
+vi.mock('@/modules/erp/reports', () => import('../../src/modules/erp/reports'));
+vi.mock('@/modules/erp/types', () => import('../../src/modules/erp/types'));
+vi.mock('@/components/document-preview', () => import('../../src/components/document-preview'));
+import { Workbench } from '../../src/components/workbench';
 
 const root = resolve(__dirname, '../..');
 const css = readFileSync(resolve(root, 'src/app/globals.css'), 'utf8');
@@ -16,6 +37,10 @@ const token = (name: string): string => {
 const rgb = (h: string) => [0, 2, 4].map(i => parseInt(h.replace('#', '').slice(i, i + 2), 16));
 const lum = (c: number[]) => { const [r, g, b] = c.map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
 const ratio = (a: string, b: string) => { const x = lum(rgb(a)), y = lum(rgb(b)); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+const member = (role: Actor['role'], branchIds: string[] = []): Actor => ({ id: 'f-member', name: 'F Member', role, branchIds });
+/** The Workbench as the server renders it for a member, from the workspace the server would send them. */
+const shell = (w: Workspace, a: Actor) => renderToStaticMarkup(createElement(Workbench, { initialWorkspace: scopeWorkspace(w, a), actor: a, memberships: [{ tenantId: w.tenantId, role: a.role, branchIds: a.branchIds, name: w.company.name, isDemo: w.demo }] }));
+const text = (html: string) => html.replace(/<svg[\s\S]*?<\/svg>/g, '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
 
 describe('agent F shell fixes', () => {
   it('D-35 the phone top bar shrinks instead of widening the page', () => {
@@ -71,5 +96,17 @@ describe('agent F shell fixes', () => {
     const wb = readFileSync(resolve(root, 'src/components/workbench.tsx'), 'utf8');
     expect(wb).toContain("<section className=\"metric-card\" key={name} style={{'--i':index} as CSSProperties}>");
     expect(css).toContain('animation-delay:calc(var(--i,0) * 40ms)');
+  });
+  it('D-13 a branch-limited Accountant or Owner gets the scoped Overview, not company ledger figures built from no journals', () => {
+    const w = buildDemoWorkspace();
+    for (const role of ['Accountant', 'Owner'] as const) {
+      const limited = text(shell(w, member(role, ['karachi'])));
+      expect(limited, role).toContain('Figures cover the records your role and branch can see.');
+      expect(limited, role).toContain('Invoiced sales (net)');
+      expect(limited, role).not.toContain('Total sales');
+    }
+    const full = text(shell(w, member('Accountant')));
+    expect(full).toContain('Every figure comes from your posted records.');
+    expect(full).toContain('Total sales');
   });
 });

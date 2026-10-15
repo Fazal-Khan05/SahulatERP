@@ -137,7 +137,9 @@ export function Workbench({initialWorkspace,actor,memberships}:Props){
   const previewing=role!==actor.role;
   // Role preview shows the data that role would actually receive, not just its screens.
   const view=useMemo(()=>{let w=workspace;if(previewing){const employeeId=role==='Salesperson'?w.documents.flatMap(d=>d.lines.map(l=>l.employeeId)).find(Boolean):actor.employeeId;w=scopeWorkspace(w,{...actor,role,employeeId})}if(branch)w=filterBranch(w,branch);return w},[workspace,previewing,role,branch,actor]);
-  const viewActor:Actor={...actor,role};const ledgerView=canReadLedger(role)&&!branch;
+  const viewActor:Actor={...actor,role};
+  // Ledger figures only for members who receive the journals: the server withholds them from branch-limited members.
+  const ledgerView=canReadLedger(role)&&!branch&&!actor.branchIds.length;
   const attention=attentionItems(view,role);
   useEffect(()=>{const onKey=(event:KeyboardEvent)=>{if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='k'){event.preventDefault();setSearchOpen(true)}};window.addEventListener('keydown',onKey);return ()=>window.removeEventListener('keydown',onKey)},[]);
   // Commands carry an idempotency key, so a response that never reached us as JSON (proxy error, dev-server

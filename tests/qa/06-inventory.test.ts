@@ -439,10 +439,10 @@ describe('06 inventory (INV)', () => {
     expect(setQty(w, item, '50', '51', { cost: '1600.1234' }).workspace.stockMoves.at(-1)).toMatchObject({ quantity: '1.0000', value: '1600.1234' });
   });
 
-  it('INV-066 unit cost 0.00001 for one unit rounds to 0: "Enter a unit cost above zero for added stock." [documented: for 15+ units the value rounds up to 0.0002 and is accepted]', () => {
+  it('INV-066 unit cost 0.00001 rounds to 0 at input (4 dp): "Enter a unit cost above zero for added stock." for any quantity', () => {
     const { w, item } = base();
     refused(w, 'set_stock_quantity', { itemId: item, warehouseId: MAIN, expectedQuantity: '50', targetQuantity: '51', cost: '0.00001', date: today(), reason: 'x' }, 'Enter a unit cost above zero for added stock.');
-    expect(setQty(w, item, '50', '65', { cost: '0.00001' }).workspace.stockMoves.at(-1)!.value).toBe('0.0002');
+    refused(w, 'set_stock_quantity', { itemId: item, warehouseId: MAIN, expectedQuantity: '50', targetQuantity: '65', cost: '0.00001', date: today(), reason: 'x' }, 'Enter a unit cost above zero for added stock.');
   });
 
   it('INV-067 correction journal memo contains the reason', () => {

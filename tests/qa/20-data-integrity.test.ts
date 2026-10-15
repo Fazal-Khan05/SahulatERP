@@ -141,17 +141,17 @@ describe('20 data integrity', () => {
     expect(parts).toEqual(['33.3333', '33.3333', '33.3334']);
     expect(money(sum(parts))).toBe('100.0000');
   });
-  it('DAT-004 quantity precision 4 dp: 0.00005 rounds consistently between the document and stock [defect: line keeps 0.00005, stock move is 0.0001]', () => {
+  it('DAT-004 quantity precision 4 dp: 0.00005 rounds consistently between the document and stock', () => {
     const t = trading(); const [w, doc] = withDocument(t.w, 'sales_invoice', t.cust, [line(t.item, '0.00005', '100')]);
     const d = w.documents.find(x => x.id === doc)!;
     const moved = w.stockMoves.find(m => m.sourceId === doc)!;
     expect(D(moved.quantity).abs().toFixed(4)).toBe(D(d.lines[0].quantity).toFixed(4));
     expect(D(moved.quantity).abs().eq(d.lines[0].quantity)).toBe(true);
   });
-  it('DAT-005 FX precision [documented: fxRate 280.12345 is stored as entered and used at full precision; posted PKR amounts round half-up to 4 dp]', () => {
+  it('DAT-005 FX precision 4 dp: fxRate 280.12345 is rounded half-up to 280.1235 at input; posted PKR amounts round half-up to 4 dp', () => {
     const t = trading(); const [w, bill] = withDocument(t.w, 'supplier_invoice', t.supp, [line(t.item, '1', '1')], { currency: 'USD', fxRate: '280.12345' });
     const doc = w.documents.find(d => d.id === bill)!;
-    expect(doc.fxRate).toBe('280.12345');
+    expect(doc.fxRate).toBe('280.1235');
     const j = w.journals.find(x => x.sourceId === bill)!;
     expect(j.lines.find(l => l.account === '2000')!.credit).toBe('280.1235');
   });

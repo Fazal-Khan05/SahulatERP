@@ -31,7 +31,7 @@ const invoiceLines = (item: string, amount: string) => [{ itemId: item, quantity
 function draft(w: Workspace, kind: string, party: string, item: string, amount: string, extra: Record<string, unknown> = {}, who: Actor = owner) {
   return withDocument(w, kind, party, invoiceLines(item, amount), extra, false, who);
 }
-/** The editor's "No, don't save" path: find or create the shared walk-in account, then book the document with the typed name. */
+/** The shared walk-in account as it stands after a first "No, don't save" (the engine creates it inside create_document; see PTY-030). */
 function walkIn(w: Workspace, type: 'customer' | 'supplier', who: Actor = owner): [Workspace, string] {
   const name = walkInName(type);
   const shared = w.parties.find(p => p.type === type && p.name.trim().toLowerCase() === name.toLowerCase());
@@ -227,10 +227,17 @@ describe('05 parties (PTY)', () => {
     expect(run(freshCompany(), 'save_party', customer(), actor('Sales Manager')).workspace.parties).toHaveLength(1);
   });
 
-  it('PTY-030 Salesperson: "Yes, save customer" is refused, and the "No" path still works on a company without a walk-in account [defect]', () => {
+  it('PTY-030 Salesperson: "Yes, save customer" is refused, and the "No" path still works on a company without a walk-in account', () => {
     refused(freshCompany(), 'save_party', editorParty('Rashid', 'customer'), 'Your role does not permit this action.', salesperson);
-    const noPath = errorOf(() => walkIn(freshCompany(), 'customer', salesperson));
+    // "No, don't save" sends create_document with walkIn + partyName (document-editor.tsx); the engine creates the shared account itself.
+    let { w, item } = stocked();
+    w = run(w, 'save_employee', { id: 'e-sp', name: 'Sana Salesperson', role: 'Salesperson', territory: 'Karachi', salary: '0', allowance: '0', deduction: '0', attendance: 30, active: true }).workspace;
+    let created: ReturnType<typeof run> | undefined;
+    const noPath = errorOf(() => { created = run(w, 'create_document', { kind: 'sales_invoice', walkIn: true, partyName: 'Rashid', warehouseId: firstWarehouse(w), date: today(), dueDate: today(), lines: [{ itemId: item, quantity: '1', price: '100', taxRate: '0', employeeId: 'e-sp' }] }, salesperson); });
     expect(noPath, 'first "No" as Salesperson must not need save_party').toBe('');
+    const shared = created!.workspace.parties.find(p => p.name === 'Walk-in customer')!;
+    expect(created!.workspace.documents[0]).toMatchObject({ partyId: shared.id, partyName: 'Rashid' });
+    expect(source('src/components/document-editor.tsx')).toContain('...(partyId ? { partyId } : { walkIn: true })');
   });
 
   it.todo('PTY-031 [browser] typing an existing name exactly matches it; hint shows city/phone/terms; no prompt');
@@ -596,7 +603,7 @@ describe('05 parties (PTY)', () => {
     expect(w.documents[0].taxSnapshot).toMatchObject({ registered: true, taxId: '1234567-8' });
   });
 
-  it.todo('PTY-098 [browser] 10,000 customers: suggestion datalist still usable (or capped with search)');
+  it.todo('PTY-098 [browser] 10,000 customers: suggestion datalist still usable (capped at 50 and filtered by the typed text in document-editor.tsx)');
 
   it('PTY-099 supplier statement shows bill, return and payment with a running balance (payment reduces the balance) [defect]', () => {
     let { w, item } = stocked(); let bill: string;

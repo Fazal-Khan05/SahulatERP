@@ -156,7 +156,7 @@ describe('14 Accounting (ACC)', () => {
     refused(w, 'reverse_journal', { id: jFor(w, inv)[0].id }, 'Use the source document\'s correction workflow for operational journals.');
   });
 
-  it('ACC-017 reversing an opening-balance journal is refused (demo opening balances and opening stock entered in-app) [defect]', () => {
+  it('ACC-017 reversing an opening-balance journal is refused (demo opening balances and opening stock entered in-app)', () => {
     const demo = buildDemoWorkspace();
     refused(demo, 'reverse_journal', { id: demo.journals.find(j => j.sourceId === 'opening-balances')!.id }, "Use the source document's correction workflow for operational journals.");
     // Opening stock entered through Inventory (bulk_stock_increase, purpose opening_stock) posts Dr 1200 / Cr 3000 with the user's reason as memo.

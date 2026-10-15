@@ -326,10 +326,10 @@ describe('13 Payroll (PAY)', () => {
     refused(setup().w, 'import_records', { kind: 'attendance', rows: [{ name: 'Nobody', attendance: '20' }] }, 'Row 2: employee Nobody not found');
   });
 
-  it('PAY-032 attendance 31 in the file is a row error [defect]', () => {
+  it('PAY-032 attendance 31 in the file is a row error', () => {
     const { w } = setup();
-    // The import caps attendance at 31 while save_employee caps it at 30; 31 then pays 31/30 of salary.
-    refused(w, 'import_records', { kind: 'attendance', rows: [{ name: 'Ayesha Siddiqui', attendance: '31' }] }, /Row 2/);
+    // The import and save_employee share one 0–30 rule (basic pay = salary × attendance ÷ 30).
+    refused(w, 'import_records', { kind: 'attendance', rows: [{ name: 'Ayesha Siddiqui', attendance: '31' }] }, 'Row 2: Attendance cannot exceed 30 days.');
   });
 
   it('PAY-033 payroll print / payslip [documented: not present; printable kinds are sales, purchase and receipt documents only]', () => {

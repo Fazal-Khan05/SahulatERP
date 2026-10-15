@@ -105,9 +105,8 @@ describe('08 Purchasing, foreign currency, supplier payments (PUR)', () => {
     expect(documentView(r.workspace, d).meta).toContainEqual({ label: 'Exchange rate', value: '1 USD = 280 PKR' });
   });
 
-  it('PUR-007 USD with empty rate refused with a clear message [defect]', () => {
+  it('PUR-007 USD with empty rate refused with a clear message', () => {
     const { w, item, sup } = base();
-    // Expected "Amount must be greater than zero."; actual raw "[DecimalError] Invalid argument: " (route.ts shows it verbatim).
     refused(w, 'create_document', { kind: 'purchase_order', partyId: sup, warehouseId: firstWarehouse(w), date: today(), dueDate: today(), currency: 'USD', fxRate: '', lines: [L(item)] }, 'Amount must be greater than zero.');
   });
 
@@ -194,7 +193,7 @@ describe('08 Purchasing, foreign currency, supplier payments (PUR)', () => {
     expectInvariants(w);
   });
 
-  it('PUR-020 bill rate different from GRN rate posts the difference to FX and clears GRNI [defect]', () => {
+  it('PUR-020 bill rate different from GRN rate posts the difference to FX and clears GRNI', () => {
     let { w, item, sup } = base();
     let po: string, grn: string;
     [w, po] = createSubmit(w, 'purchase_order', sup, [L(item, '100', '10')], USD);
@@ -202,9 +201,10 @@ describe('08 Purchasing, foreign currency, supplier payments (PUR)', () => {
     const c = convert(w, grn);
     const u = run(c.workspace, 'update_document', { id: c.recordId, partyId: sup, warehouseId: firstWarehouse(w), date: today(), dueDate: today(), currency: 'USD', fxRate: '285', lines: [L(item, '100', '10')] });
     w = submit(u.workspace, c.recordId);
-    // Expected: GRNI (2010) cleared and 5,000 difference to 5400. Actual: 2010 keeps a 5,000 debit residue and nothing posts to 5400.
+    // GRNI (2010) is cleared at the GRN value (280,000) and the 5,000 rate difference posts to 5400.
     expect(accountBalance(w, '2010')).toBe('0.0000');
     expect(accountBalance(w, '5400')).toBe('5000.0000');
+    expectInvariants(w);
   });
 
   it('PUR-021 GRN converted to a bill with another currency via API refused', () => {
@@ -283,13 +283,13 @@ describe('08 Purchasing, foreign currency, supplier payments (PUR)', () => {
     refused(w, 'create_receipt', { partyId: sup, date: today(), amount: '282800', method: 'bank', chequeNo: '', dueDate: today(), allocations: [{ invoiceId: bill, amount: '1010' }], employeeId: '', note: '', accountId: 'main-bank' }, 'Invalid invoice allocation.');
   });
 
-  it('PUR-032 supplier payment whose amount differs from its allocations is refused [defect]', () => {
+  it('PUR-032 supplier payment whose amount differs from its allocations is refused', () => {
     let { w, item, sup } = base();
     let po: string, grn: string, bill: string;
     [w, po] = createSubmit(w, 'purchase_order', sup, [L(item, '10', '400')]);
     [w, grn] = convertSubmit(w, po);
     [w, bill] = convertSubmit(w, grn);
-    // PKR bill of 4,000; paying 5,000 while allocating 4,000. Actual: accepted and 1,000 booked as an "exchange loss" on a PKR bill.
+    // PKR bill of 4,000; paying 5,000 while allocating 4,000 is refused (only a foreign-currency bill can carry an exchange difference).
     refused(w, 'create_receipt', { partyId: sup, date: today(), amount: '5000', method: 'bank', chequeNo: '', dueDate: today(), allocations: [{ invoiceId: bill, amount: '4000' }], employeeId: '', note: '', accountId: 'main-bank' }, 'Allocations must equal the receipt amount.');
   });
 
@@ -659,7 +659,7 @@ describe('08 Purchasing, foreign currency, supplier payments (PUR)', () => {
   });
 
   it.todo('PUR-084 [browser] payment dialog lists open bills oldest first; typed total spreads oldest first');
-  it.todo('PUR-085 [browser] "PKR actually paid" only for non-PKR bills (code review: document-dialogs.tsx shows it for every supplier payment — likely fails; see PUR-032)');
+  it.todo('PUR-085 [browser] "PKR actually paid" only for non-PKR bills (document-dialogs.tsx shows it only when the supplier has an open foreign-currency bill; engine side: PUR-032)');
   it.todo('PUR-086 [browser] purchase editor usable on phone');
 
   it('PUR-087 branch-limited Accountant submitting a GRN in another branch refused', () => {
@@ -717,10 +717,9 @@ describe('08 Purchasing, foreign currency, supplier payments (PUR)', () => {
     expect(docOf(r.workspace, r.recordId).fxRate).toBe('280.1234');
   });
 
-  it('PUR-095 rate with 5 decimals is rounded to 4 [defect]', () => {
+  it('PUR-095 rate with 5 decimals is rounded to 4', () => {
     const { w: w0, item, sup } = base();
     const r = create(w0, 'purchase_order', sup, [L(item)], { currency: 'USD', fxRate: '280.12345' });
-    // Actual: stored as typed ("280.12345"); FX precision is not enforced.
     expect(docOf(r.workspace, r.recordId).fxRate).toBe('280.1235');
   });
 

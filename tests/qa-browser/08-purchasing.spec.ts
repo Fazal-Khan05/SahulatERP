@@ -107,7 +107,7 @@ test('PUR-084 Payment dialog lists open bills oldest first; a typed total spread
   await page.keyboard.press('Escape');
 });
 
-test('PUR-085 "PKR actually paid" is shown only for non-PKR bills [defect]', async () => {
+test('PUR-085 "PKR actually paid" is shown only for non-PKR bills', async () => {
   const { page, context } = s;
   const w = await readWorkspaceApi(context.request);
   await purchasing(page);

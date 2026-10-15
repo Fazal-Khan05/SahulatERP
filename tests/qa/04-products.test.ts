@@ -100,7 +100,7 @@ describe('04 products (PRD)', () => {
     refused(freshCompany(), 'save_item', product({ price: '1000000000000' }), 'Enter a valid number below one trillion.');
   });
 
-  it('PRD-014 price "abc" via API gives a validation error, not a raw library error [defect]', () => {
+  it('PRD-014 price "abc" via API gives a validation error, not a raw library error', () => {
     const message = errorOf(() => run(freshCompany(), 'save_item', product({ price: 'abc' })));
     expect(message).not.toBe('');
     expect(message).not.toContain('DecimalError');
@@ -113,7 +113,7 @@ describe('04 products (PRD)', () => {
     expect(formatMoney(w.items[0].price)).toBe('Rs 1,000');
   });
 
-  it('PRD-016 price with 6 decimals is stored at 4 dp, rounded half-up [defect]', () => {
+  it('PRD-016 price with 6 decimals is stored at 4 dp, rounded half-up', () => {
     const w = run(freshCompany(), 'save_item', product({ price: '12.345678' })).workspace;
     expect(w.items[0].price).toMatch(/^12\.3457(0*)$/);
   });
@@ -218,7 +218,7 @@ describe('04 products (PRD)', () => {
     expectInvariants(w);
   });
 
-  it('PRD-031 opening qty 50 with cost empty: product kept with 0 stock and the stock step refused "Amount must be greater than zero." [defect]', () => {
+  it('PRD-031 opening qty 50 with cost empty: product kept with 0 stock and the stock step refused "Amount must be greater than zero."', () => {
     const saved = run(freshCompany(), 'save_item', product());
     const message = errorOf(() => opening(saved.workspace, saved.recordId, '50', ''));
     expect(saved.workspace.items).toHaveLength(1);
@@ -243,7 +243,7 @@ describe('04 products (PRD)', () => {
     expect(itemSpec.fields.find(f => f.key === 'openingQuantity')!.step).toBe('0.0001');
   });
 
-  it('PRD-035 opening qty 0.00001 is refused or books nothing; never a zero-quantity movement carrying value [defect]', () => {
+  it('PRD-035 opening qty 0.00001 is refused or books nothing; never a zero-quantity movement carrying value', () => {
     const saved = run(freshCompany(), 'save_item', product());
     let w = saved.workspace;
     try { w = opening(w, saved.recordId, '0.00001', '5').workspace; } catch { /* refusal is acceptable */ }

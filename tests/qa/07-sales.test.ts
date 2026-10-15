@@ -113,9 +113,10 @@ describe('07 Sales documents and the invoice editor (SAL)', () => {
     refused(w, 'create_document', { kind: 'sales_invoice', partyId: cust, warehouseId: firstWarehouse(w), date: today(), dueDate: today(), lines: [] }, /expected array to have >=1 items/);
   });
 
-  it('SAL-009 qty empty refused by engine [browser: editor message "Enter a quantity on line 1."] [documented: engine throws raw "[DecimalError] Invalid argument: "; editor blocks first]', () => {
+  it('SAL-009 qty empty refused by engine "Amount must be greater than zero.", never a raw library error [browser: editor message "Enter a quantity on line 1."]', () => {
     const { w, item, cust } = base();
-    refused(w, 'create_document', { kind: 'sales_invoice', partyId: cust, warehouseId: firstWarehouse(w), date: today(), dueDate: today(), lines: [L(item, '')] }, /Invalid argument/);
+    const message = refused(w, 'create_document', { kind: 'sales_invoice', partyId: cust, warehouseId: firstWarehouse(w), date: today(), dueDate: today(), lines: [L(item, '')] }, 'Amount must be greater than zero.');
+    expect(message).not.toContain('DecimalError');
   });
 
   it('SAL-010 qty 0 refused "Amount must be greater than zero." [browser: editor "Enter a quantity on line 1."]', () => {
@@ -136,10 +137,9 @@ describe('07 Sales documents and the invoice editor (SAL)', () => {
     expect(docOf(w, id).net).toBe('0.0100');
   });
 
-  it('SAL-013 qty 0.00001 (below 4 dp) is refused [defect]', () => {
+  it('SAL-013 qty 0.00001 (below 4 dp) is refused', () => {
     const { w, item, cust } = base();
-    // Expected: quantity precision is 4 dp, so 0.00001 rounds to 0 and must be refused.
-    // Actual: accepted; the line keeps 0.00001 while the stock move rounds to 0.0000, so invoiced and moved quantities disagree.
+    // Quantity precision is 4 dp (half-up), so 0.00001 rounds to 0 and is refused.
     refused(w, 'create_document', { kind: 'sales_invoice', partyId: cust, warehouseId: firstWarehouse(w), date: today(), dueDate: today(), lines: [L(item, '0.00001')] }, /greater than zero|quantity/i);
   });
 
@@ -191,14 +191,17 @@ describe('07 Sales documents and the invoice editor (SAL)', () => {
     expect([d.net, d.tax, d.total]).toEqual(['1000.0000', '180.0000', '1180.0000']);
   });
 
-  it('SAL-023 tax 0 and blank both 0 (editor sends blank as "0") [documented: engine defaults taxRate to 18 when the field is omitted entirely]', () => {
+  it('SAL-023 tax 0 and blank both 0 (editor sends blank as "0") [documented: a line sent without taxRate takes the company tax rate in Settings, or 0 when it is blank]', () => {
     const { w: w0, item, cust } = base();
     const zero = create(w0, 'sales_invoice', cust, [L(item, '1', '100', { taxRate: '0' })]);
     expect(docOf(zero.workspace, zero.recordId).tax).toBe('0.0000');
     const blank = create(w0, 'sales_invoice', cust, [L(item, '1', '100', { taxRate: editorValue('') })]);
     expect(docOf(blank.workspace, blank.recordId).tax).toBe('0.0000');
     const omitted = create(w0, 'sales_invoice', cust, [{ itemId: item, quantity: '1', price: '100' }]);
-    expect(docOf(omitted.workspace, omitted.recordId).tax).toBe('18.0000');
+    expect(docOf(omitted.workspace, omitted.recordId).tax).toBe('0.0000');
+    const taxed = run(w0, 'save_settings', { ...w0.settings, taxRate: '17' }).workspace;
+    const fromSettings = create(taxed, 'sales_invoice', cust, [{ itemId: item, quantity: '1', price: '100' }]);
+    expect(docOf(fromSettings.workspace, fromSettings.recordId).tax).toBe('17.0000');
   });
 
   it('SAL-024 tax 150 refused "Percentage cannot exceed 100."', () => {

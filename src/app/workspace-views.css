@@ -18,3 +18,9 @@
 .choice:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
 .choice:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
 @media (max-width:640px){.choice-list{grid-template-columns:minmax(0,1fr)}}
+
+/* Payroll: month picker beside Create payroll, run numbers that open a run's lines, and the lines table. */
+.payroll-month{width:auto;min-width:150px}
+.run-number{width:100%;font-weight:600}
+.payroll-lines tfoot td{font-weight:600;border-top:1px solid var(--border-strong);border-bottom:0;background:var(--surface-muted)}
+.payroll-lines .payroll-lines-note{padding-top:var(--space-4);font-size:var(--text-xs);color:var(--text-muted)}

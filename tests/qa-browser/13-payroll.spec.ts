@@ -42,7 +42,7 @@ test('PAY-064 Payroll status badges use distinct colours [defect]', async () => 
   expect(new Set(Object.values(byStatus)).size, 'four statuses, four colours').toBe(4);
 });
 
-test('PAY-063 Payroll lines table is readable on a phone (scrolls) [defect]', async ({ browser }) => {
+test('PAY-063 Payroll lines table is readable on a phone (scrolls)', async ({ browser }) => {
   const phone = await signedInPage(browser, { viewport: PHONE, hasTouch: true, isMobile: true });
   const { page } = phone;
   try {
@@ -53,10 +53,16 @@ test('PAY-063 Payroll lines table is readable on a phone (scrolls) [defect]', as
     expect(await runs.evaluate(el => ({ overflow: getComputedStyle(el).overflowX, scrolls: el.scrollWidth > el.clientWidth }))).toEqual({ overflow: 'auto', scrolls: true });
     await expect(runsCard(page).locator('.table-scroll-hint')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    // Expected: a run opens its per-employee lines (basic, allowance, commission, EOBI, tax, net).
+    // A run opens its per-employee lines (basic, allowance, commission, EOBI, tax, net).
     await runRow(page, 'PAY-2026-09').locator('td:first-child').tap();
     const lines = page.locator('table').filter({ has: page.locator('th', { hasText: /^(Basic|Net pay|Net)$/ }) }).filter({ hasText: F.salesperson });
     await expect(lines, 'a payroll lines table with one row per employee').toHaveCount(1, { timeout: 5000 });
+    await expect(lines.locator('thead th')).toHaveText(['Employee', 'Basic', 'Allowance', 'Commission', 'Recovery', 'Employee EOBI', 'Income tax', 'Deductions', 'Net pay']);
+    // The lines table scrolls sideways inside its card; the page does not.
+    const region = page.locator('.table-scroll').filter({ has: lines });
+    expect(await region.evaluate(el => ({ overflow: getComputedStyle(el).overflowX, scrolls: el.scrollWidth > el.clientWidth }))).toEqual({ overflow: 'auto', scrolls: true });
+    await expect(region).toHaveAttribute('tabindex', '0');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   } finally { await phone.context.close(); }
 });
 
@@ -81,7 +87,7 @@ test('PAY-088 Transition button is disabled while a command is busy', async () =
   expect(w.payrolls.find(p => p.number === 'PAY-2026-09')!.status).toBe('reviewed');
 });
 
-test('PAY-089 Line commission tooltip lists invoices [documented: not present — runs show no line or commission detail and no tooltip]', async () => {
+test('PAY-089 Line commission tooltip lists invoices [documented: not present — no tooltip; a run opens its per-employee amounts (PAY-063), not the invoices behind the commission]', async () => {
   const { page, context } = s;
   const w = await readWorkspaceApi(context.request);
   const run = w.payrolls.find(p => p.number === 'PAY-2026-09')!;
@@ -164,5 +170,37 @@ test('PAY-062 Settings → Payroll is visible while Payroll is on', async () => 
     await expect(page.getByLabel(/EOBI/)).toHaveCount(0);
   } finally {
     await writeQaWorkspace(payrollWorkspace());
+  }
+});
+
+test('PAY-025 A stale run is cancelled from Payroll (after a confirmation) and its month created again', async () => {
+  const { page, context } = s;
+  await writeQaWorkspace(payrollWorkspace());
+  await gotoApp(page);
+  await payroll(page);
+  try {
+    const row = runRow(page, 'PAY-2026-09');
+    // Approved and paid runs cannot be cancelled; draft and reviewed ones can.
+    await expect(runRow(page, 'PAY-2026-07').getByRole('button', { name: 'Cancel run' })).toHaveCount(0);
+    await expect(runRow(page, 'PAY-2026-08').getByRole('button', { name: 'Cancel run' })).toBeVisible();
+    await row.getByRole('button', { name: 'Cancel run' }).click();
+    const confirm = page.getByRole('dialog', { name: 'Cancel PAY-2026-09?' });
+    await expect(confirm).toContainText('commissions it holds are released');
+    await confirm.getByRole('button', { name: 'Keep run' }).click();
+    await expect(row.locator('.badge')).toHaveText('draft');
+    await row.getByRole('button', { name: 'Cancel run' }).click();
+    await confirm.getByRole('button', { name: 'Cancel run' }).click();
+    await expect(confirm).toHaveCount(0, { timeout: 30_000 });
+    await expect(row.locator('.badge')).toHaveText('cancelled');
+    await expect(row.locator('td').last()).toHaveText('Cancelled');
+    // The month can be created again: it recalculates in place.
+    await runsCard(page).getByLabel('Payroll month').fill('2026-09');
+    await runsCard(page).getByRole('button', { name: 'Create payroll' }).click();
+    await expect(row.locator('.badge')).toHaveText('draft', { timeout: 30_000 });
+    const runs = (await readWorkspaceApi(context.request)).payrolls.filter(p => p.month === '2026-09');
+    expect(runs.map(p => [p.status, p.date])).toEqual([['draft', '2026-09-30']]);
+  } finally {
+    await writeQaWorkspace(payrollWorkspace());
+    await gotoApp(page);
   }
 });

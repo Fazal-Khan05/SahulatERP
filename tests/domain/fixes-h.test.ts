@@ -9,11 +9,15 @@ vi.mock('@/modules/erp/types', () => import('../../src/modules/erp/types'));
 vi.mock('@/modules/erp/engine', () => import('../../src/modules/erp/engine'));
 vi.mock('@/modules/erp/dates', () => import('../../src/modules/erp/dates'));
 import { ImportsView, costClasses } from '../../src/components/imports-view';
+import { PayrollRuns, payrollDate } from '../../src/components/payroll-runs';
+import { execute } from '../../src/modules/erp/engine';
 import { buildDemoWorkspace } from '../../src/modules/erp/demo';
-import type { Actor, Role } from '../../src/modules/erp/types';
+import type { Actor, Role, Workspace } from '../../src/modules/erp/types';
 
 const actor = (role: Role): Actor => ({ id: `h-${role}`, name: `H ${role}`, role, branchIds: [] });
 const command = async () => ({ ok: true, message: '' });
+let key = 0;
+const run = (w: Workspace, type: string, payload: Record<string, unknown>) => { const r = execute(w, { type, payload, idempotencyKey: `h-fix-${++key}-key` }, actor('Owner')); return { w: r.workspace, id: r.recordId }; };
 const buttons = (html: string) => [...html.matchAll(/<button[^>]*>(?:<svg[\s\S]*?<\/svg>)?([^<]*)<\/button>/g)].map(m => m[1]);
 
 describe('H workspace view fixes', () => {
@@ -33,5 +37,32 @@ describe('H workspace view fixes', () => {
     const html = renderToStaticMarkup(createElement(ImportsView, { workspace: buildDemoWorkspace(), actor: actor('Auditor'), editable: false, busy: '', command }));
     expect(costClasses.map(c => c.value)).toEqual(['inventory', 'recoverable_tax', 'deposit', 'expense']);
     for (const c of costClasses) { expect(c.help.length).toBeGreaterThan(20); expect(html).toContain(`<dt>${c.label}</dt>`); }
+  });
+
+  it('D-10/D-44 payroll runs: Cancel run for draft and reviewed runs only, "Cancelled" for a cancelled run, run numbers open the lines', () => {
+    let w = buildDemoWorkspace();
+    w = { ...w, payrolls: [], settings: { ...w.settings, employerEobi: '5', employeeEobi: '1', eobiBase: '37000', incomeTaxRate: '5' } };
+    const ids: Record<string, string> = {};
+    for (const [month, steps] of [['2026-05', ['reviewed', 'approved', 'paid']], ['2026-06', ['reviewed', 'approved']], ['2026-07', ['reviewed']], ['2026-08', []], ['2026-09', []]] as const) {
+      const created = run(w, 'create_payroll', { month, date: `${month}-28` }); w = created.w; ids[month] = created.id!;
+      for (const status of steps) w = run(w, 'update_payroll', { id: ids[month], status }).w;
+    }
+    w = run(w, 'cancel_payroll', { id: ids['2026-09'] }).w;
+    const html = (role: Role, editable = role !== 'Auditor') => renderToStaticMarkup(createElement(PayrollRuns, { workspace: w, actor: actor(role), editable, busy: '', command }));
+    const cells = (markup: string) => [...markup.matchAll(/<tr><td><button[^>]*>(PAY-[\d-]+)<\/button><\/td>(?:<td>[^]*?<\/td>){5}<td>([^]*?)<\/td><\/tr>/g)].map(m => [m[1], m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()]);
+    // Newest month first; only draft and reviewed runs offer Cancel run.
+    expect(cells(html('Owner'))).toEqual([['PAY-2026-09', 'Cancelled'], ['PAY-2026-08', 'reviewed Cancel run'], ['PAY-2026-07', 'approved Cancel run'], ['PAY-2026-06', 'paid'], ['PAY-2026-05', 'Complete']]);
+    expect(cells(html('Payroll Administrator'))).toEqual(cells(html('Owner')));
+    expect(cells(html('Auditor'))).toEqual([['PAY-2026-09', 'Cancelled'], ['PAY-2026-08', 'Read only'], ['PAY-2026-07', 'Read only'], ['PAY-2026-06', 'Read only'], ['PAY-2026-05', 'Complete']]);
+    expect(html('Auditor')).not.toContain('Create payroll');
+    expect(html('Owner')).toContain('aria-label="Payroll month"');
+    expect(html('Owner')).toContain('aria-expanded="false"');
+  });
+
+  it('D-10 a payroll for an earlier month is dated on its last day; the current month is dated today', () => {
+    expect(payrollDate('2026-09', '2026-10-15')).toBe('2026-09-30');
+    expect(payrollDate('2026-02', '2026-10-15')).toBe('2026-02-28');
+    expect(payrollDate('2024-02', '2026-10-15')).toBe('2024-02-29');
+    expect(payrollDate('2026-10', '2026-10-15')).toBe('2026-10-15');
   });
 });

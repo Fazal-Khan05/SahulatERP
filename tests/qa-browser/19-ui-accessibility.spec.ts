@@ -239,7 +239,7 @@ test.describe('layout, keyboard and accessibility on the busy company', () => {
     await s.context.close();
   });
 
-  test('UIX-030 focus is trapped in dialogs and returns to the trigger on close [defect]', async ({ browser }) => {
+  test('UIX-030 focus is trapped in dialogs and returns to the trigger on close', async ({ browser }) => {
     const s = await open(browser, { viewport: DESKTOP });
     const { page } = s;
     const returned: string[] = [];
@@ -260,7 +260,7 @@ test.describe('layout, keyboard and accessibility on the busy company', () => {
       const now = await page.evaluate(() => { const e = document.activeElement as HTMLElement; return e === document.body ? 'body' : `${e.tagName.toLowerCase()} "${e.innerText.trim()}"`; });
       returned.push(`${trigger}: ${await button.evaluate(el => el === document.activeElement) ? 'trigger' : now}`);
     }
-    // Actual: closing either dialog drops focus on <body>; keyboard users restart from the top of the page.
+    // Dialogs open from state, so ui/dialog.tsx records the focused element on open and returns focus there on close (D-45).
     expect(returned).toEqual(['New invoice: trigger', 'Record receipt: trigger']);
     await s.context.close();
   });

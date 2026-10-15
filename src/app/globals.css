@@ -377,7 +377,7 @@ button:focus-visible,a:focus-visible,[role=switch]:focus-visible{outline:2px sol
 .main-shell{margin-left:var(--sidebar-width)}
 
 /* Top bar */
-.topbar{height:var(--topbar-height);background:color-mix(in srgb,var(--background) 86%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:calc(var(--z-sidebar) - 1);padding:0 var(--space-8)}
+.topbar{height:var(--topbar-height);background:color-mix(in srgb,var(--background) 86%,transparent);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:calc(var(--z-sidebar) - 1);padding:0 var(--space-8)}
 .breadcrumb{color:var(--text-subtle);font-size:var(--text-sm)}
 .breadcrumb strong{color:var(--text);font-weight:500}
 .topbar-right{color:var(--text-muted)}
@@ -462,7 +462,7 @@ tbody tr:hover{background:var(--surface-muted)}
 .workspace-menu-name small,.light-menu .workspace-menu-name small{color:var(--text-muted)}
 .workspace-menu-item>svg,.light-menu .workspace-menu-item>svg,.workspace-menu-item .company-icon{color:var(--accent-text)}
 .menu-empty{color:var(--text-muted)}
-.dialog-overlay{background:rgba(31,34,36,.32);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:var(--z-overlay)}
+.dialog-overlay{background:rgba(31,34,36,.32);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);z-index:var(--z-overlay)}
 .dialog-content{border-radius:var(--dialog-radius);box-shadow:var(--shadow-lg);border:1px solid var(--border);z-index:var(--z-dialog)}
 .dialog-close{background:var(--surface-sunken);color:var(--text-muted);border-radius:var(--radius-sm);transition:background var(--duration-base) var(--ease-out),color var(--duration-base) var(--ease-out)}
 .dialog-close:hover{background:var(--border);color:var(--text)}
@@ -704,7 +704,7 @@ button,a,[role=button],[role=tab],[role=switch],.nav-item,.tab,.chip,.badge,.swa
 .badge.info{background:var(--accent-2-soft);color:var(--accent-2-text)}
 .card:hover,.table-card:hover{border-color:var(--border)}
 /* Overlays: indigo tint and a stronger blur so the workspace shows through every popup the same way */
-.dialog-overlay,.sidebar-scrim{background:rgba(16,31,82,.38);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.dialog-overlay,.sidebar-scrim{background:rgba(16,31,82,.38);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
 .dialog-content{border-radius:20px;box-shadow:var(--shadow-xl)}
 /* Phone bottom sheets meet the screen edge: rounded on top only (this layer comes after the sheet rule above). */
 @media(max-width:760px){.dialog-content{border-radius:20px 20px 0 0}}

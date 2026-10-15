@@ -202,11 +202,11 @@ test('ONB-085 Step transition: forward slides in from the right, back from the l
   await expect(heading(page)).toHaveText('Features', { timeout: 30_000 });
   await expect(page.locator('.setup-body')).toHaveClass(/step-forward/);
   const forward = await page.evaluate(() => [...document.styleSheets].flatMap(s => { try { return [...s.cssRules]; } catch { return []; } }).find(r => r instanceof CSSKeyframesRule && r.name === 'step-forward')?.cssText ?? '');
-  expect(forward).toMatch(/translateX\(24px\)/);
+  expect(forward).toMatch(/translateX?\(24px\)/); // the production CSS minifier writes translateX(24px) as translate(24px)
   await page.getByRole('button', { name: 'Back' }).click();
   await expect(page.locator('.setup-body')).toHaveClass(/step-back/);
   const back = await page.evaluate(() => [...document.styleSheets].flatMap(s => { try { return [...s.cssRules]; } catch { return []; } }).find(r => r instanceof CSSKeyframesRule && r.name === 'step-back')?.cssText ?? '');
-  expect(back).toMatch(/translateX\(-24px\)/);
+  expect(back).toMatch(/translateX?\(-24px\)/);
   expect(await page.locator('.setup-body').evaluate(el => getComputedStyle(el).animationName)).toBe('step-back');
   await context.close();
 });

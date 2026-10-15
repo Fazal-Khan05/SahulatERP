@@ -174,6 +174,13 @@ Expected: the refreshed session is always saved before the page renders.
 Where: no session-refresh proxy (`src/proxy.ts`, Next.js 16's name for middleware); `src/lib/supabase/server.ts` silently ignores cookie writes from Server Components.
 Fix: a session-refresh proxy that refreshes an expiring session once, before rendering, and writes the new cookies to both the rendering request and the browser (Supabase's recommended SSR pattern).
 
+**D-78 · S4 · Production CSS drops the standard backdrop-filter, so dialog backdrops and the top bar lose their blur in Chrome**
+Cases: SET-041 (the dialog backdrop is 3 px instead of 8 px on a production build); also the top bar's glass blur.
+What happens: three rules wrote `backdrop-filter` before `-webkit-backdrop-filter`. The production CSS minifier treats the later prefixed declaration as overriding the standard one and drops the standard one, which Chrome needs, so an older 3 px rule wins. Development builds are not minified, so the agents' runs passed.
+Expected: the same 8 px blur (12 px on the top bar) in production as in development.
+Where: `src/app/globals.css` (top bar, dialog overlay, overlay + scrim rules).
+Fix: write `-webkit-backdrop-filter` first and `backdrop-filter` last; a guard test (`tests/domain/fixes-css.test.ts`) keeps that order.
+
 ## Not defects, but worth deciding
 
 - **Tax default 18% (SAL-023, and SET-085 = D-27).** `lineInput` defaults an omitted `taxRate` to 18. Decide whether the default comes from Settings, and add a Settings field for it, since `save_settings` has no UI either (see D-09).

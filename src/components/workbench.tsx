@@ -123,6 +123,8 @@ function SearchDialog({open,close,workspace,role,choose}:{open:boolean;close:()=
   const needle=query.trim().toLocaleLowerCase();
   // The index is built when the dialog opens (once per workspace snapshot and role); a keystroke only scans it.
   const index=useMemo(()=>open?searchIndex(workspace,role):[],[open,workspace,role]);
+  const extras=[canView(role,'collections',workspace)||canView(role,'purchasing',workspace)?'receipts and cheques':'',canView(role,'imports',workspace)?'shipments':'',canReadLedger(role)&&canView(role,'accounting',workspace)?'journals':''].filter(Boolean);
+  const alsoSearched=extras.length>1?`${extras.slice(0,-1).join(', ')} and ${extras.at(-1)}`:extras[0];
   const results=useMemo(()=>needle?searchHits(index,needle):[],[index,needle]);
   // ↑/↓ move a highlight while focus stays in the field (aria-activedescendant); Enter opens it, or the first result.
   useEffect(()=>{if(active>=0)document.getElementById(`${listId}-${active}`)?.scrollIntoView({block:'nearest'})},[active,listId]);
@@ -132,7 +134,7 @@ function SearchDialog({open,close,workspace,role,choose}:{open:boolean;close:()=
     if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();if(!results.length)return;const step=event.key==='ArrowDown'?1:-1;setActive(index=>index<0?(step>0?0:results.length-1):(index+step+results.length)%results.length)}
     else if(event.key==='Enter'&&results.length){event.preventDefault();pick(results[Math.max(active,0)])}
   };
-  return <Dialog open={open} onOpenChange={value=>{if(!value){close();reset()}}}><DialogContent className="search-dialog"><DialogTitle>Search</DialogTitle><DialogDescription>Documents, customers, suppliers and products in this workspace.</DialogDescription>
+  return <Dialog open={open} onOpenChange={value=>{if(!value){close();reset()}}}><DialogContent className="search-dialog"><DialogTitle>Search</DialogTitle><DialogDescription>Documents, customers, suppliers and products in this workspace.{alsoSearched&&` Also ${alsoSearched}.`}</DialogDescription>
     <input className="search-input" autoFocus type="search" aria-label="Search the workspace" placeholder="Invoice number, customer, SKU…" aria-controls={listId} aria-activedescendant={active>=0&&active<results.length?`${listId}-${active}`:undefined} value={query} onKeyDown={onKey} onChange={event=>{setQuery(event.target.value);setActive(-1)}}/>
     <div className="search-results" id={listId} role="list">{needle&&!results.length&&<div className="empty-state">No matches for “{query}”.</div>}{results.map((r,index)=><button key={`${r.module}:${r.key}`} id={`${listId}-${index}`} role="listitem" className="search-result" data-highlighted={index===active?'':undefined} aria-current={index===active||undefined} onClick={()=>pick(r)}><span><strong>{r.title}</strong><small>{r.detail()}</small></span><span className="search-module">{labels[r.module]}</span></button>)}</div>
   </DialogContent></Dialog>;
@@ -141,17 +143,27 @@ const searchCache=new WeakMap<Workspace,Map<Role,SearchHit[]>>();
 /**
  * Every record the role may open, each with a lower-cased haystack. Built once per workspace snapshot and role
  * (a new snapshot arrives after every command); details are formatted only for the few results on screen.
+ * Receipts are found by number or cheque number, shipments by number, container or GD number, and journals (ledger
+ * roles only) by number or memo, unless the record that posted the journal sits in a module the role cannot see.
  */
 export function searchIndex(w:Workspace,role:Role):SearchHit[]{
   const byRole=searchCache.get(w)??new Map<Role,SearchHit[]>();searchCache.set(w,byRole);
   const cached=byRole.get(role);if(cached)return cached;
   const index:SearchHit[]=[];const parties=new Map(w.parties.map(p=>[p.id,p]));const amount=new Intl.NumberFormat('en-PK',{maximumFractionDigits:2});
-  for(const d of w.documents){const module=documentModule(d.kind);if(!canView(role,module,w))continue;const kind=d.kind.replaceAll('_',' ');const party=d.partyName||parties.get(d.partyId)?.name||'—';
+  const sources=new Map<string,Module>();// record id → module, to hide the journals of records the role cannot see
+  for(const d of w.documents){const module=documentModule(d.kind);sources.set(d.id,module);if(!canView(role,module,w))continue;const kind=d.kind.replaceAll('_',' ');const party=d.partyName||parties.get(d.partyId)?.name||'—';
     index.push({key:d.id,title:d.number,module,open:{document:d.id},text:`${d.number} ${kind} · ${party} · Rs ${amount.format(Number(d.total))}`.toLocaleLowerCase(),detail:()=>`${kind} · ${party} · ${formatMoney(d.total)}`})}
   for(const p of w.parties){const module:Module=p.type==='customer'?'collections':'purchasing';if(!canView(role,module,w))continue;const detail=`${p.type} · ${p.city}`;
     index.push({key:p.id,title:p.name,module,text:`${p.name} ${detail}`.toLocaleLowerCase(),detail:()=>detail})}
-  if(canView(role,'inventory',w))for(const i of w.items){const detail=`${i.sku} · ${i.category}`;
+  for(const i of w.items){sources.set(i.id,'inventory');if(!canView(role,'inventory',w))continue;const detail=`${i.sku} · ${i.category}`;
     index.push({key:i.id,title:i.name,module:'inventory',open:{item:i.id},text:`${i.name} ${detail}`.toLocaleLowerCase(),detail:()=>detail})}
+  for(const r of w.receipts){const party=parties.get(r.partyId);const module:Module=party?.type==='supplier'?'purchasing':'collections';sources.set(r.id,module);if(!canView(role,module,w))continue;const how=r.method==='cheque'?`cheque ${r.chequeNo}`:r.method;
+    index.push({key:r.id,title:r.number,module,text:`${r.number} ${r.chequeNo}`.toLocaleLowerCase(),detail:()=>`${how} · ${party?.name??'—'} · ${formatMoney(r.amount)} · ${r.status}`})}
+  for(const sh of w.shipments){sources.set(sh.id,'imports');if(!canView(role,'imports',w))continue;const supplier=parties.get(sh.supplierId)?.name??'—';
+    index.push({key:sh.id,title:sh.number,module:'imports',text:`${sh.number} ${sh.container} ${sh.gdNumber}`.toLocaleLowerCase(),detail:()=>`${sh.container} · ${sh.gdNumber} · ${supplier} · ${sh.status.replaceAll('_',' ')}`})}
+  for(const pr of w.payrolls)sources.set(pr.id,'payroll');
+  if(canReadLedger(role)&&canView(role,'accounting',w))for(const j of w.journals){const source=sources.get(j.sourceId.split(':')[0]);if(source&&!canView(role,source,w))continue;
+    index.push({key:j.id,title:j.number,module:'accounting',text:`${j.number} ${j.memo}`.toLocaleLowerCase(),detail:()=>`${j.date} · ${j.memo}${j.status==='draft'?' · draft':''}`})}
   byRole.set(role,index);return index;
 }
 /** The first `cap` records whose haystack contains the needle as plain text (no pattern syntax), in index order. */

@@ -25,7 +25,7 @@ async function report(page: Page, label: string) {
   await expect(page.locator('.report-card h2')).toHaveText(label);
 }
 
-test('ACC-053 Journal search by memo or number [defect]', async () => {
+test('ACC-053 Journal search by memo or number', async () => {
   const { page, context } = s;
   const w = await readWorkspaceApi(context.request);
   // An older journal that is not among the latest 8 shown on Accounting.

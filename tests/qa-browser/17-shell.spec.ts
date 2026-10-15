@@ -187,13 +187,17 @@ test('NAV-014 Ctrl+K and ⌘K open search instantly with no dialog animation', a
   }
 });
 
-test('NAV-015 Search "INV-2026" lists documents; Enter opens the first', async () => {
+test('NAV-015 Search "INV-2026" lists documents; Enter opens the first [case-corrected: since D-39 the journals whose memo names an INV-2026 invoice also match; the invoices are listed first]', async () => {
   const { page } = s;
   await home(page);
   await search(page, 'INV-2026');
   const titles = await resultTitles(page);
-  expect(titles.length).toBeGreaterThan(0);
-  for (const t of titles) expect(t).toMatch(/^INV-2026-\d{4}$/);
+  const modules = await results(page).locator('.search-module').allInnerTexts();
+  const documents = modules.filter(m => m === 'Sales').length;
+  expect(documents).toBeGreaterThan(0);
+  expect(modules.slice(0, documents).every(m => m === 'Sales'), 'documents come first').toBe(true);
+  for (const t of titles.slice(0, documents)) expect(t).toMatch(/^INV-2026-\d{4}$/);
+  for (const [i, m] of modules.entries()) if (i >= documents) { expect(m).toBe('Accounting'); await expect(results(page).nth(i).locator('small')).toContainText('INV-2026'); }
   await expect(results(page).first().locator('.search-module')).toHaveText('Sales');
   await searchInput(page).press('Enter');
   // Expected: the first document opens (dialog closes and the invoice is shown).
@@ -201,7 +205,7 @@ test('NAV-015 Search "INV-2026" lists documents; Enter opens the first', async (
   await expect(page.getByRole('dialog', { name: new RegExp(titles[0]) })).toBeVisible({ timeout: 3000 });
 });
 
-test('NAV-016 Search a customer name lists the customer and their documents', async () => {
+test('NAV-016 Search a customer name lists the customer and their documents [case-corrected: since D-39 a journal whose memo names the customer (an expense "for the Metro Home Stores order") is listed too]', async () => {
   const { page, context } = s;
   await home(page);
   const w = await readWorkspaceApi(context.request);
@@ -210,7 +214,9 @@ test('NAV-016 Search a customer name lists the customer and their documents', as
   await search(page, F.metro);
   const titles = await resultTitles(page);
   expect(titles).toContain(F.metro);
-  expect(titles.filter(t => t !== F.metro).sort()).toEqual(docs.sort());
+  const modules = await results(page).locator('.search-module').allInnerTexts();
+  expect(titles.filter((t, i) => t !== F.metro && modules[i] !== 'Accounting').sort()).toEqual(docs.sort());
+  for (const [i, m] of modules.entries()) if (m === 'Accounting') await expect(results(page).nth(i).locator('small')).toContainText(F.metro);
   await expect(results(page).filter({ hasText: 'customer · Lahore' }).locator('.search-module')).toHaveText('Collections');
   await closeSearch(page);
 });
@@ -351,7 +357,8 @@ test('NAV-027 Clicking a result navigates to its module and opens the record', a
   const w = await readWorkspaceApi(context.request);
   const number = numberOf(w, ids.inv1);
   await search(page, number);
-  await results(page).filter({ hasText: number }).click();
+  // The invoice itself (its journals mention the number too since D-39).
+  await results(page).filter({ has: page.locator('strong', { hasText: new RegExp(`^${number}$`) }) }).click();
   await expect(searchDialog(page)).toHaveCount(0);
   await expect(breadcrumb(page)).toHaveText('Sales');
   await expect(page.getByRole('dialog', { name: new RegExp(number) }), 'the invoice opens').toBeVisible({ timeout: 3000 });

@@ -180,4 +180,22 @@ describe('agent F shell fixes', () => {
     expect(searchHits(index, 'bulk product 9999').map(h => h.title)).toEqual(['Bulk product 9999']);
     expect(searchHits(index, 'inv-2025-09999').map(h => h.title)).toEqual(['INV-2025-09999']);
   });
+  it('D-39 search finds cheques, shipments and (ledger roles only) journals, and hides journals of hidden modules', () => {
+    const w = buildDemoWorkspace();
+    const titles = (index: ReturnType<typeof searchIndex>, q: string) => searchHits(index, q.toLocaleLowerCase()).map(h => `${h.module}:${h.title}`);
+    const owner = searchIndex(w, 'Owner');
+    expect(titles(owner, 'PDC-1048')).toEqual(['collections:REC-0003']);
+    expect(titles(owner, 'TCLU-448201-7')).toEqual(['imports:SHP-2026-001']);
+    expect(titles(owner, 'KAPE-HC-29184')).toEqual(['imports:SHP-2026-001']);
+    expect(titles(owner, 'Opening balances · synthetic')).toEqual(['accounting:JV-00001']);
+    expect(titles(owner, 'JV-00002')).toEqual(['accounting:JV-00002']);
+    // A non-ledger role gets no journals, even from an unscoped workspace.
+    expect(searchIndex(w, 'Sales Manager').filter(h => h.module === 'accounting')).toEqual([]);
+    expect(searchIndex(scopeWorkspace(w, member('Salesperson')), 'Salesperson').filter(h => h.module === 'accounting' || h.module === 'imports')).toEqual([]);
+    // With Purchasing hidden, a bill's journal is not a way back to the bill.
+    const noPurchasing = { ...w, modules: w.modules.filter(m => m !== 'purchasing') };
+    expect(titles(searchIndex(w, 'Owner'), 'supplier invoice · BILL-2026-0001')).toHaveLength(1);
+    expect(titles(searchIndex(noPurchasing, 'Owner'), 'supplier invoice · BILL-2026-0001')).toEqual([]);
+    expect(titles(searchIndex(noPurchasing, 'Owner'), 'Opening balances · synthetic')).toEqual(['accounting:JV-00001']);
+  });
 });

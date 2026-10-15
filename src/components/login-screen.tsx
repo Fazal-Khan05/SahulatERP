@@ -1,7 +1,7 @@
 'use client';
 import { useState, type FormEvent } from 'react';
 import { Eye, EyeOff, Loader2, LockKeyhole, Mail, ShieldCheck } from 'lucide-react';
-import { createBrowserSupabase } from '@/lib/supabase/client';
+import { postAuth } from '@/lib/supabase/client';
 import { Button } from './ui/button';
 
 export function LoginScreen() {
@@ -12,15 +12,16 @@ export function LoginScreen() {
   const [message, setMessage] = useState('');
   async function submit(event: FormEvent) {
     event.preventDefault(); setBusy(true); setMessage('');
-    const { error } = await createBrowserSupabase().auth.signInWithPassword({ email, password });
-    if (error) { setMessage(error.message); setBusy(false); return; }
+    // The server signs in and keeps the session in HttpOnly cookies.
+    const error = await postAuth('/auth/signin', { email, password });
+    if (error) { setMessage(error); setBusy(false); return; }
     // Stay on the requested workspace/page (e.g. /?tenant=…) rather than dropping it on sign-in.
     window.location.assign(`${window.location.pathname}${window.location.search}`);
   }
   async function reset() {
     setBusy(true); setMessage('');
-    const { error } = await createBrowserSupabase().auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/auth/callback?next=/account/reset` });
-    setMessage(error ? error.message : 'Password reset instructions were sent if this address is registered.');
+    const error = await postAuth('/auth/forgot', { email });
+    setMessage(error ?? 'Password reset instructions were sent if this address is registered.');
     setBusy(false);
   }
   return <main className="login-shell"><section className="login-panel">

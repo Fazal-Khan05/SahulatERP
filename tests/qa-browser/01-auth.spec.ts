@@ -10,14 +10,15 @@ test.beforeAll(async () => { ({ ids } = await seedRich()); });
 async function loginPage(browser: Browser, options: Parameters<Browser['newContext']>[0] = {}) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, ...options });
   const page = await context.newPage();
-  const tokenRequests: Request[] = [];
-  page.on('request', r => { if (r.url().includes('/auth/v1/token')) tokenRequests.push(r); });
+  // Sign-in runs on the server (D-31): the browser posts the credentials to the app's own /auth/signin route.
+  const signInRequests: Request[] = [];
+  page.on('request', r => { if (new URL(r.url()).pathname === '/auth/signin') signInRequests.push(r); });
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.goto(APP);
   await page.waitForLoadState('networkidle');
   await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
-  return { context, page, tokenRequests, errors };
+  return { context, page, signInRequests, errors };
 }
 const email = (page: Page) => page.getByLabel('Email address');
 const password = (page: Page) => page.locator('input[autocomplete="current-password"]');
@@ -69,10 +70,10 @@ test('AUTH-004 Unknown email shows the same generic error as a wrong password', 
 });
 
 test('AUTH-007 Email with surrounding spaces is trimmed and accepted', async ({ browser }) => {
-  const { context, page, tokenRequests } = await loginPage(browser);
+  const { context, page, signInRequests } = await loginPage(browser);
   await attempt(page, `  ${EMAIL}  `, PASSWORD);
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible({ timeout: 60_000 });
-  expect(bodyOf(tokenRequests[0]).email).toBe(EMAIL);
+  expect(bodyOf(signInRequests[0]).email).toBe(EMAIL);
   await context.close();
 });
 
@@ -84,55 +85,55 @@ test('AUTH-008 Email in different case is accepted', async ({ browser }) => {
 });
 
 test('AUTH-009 Password with leading/trailing spaces is not trimmed and does not match', async ({ browser }) => {
-  const { context, page, tokenRequests } = await loginPage(browser);
+  const { context, page, signInRequests } = await loginPage(browser);
   await attempt(page, EMAIL, ` ${PASSWORD} `);
   await expect(errorNote(page)).toBeVisible({ timeout: 30_000 });
-  expect(bodyOf(tokenRequests[0]).password).toBe(` ${PASSWORD} `);
+  expect(bodyOf(signInRequests[0]).password).toBe(` ${PASSWORD} `);
   await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
   await context.close();
 });
 
 test('AUTH-010 200-character password is not truncated [documented: no account has a 200-char password; the field and the request carry all 200 characters and Supabase answers with the generic error]', async ({ browser }) => {
-  const { context, page, tokenRequests } = await loginPage(browser);
+  const { context, page, signInRequests } = await loginPage(browser);
   const long = 'Aa1!'.repeat(50);
   await attempt(page, EMAIL, long);
   expect(await password(page).inputValue()).toHaveLength(200);
   await expect(errorNote(page)).toBeVisible({ timeout: 30_000 });
-  expect(bodyOf(tokenRequests[0]).password).toHaveLength(200);
+  expect(bodyOf(signInRequests[0]).password).toHaveLength(200);
   await context.close();
 });
 
 test('AUTH-011 SQL-ish email gives a generic failure, no 500 [documented: the browser email validation blocks it before any request]', async ({ browser }) => {
-  const { context, page, tokenRequests } = await loginPage(browser);
+  const { context, page, signInRequests } = await loginPage(browser);
   const statuses: number[] = [];
   page.on('response', r => statuses.push(r.status()));
   await attempt(page, "' OR 1=1--@x.com", 'whatever-password');
   expect(await email(page).evaluate((el: HTMLInputElement) => el.validity.valid)).toBe(false);
   await page.waitForTimeout(500);
-  expect(tokenRequests).toHaveLength(0);
+  expect(signInRequests).toHaveLength(0);
   expect(statuses.filter(s => s >= 500)).toEqual([]);
   await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
   await context.close();
 });
 
 test('AUTH-012 Script tag in the email field never executes [documented: blocked by email validation, nothing rendered]', async ({ browser }) => {
-  const { context, page, tokenRequests } = await loginPage(browser);
+  const { context, page, signInRequests } = await loginPage(browser);
   let dialog = false;
   page.on('dialog', d => { dialog = true; void d.dismiss(); });
   await attempt(page, '<script>alert(1)</script>@x.com', 'whatever-password');
   await page.waitForTimeout(500);
   expect(dialog).toBe(false);
-  expect(tokenRequests).toHaveLength(0);
+  expect(signInRequests).toHaveLength(0);
   expect(await page.locator('script:has-text("alert(1)")').count()).toBe(0);
   await context.close();
 });
 
 test('AUTH-013 Unicode email local part is rejected by email validation, no crash', async ({ browser }) => {
-  const { context, page, tokenRequests, errors } = await loginPage(browser);
+  const { context, page, signInRequests, errors } = await loginPage(browser);
   await attempt(page, 'علی@example.com', 'whatever-password');
   await page.waitForTimeout(500);
   const valid = await email(page).evaluate((el: HTMLInputElement) => el.validity.valid);
-  if (valid) await expect(errorNote(page)).toBeVisible({ timeout: 30_000 }); else expect(tokenRequests).toHaveLength(0);
+  if (valid) await expect(errorNote(page)).toBeVisible({ timeout: 30_000 }); else expect(signInRequests).toHaveLength(0);
   expect(errors).toEqual([]);
   await context.close();
 });
@@ -152,25 +153,25 @@ test('AUTH-014 Eye toggle shows/hides characters and keeps the cursor position',
 });
 
 test('AUTH-016 Enter in the password field submits', async ({ browser }) => {
-  const { context, page, tokenRequests } = await loginPage(browser);
+  const { context, page, signInRequests } = await loginPage(browser);
   await email(page).fill(EMAIL);
   await password(page).fill('definitely-not-the-password');
   await password(page).press('Enter');
   await expect(errorNote(page)).toBeVisible({ timeout: 30_000 });
-  expect(tokenRequests).toHaveLength(1);
+  expect(signInRequests).toHaveLength(1);
   await context.close();
 });
 
 test('AUTH-017 Double-click sends one request; spinner and disabled while busy', async ({ browser }) => {
-  const { context, page, tokenRequests } = await loginPage(browser);
-  await page.route('**/auth/v1/token**', async route => { await new Promise(r => setTimeout(r, 1500)); await route.continue(); });
+  const { context, page, signInRequests } = await loginPage(browser);
+  await page.route('**/auth/signin', async route => { await new Promise(r => setTimeout(r, 1500)); await route.continue(); });
   await email(page).fill(EMAIL);
   await password(page).fill('definitely-not-the-password');
   await submit(page).dblclick();
   await expect(submit(page)).toBeDisabled();
   await expect(submit(page).locator('.spin')).toBeVisible();
   await expect(errorNote(page)).toBeVisible({ timeout: 30_000 });
-  expect(tokenRequests).toHaveLength(1);
+  expect(signInRequests).toHaveLength(1);
   await context.close();
 });
 
@@ -200,7 +201,7 @@ test('AUTH-036 [manual] Set a new 8-char password through the emailed reset link
 test('AUTH-037 New password of 7 chars is refused with a length message', async ({ browser }) => {
   const { context, page } = await signedInPage(browser);
   let updates = 0;
-  await page.route('**/auth/v1/user**', route => { if (route.request().method() === 'PUT') { updates++; return route.abort(); } return route.continue(); });
+  await page.route('**/auth/password', route => { if (route.request().method() === 'POST') { updates++; return route.abort(); } return route.continue(); });
   await page.goto('/account/reset');
   await expect(page.getByLabel('New password', { exact: true })).toBeVisible({ timeout: 30_000 });
   await page.getByLabel('New password', { exact: true }).fill('Abc1234');
@@ -216,7 +217,7 @@ test('AUTH-037 New password of 7 chars is refused with a length message', async 
 test('AUTH-038 Empty new password is blocked', async ({ browser }) => {
   const { context, page } = await signedInPage(browser);
   let updates = 0;
-  await page.route('**/auth/v1/user**', route => { if (route.request().method() === 'PUT') { updates++; return route.abort(); } return route.continue(); });
+  await page.route('**/auth/password', route => { if (route.request().method() === 'POST') { updates++; return route.abort(); } return route.continue(); });
   await page.goto('/account/reset');
   await expect(page.getByLabel('New password', { exact: true })).toBeVisible({ timeout: 30_000 });
   await page.getByRole('button', { name: 'Save new password' }).click();
@@ -310,8 +311,8 @@ test('AUTH-061 Sign in while offline: clear network error; retry works when onli
 
 test('AUTH-062 Slow auth (>10 s): spinner persists, no duplicate submit, eventually resolves', async ({ browser }) => {
   test.setTimeout(90_000);
-  const { context, page, tokenRequests } = await loginPage(browser);
-  await page.route('**/auth/v1/token**', async route => { await new Promise(r => setTimeout(r, 11_000)); await route.continue(); });
+  const { context, page, signInRequests } = await loginPage(browser);
+  await page.route('**/auth/signin', async route => { await new Promise(r => setTimeout(r, 11_000)); await route.continue(); });
   await email(page).fill(EMAIL);
   await password(page).fill(PASSWORD);
   await submit(page).click();
@@ -322,22 +323,26 @@ test('AUTH-062 Slow auth (>10 s): spinner persists, no duplicate submit, eventua
   await page.waitForTimeout(5500);
   await expect(submit(page).locator('.spin')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible({ timeout: 60_000 });
-  expect(tokenRequests).toHaveLength(1);
+  expect(signInRequests).toHaveLength(1);
   await context.close();
 });
 
-test('AUTH-063 Network: the password goes only in the HTTPS body to Supabase, never in a URL or log', async ({ browser }) => {
+test('AUTH-063 Network: the password goes only in a POST body, never in a URL or log [case-corrected: sign-in runs on the server (D-31), so the browser posts the password once to the app\'s own /auth/signin route (HTTPS in production) and never calls Supabase itself]', async ({ browser }) => {
   const { context, page } = await loginPage(browser);
   successfulSignInRequests = []; successfulConsole = [];
   page.on('request', r => successfulSignInRequests.push({ url: r.url(), method: r.method(), body: r.postData() ?? '' }));
   page.on('console', m => successfulConsole.push(m.text()));
+  const appOrigin = new URL(page.url()).origin;
   await attempt(page, EMAIL, PASSWORD);
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible({ timeout: 60_000 });
   await context.close();
   const carrying = successfulSignInRequests.filter(r => r.body.includes(PASSWORD));
   expect(carrying).toHaveLength(1);
   expect(carrying[0].method).toBe('POST');
-  expect(carrying[0].url).toMatch(/^https:\/\/[^/]+\/auth\/v1\/token\?grant_type=password$/);
+  const target = new URL(carrying[0].url);
+  expect(`${target.pathname}${target.search}`).toBe('/auth/signin');
+  expect(target.origin).toBe(appOrigin);
+  expect(successfulSignInRequests.some(r => r.url.includes('/auth/v1/'))).toBe(false);
   expect(successfulSignInRequests.some(r => r.url.includes(encodeURIComponent(PASSWORD)) || r.url.includes(PASSWORD))).toBe(false);
   expect(successfulConsole.some(t => t.includes(PASSWORD))).toBe(false);
 });
@@ -367,7 +372,7 @@ test('AUTH-074 Violet focus ring on inputs, visible with the keyboard', async ({
 });
 
 test('AUTH-076 254-character email is accepted by validation or gets a clear error [documented: passes browser validation, reaches Supabase and gets the generic error]', async ({ browser }) => {
-  const { context, page, tokenRequests } = await loginPage(browser);
+  const { context, page, signInRequests } = await loginPage(browser);
   const local = 'a'.repeat(64);
   const domain = `${'b'.repeat(63)}.${'c'.repeat(63)}.${'d'.repeat(57)}.com`;
   const long = `${local}@${domain}`;
@@ -375,7 +380,7 @@ test('AUTH-076 254-character email is accepted by validation or gets a clear err
   await attempt(page, long, 'whatever-password');
   await page.waitForTimeout(500);
   const valid = await email(page).evaluate((el: HTMLInputElement) => el.validity.valid);
-  if (valid) { await expect(errorNote(page)).toBeVisible({ timeout: 30_000 }); expect(tokenRequests).toHaveLength(1); }
+  if (valid) { await expect(errorNote(page)).toBeVisible({ timeout: 30_000 }); expect(signInRequests).toHaveLength(1); }
   else expect(await email(page).evaluate((el: HTMLInputElement) => el.validationMessage)).not.toBe('');
   await context.close();
 });
@@ -394,19 +399,20 @@ test('AUTH-077 Pasted email with a newline: newline stripped, no crash', async (
 });
 
 test('AUTH-078 Emoji password is sent intact [documented: no account has an emoji password; the field and request keep the emoji and Supabase answers with the generic error]', async ({ browser }) => {
-  const { context, page, tokenRequests } = await loginPage(browser);
+  const { context, page, signInRequests } = await loginPage(browser);
   await attempt(page, EMAIL, '😀🔒 pass word ✓');
   await expect(errorNote(page)).toBeVisible({ timeout: 30_000 });
-  expect(bodyOf(tokenRequests[0]).password).toBe('😀🔒 pass word ✓');
+  expect(bodyOf(signInRequests[0]).password).toBe('😀🔒 pass word ✓');
   await context.close();
 });
 
 test('AUTH-084 Refresh on /account/reset after a successful change shows the expired/complete state, not the form [defect]', async ({ browser }) => {
   const { context, page } = await signedInPage(browser);
-  // The change is stubbed (and uses the current password) so the real password never changes.
-  await page.route('**/auth/v1/user**', async route => {
-    if (route.request().method() !== 'PUT') return route.continue();
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: process.env.BOOTSTRAP_OWNER_ID, aud: 'authenticated', role: 'authenticated', email: EMAIL, app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() }) });
+  // The change is stubbed (and uses the current password) so the real password never changes. The password is
+  // set by the app's /auth/password route (D-31); its GET (does this browser hold a reset session?) stays real.
+  await page.route('**/auth/password', async route => {
+    if (route.request().method() !== 'POST') return route.continue();
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) });
   });
   await page.goto('/account/reset');
   await expect(page.getByLabel('New password', { exact: true })).toBeVisible({ timeout: 30_000 });
@@ -422,10 +428,10 @@ test('AUTH-084 Refresh on /account/reset after a successful change shows the exp
 });
 
 test('AUTH-088 Plus-tag email passes validation and reaches sign-in [documented: no a+qa account exists; the address is accepted by the form and sent unchanged, Supabase answers generically]', async ({ browser }) => {
-  const { context, page, tokenRequests } = await loginPage(browser);
+  const { context, page, signInRequests } = await loginPage(browser);
   await attempt(page, 'qa+tag@example.com', 'whatever-password');
   await expect(errorNote(page)).toBeVisible({ timeout: 30_000 });
-  expect(bodyOf(tokenRequests[0]).email).toBe('qa+tag@example.com');
+  expect(bodyOf(signInRequests[0]).email).toBe('qa+tag@example.com');
   await context.close();
 });
 
@@ -446,7 +452,7 @@ test('AUTH-093 Deep link to /print/... then sign in reaches the app', async ({ b
 
 test('AUTH-096 Very slow network (3G): login usable, no duplicate submissions', async ({ browser }) => {
   test.setTimeout(90_000);
-  const { context, page, tokenRequests } = await loginPage(browser);
+  const { context, page, signInRequests } = await loginPage(browser);
   const cdp = await context.newCDPSession(page);
   await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 400, downloadThroughput: 50 * 1024, uploadThroughput: 20 * 1024 });
   await email(page).fill(EMAIL);
@@ -454,7 +460,7 @@ test('AUTH-096 Very slow network (3G): login usable, no duplicate submissions', 
   await submit(page).click();
   await submit(page).click({ force: true, timeout: 2000 }).catch(() => undefined);
   await expect(errorNote(page)).toBeVisible({ timeout: 60_000 });
-  expect(tokenRequests).toHaveLength(1);
+  expect(signInRequests).toHaveLength(1);
   await context.close();
 });
 

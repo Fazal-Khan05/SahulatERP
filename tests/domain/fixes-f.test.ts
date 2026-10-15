@@ -158,7 +158,7 @@ describe('agent F shell fixes', () => {
     expect(wb).toContain("else if(event.key==='Enter'&&results.length){event.preventDefault();pick(results[Math.max(active,0)])}");
     expect(wb).toContain("data-highlighted={index===active?'':undefined} aria-current={index===active||undefined}");
     // Documents open in the details dialog and products in the product dialog, over their module.
-    expect(wb).toContain('const openSearchHit=(hit:SearchHit)=>{go(hit.module);setOpenDocumentId(hit.open?.document??null);setOpenItemId(hit.open?.item??null)};');
+    expect(wb).toContain('const openSearchHit=(hit:SearchHit)=>{go(hit.module,hit.open?.tab?{tab:hit.open.tab}:undefined);setOpenDocumentId(hit.open?.document??null);setOpenItemId(hit.open?.item??null)};');
   });
   it('D-36 search over 10k documents and 10k products: one index per workspace snapshot, capped plain-text scans', () => {
     const w = buildDemoWorkspace();

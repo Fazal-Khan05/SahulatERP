@@ -364,6 +364,26 @@ test('NAV-027 Clicking a result navigates to its module and opens the record', a
   await expect(searchDialog(page)).toHaveCount(0);
   await expect(breadcrumb(page)).toHaveText('Sales');
   await expect(page.getByRole('dialog', { name: new RegExp(number) }), 'the invoice opens').toBeVisible({ timeout: 3000 });
+  // A supplier opens Purchasing on its Suppliers tab, also when Purchasing is already open on another tab.
+  const pickSupplier = async () => {
+    await page.keyboard.press('ControlOrMeta+k');
+    await searchInput(page).fill(F.supplier);
+    await results(page).filter({ hasText: 'supplier · ' }).click();
+    await expect(breadcrumb(page)).toHaveText('Purchasing');
+    await expect(page.getByRole('tab', { name: 'Suppliers' })).toHaveAttribute('aria-selected', 'true');
+  };
+  await home(page);
+  await pickSupplier();
+  await page.getByRole('tab', { name: 'Documents' }).click();
+  await pickSupplier();
+  // A product opens Inventory on its Products tab with the product's details.
+  await page.keyboard.press('ControlOrMeta+k');
+  await searchInput(page).fill('QA-KET');
+  await results(page).first().click();
+  await expect(breadcrumb(page)).toHaveText('Inventory');
+  await expect(page.getByRole('dialog', { name: new RegExp(F.kettle) })).toBeVisible({ timeout: 3000 });
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('tab', { name: 'Products' })).toHaveAttribute('aria-selected', 'true');
 });
 
 test('NAV-028 Search with 20k records stays under 100 ms per keystroke', async ({ browser }) => {

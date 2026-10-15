@@ -139,18 +139,36 @@ export function stockMovements(w: Workspace, from: string, to: string, itemId?: 
 }
 
 export type SalesRow = { key: string; label: string; invoices: number; quantity: string; net: string; returns: string; netOfReturns: string };
-/** Net sales for a period grouped by customer, product or salesperson, from submitted invoices less credit notes. */
+/**
+ * Net sales for a period grouped by customer, product or salesperson, from submitted invoices less credit notes.
+ * By salesperson, a line with commission splits is apportioned by the split shares (net, returns and quantity, rounded to 4 dp); the last share takes the remainder so totals agree across groupings.
+ */
 export function salesAnalysis(w: Workspace, from: string, to: string, by: "customer" | "item" | "salesperson"): { rows: SalesRow[]; total: SalesRow } {
   const groups = new Map<string, { label: string; invoices: Set<string>; quantity: ReturnType<typeof D>; net: ReturnType<typeof D>; returns: ReturnType<typeof D> }>();
-  const keyOf = (d: Document, l: Document["lines"][number]) => by === "customer" ? [d.partyId, w.parties.find(p => p.id === d.partyId)?.name ?? d.partyId] : by === "item" ? [l.itemId, w.items.find(i => i.id === l.itemId)?.name ?? l.itemId] : [l.employeeId || "none", w.employees.find(e => e.id === l.employeeId)?.name ?? "Unassigned"];
+  const person = (employeeId: string) => [employeeId || "none", w.employees.find(e => e.id === employeeId)?.name ?? "Unassigned"];
+  /** The groups a line belongs to, with each one's share of it. */
+  const partsOf = (d: Document, l: Document["lines"][number]): { key: string; label: string; weight: ReturnType<typeof D> }[] => {
+    if (by === "customer") return [{ key: d.partyId, label: w.parties.find(p => p.id === d.partyId)?.name ?? d.partyId, weight: D(1) }];
+    if (by === "item") return [{ key: l.itemId, label: w.items.find(i => i.id === l.itemId)?.name ?? l.itemId, weight: D(1) }];
+    const splits = l.splits?.filter(x => D(x.share).gt(0)) ?? [];
+    if (!splits.length) { const [key, label] = person(l.employeeId); return [{ key, label, weight: D(1) }]; }
+    const whole = sum(splits.map(x => x.share));
+    return splits.map(x => { const [key, label] = person(x.employeeId); return { key, label, weight: D(x.share).div(whole) }; });
+  };
   for (const d of w.documents) {
     if (!["sales_invoice", "credit_note"].includes(d.kind) || d.status !== "submitted" || d.date < from || d.date > to) continue;
     for (const l of d.lines) {
-      const [key, label] = keyOf(d, l);
-      const g = groups.get(key) ?? { label, invoices: new Set(), quantity: D(0), net: D(0), returns: D(0) };
       const lineNet = D(l.quantity).mul(l.price).mul(D(100).minus(l.discount)).div(100);
-      if (d.kind === "sales_invoice") { g.invoices.add(d.id); g.quantity = g.quantity.plus(l.quantity); g.net = g.net.plus(lineNet); } else g.returns = g.returns.plus(lineNet);
-      groups.set(key, g);
+      const parts = partsOf(d, l);
+      let restNet = lineNet, restQuantity = D(l.quantity);
+      parts.forEach(({ key, label, weight }, i) => {
+        const last = i === parts.length - 1;
+        const net = last ? restNet : lineNet.mul(weight).toDecimalPlaces(4), quantity = last ? restQuantity : D(l.quantity).mul(weight).toDecimalPlaces(4);
+        restNet = restNet.minus(net); restQuantity = restQuantity.minus(quantity);
+        const g = groups.get(key) ?? { label, invoices: new Set(), quantity: D(0), net: D(0), returns: D(0) };
+        if (d.kind === "sales_invoice") { g.invoices.add(d.id); g.quantity = g.quantity.plus(quantity); g.net = g.net.plus(net); } else g.returns = g.returns.plus(net);
+        groups.set(key, g);
+      });
     }
   }
   const rows = [...groups].map(([key, g]) => ({ key, label: g.label, invoices: g.invoices.size, quantity: money(g.quantity), net: money(g.net), returns: money(g.returns), netOfReturns: money(g.net.minus(g.returns)) })).sort((a, b) => D(b.netOfReturns).cmp(a.netOfReturns));

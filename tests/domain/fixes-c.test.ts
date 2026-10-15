@@ -3,7 +3,7 @@ import { buildDemoWorkspace } from '../../src/modules/erp/demo';
 import { businessToday } from '../../src/modules/erp/dates';
 import { accountBalance, execute, outstanding } from '../../src/modules/erp/engine';
 import { D, money, sum } from '../../src/modules/erp/money';
-import { agedBalances, landedCostPayable, partyStatement } from '../../src/modules/erp/reports';
+import { agedBalances, landedCostPayable, partyStatement, salesAnalysis } from '../../src/modules/erp/reports';
 import { toggleModules } from '../../src/modules/erp/modules';
 import { blankWorkspace } from '../../src/modules/erp/seed';
 import type { Actor, Workspace } from '../../src/modules/erp/types';
@@ -220,5 +220,50 @@ describe('D-25 statement shows a bounced cheque and its reversal', () => {
     const customers = w.parties.filter(p => p.type === 'customer');
     for (const p of customers) expect(partyStatement(w, p.id, '2000-01-01', '2099-12-31').closing, p.name).toBe(agedRow(w, 'customer', p.id));
     expect(money(sum(customers.map(p => partyStatement(w, p.id, '2000-01-01', '2099-12-31').closing)))).toBe(accountBalance(w, '1100'));
+  });
+});
+
+describe('D-26 sales analysis by salesperson apportions split lines by share', () => {
+  const employee = (w: Workspace, name: string) => run(w, 'save_employee', { name, role: 'OB', territory: '', salary: '1', allowance: '0', deduction: '0', attendance: 30, active: true });
+  function staffed() {
+    let { w, item, cust } = company();
+    const a = employee(w, 'Hamza Khan'); w = a.workspace;
+    const b = employee(w, 'Sara Malik'); w = b.workspace;
+    const c = employee(w, 'Bilal Ahmed'); w = c.workspace;
+    return { w, item, cust, a: a.recordId, b: b.recordId, c: c.recordId };
+  }
+  const sale = (w: Workspace, cust: string, item: string, quantity: string, price: string, line: Record<string, unknown>): [Workspace, string] => {
+    const created = run(w, 'create_document', { kind: 'sales_invoice', partyId: cust, warehouseId: w.warehouses[0].id, date: DAY, dueDate: DAY, lines: [{ itemId: item, quantity, price, discount: '0', taxRate: '0', employeeId: '', splits: [], ...line }] });
+    return [run(created.workspace, 'submit_document', { id: created.recordId }).workspace, created.recordId];
+  };
+  const rowsOf = (w: Workspace) => salesAnalysis(w, '2026-01-01', '2026-12-31', 'salesperson').rows.map(r => [r.label, r.invoices, r.quantity, r.net, r.returns, r.netOfReturns]);
+
+  it('a 60/40 split gives each person their share of net, quantity and returns', () => {
+    let { w, item, cust, a, b } = staffed(); let inv: string;
+    [w, inv] = sale(w, cust, item, '10', '100', { splits: [{ employeeId: a, share: '60' }, { employeeId: b, share: '40' }] });
+    w = returnOf(w, inv, '5');
+    expect(rowsOf(w)).toEqual([
+      ['Hamza Khan', 1, '6.0000', '600.0000', '300.0000', '300.0000'],
+      ['Sara Malik', 1, '4.0000', '400.0000', '200.0000', '200.0000'],
+    ]);
+  });
+
+  it('uneven thirds still add up to the customer and product totals exactly', () => {
+    let { w, item, cust, a, b, c } = staffed();
+    [w] = sale(w, cust, item, '7', '33.33', { discount: '3', splits: [{ employeeId: a, share: '33.3333' }, { employeeId: b, share: '33.3333' }, { employeeId: c, share: '33.3334' }] });
+    [w] = sale(w, cust, item, '1', '50', { employeeId: a });
+    const bySalesperson = salesAnalysis(w, '2026-01-01', '2026-12-31', 'salesperson').total;
+    for (const by of ['customer', 'item'] as const) {
+      const other = salesAnalysis(w, '2026-01-01', '2026-12-31', by).total;
+      expect([bySalesperson.quantity, bySalesperson.net, bySalesperson.netOfReturns], by).toEqual([other.quantity, other.net, other.netOfReturns]);
+    }
+    expect(rowsOf(w).map(r => r[0])).toEqual(['Hamza Khan', 'Bilal Ahmed', 'Sara Malik']);
+  });
+
+  it('lines without splits keep their salesperson, and unassigned lines stay "Unassigned"', () => {
+    let { w, item, cust, a } = staffed();
+    [w] = sale(w, cust, item, '2', '100', { employeeId: a });
+    [w] = sale(w, cust, item, '1', '100', {});
+    expect(rowsOf(w)).toEqual([['Hamza Khan', 1, '2.0000', '200.0000', '0.0000', '200.0000'], ['Unassigned', 1, '1.0000', '100.0000', '0.0000', '100.0000']]);
   });
 });

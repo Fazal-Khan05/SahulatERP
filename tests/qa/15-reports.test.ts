@@ -553,7 +553,7 @@ describe('15 Reports (RPT)', () => {
     expect(agedBalances(w, 'supplier', T).rows.map(r => [r.name, r.total])).toEqual([['Walk-in supplier', '150.0000']]);
   });
 
-  it('RPT-072 sales analysis by salesperson with splits gives each person their share [defect]', () => {
+  it('RPT-072 sales analysis by salesperson with splits gives each person their share', () => {
     let { w, item, cust } = base();
     const a = run(w, 'save_employee', { name: 'Hamza Khan', role: 'OB', territory: '', salary: '1', allowance: '0', deduction: '0', attendance: 30, active: true }); w = a.workspace;
     const b = run(w, 'save_employee', { name: 'Sara Malik', role: 'ASM', territory: '', salary: '1', allowance: '0', deduction: '0', attendance: 30, active: true }); w = b.workspace;

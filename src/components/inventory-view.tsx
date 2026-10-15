@@ -80,6 +80,9 @@ export function InventoryView({ workspace, actor, busy, notice, command, openSto
     return <tr key={`${item.id}:${location.id}`}><td>{item.sku}</td><td>{item.name}</td><td>{location.name}</td><td>{D(level.quantity).toString()} {item.unit}</td><td>{formatMoney(level.average)}</td><td>{formatMoney(level.value)}</td></tr>;
   });
   function clear() { setQuery(''); setCategory(''); setWarehouseId(''); setAvailability(''); setItemLimit(inventoryPageSize); setBreakdownLimit(inventoryPageSize); }
+  const emptyState = (noMatch: string) => <div className="empty-state">{!workspace.items.length
+    ? (editable ? 'No products yet. Add your first product on the Products tab, or import a CSV there.' : 'No products yet.')
+    : <>{noMatch} {filtered && <button className="text-button" type="button" onClick={clear}>Reset filters</button>}</>}</div>;
   return <div className="stack">
     <section className="card"><div className="card-heading"><div><h2>{warehouse ? `Stock in ${warehouse.name}` : singleLocation ? 'Stock' : 'Stock across all warehouses'}</h2><p>{filteredItems.length} of {workspace.items.length} products{singleLocation ? '' : ' · Select View for warehouse detail'}</p></div>{editable && !singleLocation && <Button variant="outline" onClick={openStockTransfer}><ArrowRightLeft size={16}/>Transfer stock</Button>}</div>
       <div className="list-filters" aria-label="Inventory filters">
@@ -89,11 +92,11 @@ export function InventoryView({ workspace, actor, busy, notice, command, openSto
         <label>Stock level<select aria-label="Stock level" value={availability} onChange={event => refilter(setAvailability)(event.target.value)}><option value="">All levels</option><option value="in">In stock</option><option value="low">Low stock</option><option value="out">Out of stock</option></select></label>
         {filtered && <button className="list-filter-clear" type="button" onClick={clear}>Clear filters</button>}
       </div>
-      <div className="table-scroll"><table><thead><tr>{['SKU','Product','Category',warehouse ? 'Warehouse quantity' : singleLocation ? 'Quantity' : 'Total quantity','Average cost','Value','Reorder','Actions'].map(head => <th key={head}>{head}</th>)}</tr></thead><tbody>{rows.length ? rows : <tr><td colSpan={8}><div className="empty-state">No products match these filters.</div></td></tr>}</tbody></table></div><p className="table-scroll-hint">Swipe sideways to see every column.</p>
+      <div className="table-scroll"><table><thead><tr>{['SKU','Product','Category',warehouse ? 'Warehouse quantity' : singleLocation ? 'Quantity' : 'Total quantity','Average cost','Value','Reorder','Actions'].map(head => <th key={head}>{head}</th>)}</tr></thead><tbody>{rows.length ? rows : <tr><td colSpan={8}>{emptyState('No products match these filters.')}</td></tr>}</tbody></table></div><p className="table-scroll-hint">Swipe sideways to see every column.</p>
       <ShowMore shown={rows.length} total={filteredItems.length} noun="products" onMore={() => setItemLimit(limit => limit + inventoryPageSize)}/>
     </section>
     {!singleLocation && <section className="card"><div className="card-heading"><div><h2>Stock by warehouse</h2><p>Invoices draw stock from their selected warehouse.</p></div></div>
-      <div className="table-scroll"><table><thead><tr>{['SKU','Product','Warehouse','Quantity','Average cost','Value'].map(head => <th key={head}>{head}</th>)}</tr></thead><tbody>{breakdownRows.length ? breakdownRows : <tr><td colSpan={6}><div className="empty-state">No warehouse stock matches these filters.</div></td></tr>}</tbody></table></div><p className="table-scroll-hint">Swipe sideways to see every column.</p>
+      <div className="table-scroll"><table><thead><tr>{['SKU','Product','Warehouse','Quantity','Average cost','Value'].map(head => <th key={head}>{head}</th>)}</tr></thead><tbody>{breakdownRows.length ? breakdownRows : <tr><td colSpan={6}>{emptyState('No warehouse stock matches these filters.')}</td></tr>}</tbody></table></div><p className="table-scroll-hint">Swipe sideways to see every column.</p>
       <ShowMore shown={breakdownRows.length} total={breakdownTotal} noun="rows" onMore={() => setBreakdownLimit(limit => limit + inventoryPageSize)}/>
     </section>}
     {selected && <ItemDetails key={`${selected.itemId}:${selected.mode}`} workspace={workspace} actor={actor} itemId={selected.itemId} initialMode={selected.mode} onClose={() => setSelected(null)} command={command} busy={busy} notice={notice}/>}

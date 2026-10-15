@@ -85,7 +85,7 @@ export function MasterDataView({ spec, workspace, editable, busy, command }: {
             : <Button size="sm" variant="ghost" disabled={!!busy} aria-label={`Archive ${String(record.name)}`} onClick={() => archive(record, true)}><Archive size={14}/>{spec.key === 'employees' ? 'Deactivate' : 'Archive'}</Button>)}
           {!editable && <span>Read only</span>}
         </div></td>
-      </tr>) : <tr><td colSpan={spec.columns.length + 1}><div className="empty-state">{all.length ? `No ${spec.label.toLowerCase()} match these filters.` : `No ${spec.label.toLowerCase()} yet. ${editable ? `Add one or import a CSV.` : ''}`}</div></td></tr>}
+      </tr>) : <tr><td colSpan={spec.columns.length + 1}><div className="empty-state">{all.length ? <>No {spec.label.toLowerCase()} match these filters. <button className="text-button" type="button" onClick={() => { setQuery(''); setStatus('active'); }}>Reset filters</button></> : `No ${spec.label.toLowerCase()} yet. ${editable ? `Add one or import a CSV.` : ''}`}</div></td></tr>}
     </tbody></table></div>
     <p className="table-scroll-hint">Swipe sideways to see every column.</p>
     <RecordForm spec={spec} workspace={workspace} initial={editing === 'new' ? spec.blank(workspace) : editing} open={editing !== null} busy={busy === spec.saveCommand} onClose={() => setEditing(null)} onSave={save}/>

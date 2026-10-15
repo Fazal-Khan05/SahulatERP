@@ -9,9 +9,13 @@ vi.mock('@/modules/erp/types', () => import('../../src/modules/erp/types'));
 vi.mock('@/modules/erp/engine', () => import('../../src/modules/erp/engine'));
 vi.mock('@/modules/erp/dates', () => import('../../src/modules/erp/dates'));
 vi.mock('@/modules/erp/master-data', () => import('../../src/modules/erp/master-data'));
+vi.mock('@/modules/erp/reports', () => import('../../src/modules/erp/reports'));
+vi.mock('@/modules/erp/access', () => import('../../src/modules/erp/access'));
 import { SettingsView, TaxSettings, settingsPayload } from '../../src/components/settings-view';
 import { readCsvRows } from '../../src/components/csv-import-dialog';
 import { InventoryView, stockLevels } from '../../src/components/inventory-view';
+import { CashBankView } from '../../src/components/cash-bank-view';
+import { DocumentsList } from '../../src/components/documents-list';
 import { buildDemoWorkspace } from '../../src/modules/erp/demo';
 import { execute, stock } from '../../src/modules/erp/engine';
 import { blankWorkspace } from '../../src/modules/erp/seed';
@@ -146,6 +150,21 @@ describe('G2 form fixes', () => {
     // An Owner previewing a read-only role sees that role's read-only form.
     const preview = renderToStaticMarkup(createElement(SettingsView, { workspace: w, realRole: 'Owner', role: 'Auditor', setRole: () => {}, busy: '', command, onWorkspace: () => {}, onReset: () => {}, audit: null }));
     expect(preview).not.toContain('Save changes');
+  });
+
+  it('D-73 empty states on a new company name or offer the next step', () => {
+    const w = freshCompany();
+    const auditor: Actor = { ...owner, role: 'Auditor' };
+    const inventory = (who: Actor) => renderToStaticMarkup(createElement(InventoryView, { workspace: w, actor: who, busy: '', notice: '', command: async () => ({}), openStockTransfer: () => {} }));
+    expect(inventory(owner)).toContain('No products yet. Add your first product on the Products tab, or import a CSV there.');
+    expect(inventory(auditor)).toContain('<div class="empty-state">No products yet.</div>');
+    const cash = (editable: boolean) => renderToStaticMarkup(createElement(CashBankView, { workspace: w, actor: owner, editable, busy: '', command }));
+    const activity = cash(true).split('No movements on this account yet.')[1].split('</div></td>')[0];
+    expect(activity).toContain('Transfer</button>');
+    expect(activity).toContain('Record expense</button>');
+    expect(cash(false)).toContain('No movements on this account yet. Receipts, transfers and expenses posted to it appear here.');
+    const docs = renderToStaticMarkup(createElement(DocumentsList, { side: 'sales', workspace: w, actor: owner, editable: true, busy: '', command }));
+    expect(docs).toContain('No sales documents yet. Create one with New invoice above.');
   });
 
   it('D-09 with Payroll off the form keeps the saved payroll rates (save_settings replaces every setting)', () => {

@@ -62,7 +62,9 @@ export function CashBankView({ workspace, actor, editable, busy, command }: { wo
     <section className="card">
       <div className="card-heading"><div><h2>Activity · {selectedName}</h2><p>Balance <span style={balanceTone(activity.balance)}>{formatMoney(activity.balance)}</span> · latest {activity.rows.length} movements</p></div></div>
       <div className="table-scroll"><table><thead><tr><th>Date</th><th>Journal</th><th>Description</th><th>In</th><th>Out</th><th>Balance</th></tr></thead><tbody>
-        {activity.rows.length ? activity.rows.map((r, i) => <tr key={`${r.journal}-${i}`}><td>{r.date}</td><td>{r.journal}</td><td>{r.memo}</td><td>{r.debit ? formatMoney(r.debit) : ''}</td><td>{r.credit ? formatMoney(r.credit) : ''}</td><td style={balanceTone(r.balance)}>{formatMoney(r.balance)}</td></tr>) : <tr><td colSpan={6}><div className="empty-state">No movements on this account yet.</div></td></tr>}
+        {activity.rows.length ? activity.rows.map((r, i) => <tr key={`${r.journal}-${i}`}><td>{r.date}</td><td>{r.journal}</td><td>{r.memo}</td><td>{r.debit ? formatMoney(r.debit) : ''}</td><td>{r.credit ? formatMoney(r.credit) : ''}</td><td style={balanceTone(r.balance)}>{formatMoney(r.balance)}</td></tr>) : <tr><td colSpan={6}><div className="empty-state">No movements on this account yet.{canManage && accounts.length
+          ? <div className="form-actions" style={{ justifyContent: 'center', marginTop: 14 }}>{accounts.length > 1 && <Button variant="outline" onClick={() => setModal('transfer')}><ArrowLeftRight size={16}/>Transfer</Button>}<Button variant="outline" onClick={() => setModal('expense')}><Receipt size={16}/>Record expense</Button></div>
+          : ' Receipts, transfers and expenses posted to it appear here.'}</div></td></tr>}
       </tbody></table></div>
     </section>
     <section className="card">

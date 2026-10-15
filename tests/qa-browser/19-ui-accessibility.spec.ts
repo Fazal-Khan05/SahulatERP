@@ -584,8 +584,8 @@ test.describe('empty company', () => {
       }
     }
     saveEvidence('uix-059-empty-states.json', { seen, bad });
-    // Actual: generic "No records yet." (Overview, Imports, Commissions, Accounting), "No movements on this account yet." and,
-    // on a company with no products, "No products match these filters." offer no way forward.
+    // Actual: the generic workbench "No records yet." (Overview, Imports, Commissions, Accounting) offers no way forward
+    // (wave 2); Cash & bank activity, the Stock tab and the document lists were fixed under D-73.
     expect(seen.length).toBeGreaterThan(5);
     expect(bad).toEqual([]);
     await s.context.close();

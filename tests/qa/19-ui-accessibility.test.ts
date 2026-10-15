@@ -107,7 +107,7 @@ describe('19 ui accessibility', () => {
     expect(ratio('#ffffff', token('accent'))).toBeGreaterThanOrEqual(4.5);
     expect(ratio('#ffffff', token('accent-hover'))).toBeGreaterThanOrEqual(4.5);
   });
-  it('UIX-024 badges (green/amber/red/violet/cyan on pastels) ≥ 4.5:1 [defect: danger badge #d92d20 on #fee9e7 is 4.15:1]', () => {
+  it('UIX-024 badges (green/amber/red/violet/cyan on pastels) ≥ 4.5:1', () => {
     const badges: Record<string, [string, string]> = {
       success: [token('success-text'), token('success-soft')], warning: [token('warning-text'), token('warning-soft')], danger: [token('danger'), token('danger-soft')],
       info: [token('accent-2-text'), token('accent-2-soft')], draft: [token('draft-text'), token('draft-soft')], neutral: [token('text-muted'), token('surface-sunken')],
@@ -125,11 +125,13 @@ describe('19 ui accessibility', () => {
     expect(css).toContain('::placeholder{color:var(--text-subtle)}');
     expect(ratio(token('text-subtle'), '#ffffff')).toBeGreaterThanOrEqual(3);
   });
-  it('UIX-027 setup footer (white 88% on the tinted scrim over the page) ≥ 4.5:1 [defect: ≈1.9:1 at worst against the light page behind the scrim]', () => {
+  it('UIX-027 setup footer (white 88% on its navy backdrop over the tinted scrim and the page) ≥ 4.5:1', () => {
     expect(css).toContain('background:linear-gradient(180deg,rgba(16,31,82,.30),rgba(16,31,82,.44))');
-    expect(css).toContain('.setup-foot{margin:0;color:rgba(255,255,255,.88)');
-    const page = rgb(token('background'));
-    const worst = Math.min(...[0.30, 0.44].map(a => { const bg = over([16, 31, 82], a, page); return ratio(over([255, 255, 255], 0.88, bg), bg); }));
+    const foot = css.match(/\.setup-foot\{margin:0;color:rgba\(255,255,255,\.88\);[^}]*background:rgba\(16,31,82,(\.\d+)\)/);
+    expect(foot).not.toBeNull();
+    const backdrop = Number(foot![1]);
+    // Worst case: the lightest page (the blurred workspace or plain white) behind the lightest end of the scrim.
+    const worst = Math.min(...[rgb(token('background')), rgb('#ffffff')].flatMap(page => [0.30, 0.44].map(a => { const bg = over([16, 31, 82], backdrop, over([16, 31, 82], a, page)); return ratio(over([255, 255, 255], 0.88, bg), bg); })));
     expect(worst).toBeGreaterThanOrEqual(4.5);
   });
   it('UIX-031 skip-to-content link [documented: not present]', () => {

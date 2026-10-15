@@ -8,6 +8,14 @@ import { describe, expect, it } from 'vitest';
 
 const root = resolve(__dirname, '../..');
 const css = readFileSync(resolve(root, 'src/app/globals.css'), 'utf8');
+const tokensCss = readFileSync(resolve(root, 'src/app/tokens.css'), 'utf8');
+const token = (name: string): string => {
+  const v = tokensCss.match(new RegExp(`--${name}:\\s*([^;]+);`))![1].trim();
+  return v.startsWith('var(') ? token(v.slice(6, -1)) : v;
+};
+const rgb = (h: string) => [0, 2, 4].map(i => parseInt(h.replace('#', '').slice(i, i + 2), 16));
+const lum = (c: number[]) => { const [r, g, b] = c.map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+const ratio = (a: string, b: string) => { const x = lum(rgb(a)), y = lum(rgb(b)); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
 
 describe('agent F shell fixes', () => {
   it('D-35 the phone top bar shrinks instead of widening the page', () => {
@@ -20,5 +28,12 @@ describe('agent F shell fixes', () => {
   });
   it('D-62 tablet metric tiles wrap two per row below 960 px', () => {
     expect(css).toContain('@media(max-width:960px){.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}');
+  });
+  it('D-47 danger text, the setup footer and scroll regions meet contrast and focus rules', () => {
+    expect(ratio(token('danger'), token('danger-soft'))).toBeGreaterThanOrEqual(4.5);
+    expect(ratio('#ffffff', token('danger'))).toBeGreaterThanOrEqual(4.5);
+    expect(ratio('#ffffff', token('danger-hover'))).toBeGreaterThanOrEqual(4.5);
+    expect(css).toMatch(/\.setup-foot\{[^}]*background:rgba\(16,31,82,\.7\)/);
+    expect(css).toContain('.table-scroll:focus-visible,.branding-preview-frame:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}');
   });
 });

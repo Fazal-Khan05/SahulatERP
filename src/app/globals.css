@@ -324,6 +324,8 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:none;bor
 input::placeholder,textarea::placeholder{color:var(--text-subtle)}
 label{font-size:var(--text-sm);font-weight:500;color:var(--text-muted)}
 button:focus-visible,a:focus-visible,[role=switch]:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:var(--radius-sm)}
+/* Keyboard-scrollable regions get the same violet ring, drawn inside so a card's rounded clip cannot hide it. */
+.table-scroll:focus-visible,.branding-preview-frame:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .button{border-radius:var(--button-radius);min-height:var(--button-height);font-weight:500;font-size:var(--text-sm);box-shadow:none;transition:background var(--duration-base) var(--ease-out),color var(--duration-base) var(--ease-out),border-color var(--duration-base) var(--ease-out),transform var(--duration-fast) var(--ease-out),box-shadow var(--duration-base) var(--ease-out)}
 .button:active:not(:disabled){transform:translateY(1px) scale(.985)}
 .button-primary{background:var(--accent);color:var(--primary-foreground);box-shadow:none}
@@ -740,7 +742,7 @@ button,a,[role=button],[role=tab],[role=switch],.nav-item,.tab,.chip,.badge,.swa
 .setup-body .wizard-heading h1{font-size:var(--text-2xl);margin:0 0 4px}
 .setup-body .wizard-heading p{margin:0;color:var(--text-muted)}
 .setup-actions{position:sticky;bottom:0;z-index:2;background:var(--surface);padding:16px 28px calc(16px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--border);margin-top:14px}
-.setup-foot{margin:0;color:rgba(255,255,255,.88);font-size:var(--text-sm);text-align:center;display:flex;gap:12px;flex-wrap:wrap;justify-content:center;align-items:center}
+.setup-foot{margin:0;color:rgba(255,255,255,.88);font-size:var(--text-sm);text-align:center;display:flex;gap:12px;flex-wrap:wrap;justify-content:center;align-items:center;background:rgba(16,31,82,.7);padding:8px 16px;border-radius:var(--radius-md);max-width:min(960px,100%)}
 .setup-foot strong{color:#fff}
 .setup-foot a,.setup-foot .text-button{color:#fff;text-decoration:underline;text-underline-offset:3px;font-size:var(--text-sm)}
 .setup-foot form{display:inline}

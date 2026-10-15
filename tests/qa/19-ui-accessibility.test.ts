@@ -194,7 +194,7 @@ describe('19 ui accessibility', () => {
     expect(tokensCss).toContain('@media (prefers-reduced-motion: reduce) {\n  :root { --duration-fast: 0ms; --duration-base: 0ms; --duration-slow: 0ms; }');
   });
   it('UIX-046 reduced motion: provisioning ring slows to 3 s', () => {
-    expect(css).toContain('@media(prefers-reduced-motion:reduce){.provision-ring{animation-duration:3s}');
+    expect(css).toContain('@media(prefers-reduced-motion:reduce){.provision-ring{animation-duration:3s!important;animation-iteration-count:infinite!important}');
   });
   it('UIX-047 UI animation durations ≤ 320 ms with ease-out curves [documented: spinners, skeleton pulse, provisioning ring and the 800 ms setup reveal are longer by design]', () => {
     expect([token('duration-fast'), token('duration-base'), token('duration-slow')]).toEqual(['120ms', '200ms', '320ms']);

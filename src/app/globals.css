@@ -779,4 +779,5 @@ button,a,[role=button],[role=tab],[role=switch],.nav-item,.tab,.chip,.badge,.swa
 .provision-lines li{display:flex;align-items:center;gap:10px;font-size:var(--text-base);color:var(--text);opacity:0;transform:translateY(6px);animation:provision-in var(--duration-slow) var(--ease-out) forwards;animation-delay:calc(var(--i,0) * 230ms)}
 @keyframes provision-in{to{opacity:1;transform:none}}
 .provision-check{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--success-soft);color:var(--success-text);flex-shrink:0}
-@media(prefers-reduced-motion:reduce){.provision-ring{animation-duration:3s}.provision-lines li{animation:provision-in 150ms var(--ease-out) forwards;animation-delay:0s}}
+/* Reduced motion: the ring keeps turning, slowly (it must beat the global !important reset, which would freeze it). */
+@media(prefers-reduced-motion:reduce){.provision-ring{animation-duration:3s!important;animation-iteration-count:infinite!important}.provision-lines li{animation:provision-in 150ms var(--ease-out) forwards;animation-delay:0s}}

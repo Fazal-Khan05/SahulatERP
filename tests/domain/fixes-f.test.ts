@@ -52,4 +52,7 @@ describe('agent F shell fixes', () => {
     expect(css.replace(fine, '')).not.toMatch(/\.metric-card:hover\{[^}]*box-shadow:var\(--shadow/);
     expect(css).toMatch(/\.metric-grid>\.metric-card\{animation:view-in [^;}]* backwards;/);
   });
+  it('D-53 under reduced motion the provisioning ring turns slowly instead of freezing', () => {
+    expect(css).toContain('@media(prefers-reduced-motion:reduce){.provision-ring{animation-duration:3s!important;animation-iteration-count:infinite!important}');
+  });
 });

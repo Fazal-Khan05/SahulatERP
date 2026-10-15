@@ -90,7 +90,7 @@ test('ONB-060 Provisioning lines = selected modules + "Opening your books" + "Pr
   await context.close();
 });
 
-test('ONB-061 Reduced motion: provisioning lines appear without stagger and the ring turns slowly [defect]', async ({ browser }) => {
+test('ONB-061 Reduced motion: provisioning lines appear without stagger and the ring turns slowly', async ({ browser }) => {
   const { context, page } = await openWizard(browser, 4, { reducedMotion: 'reduce' });
   await page.getByRole('button', { name: 'Create my workspace' }).click();
   await expect(page.locator('.setup-provisioning')).toBeVisible();
@@ -99,7 +99,7 @@ test('ONB-061 Reduced motion: provisioning lines appear without stagger and the 
   const ring = await page.locator('.provision-ring').evaluate(el => { const s = getComputedStyle(el); return { duration: s.animationDuration, count: s.animationIterationCount }; });
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible({ timeout: 60_000 });
   await context.close();
-  // "Slow" ring: a multi-second rotation that keeps turning. The universal reduced-motion rule (!important) wins over .provision-ring{animation-duration:3s}.
+  // "Slow" ring: a multi-second rotation that keeps turning (D-53: its rule is !important so the universal reduced-motion reset cannot freeze it).
   expect(ring, `ring animation under reduced motion: ${JSON.stringify(ring)}`).toEqual({ duration: '3s', count: 'infinite' });
 });
 

@@ -418,7 +418,7 @@ describe('15 Reports (RPT)', () => {
     expect(bal(w, '1100')).toBe('-200.0000');
   });
 
-  it('RPT-053 statement with a bounced cheque shows the receipt and its reversal [defect]', () => {
+  it('RPT-053 statement with a bounced cheque shows the receipt and its reversal', () => {
     const w = buildDemoWorkspace();
     const s = partyStatement(w, 'c-4', '2026-09-01', '2026-10-31');
     expect(s.closing).toBe('65490.0000');

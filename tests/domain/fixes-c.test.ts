@@ -176,3 +176,49 @@ describe('D-12 aged balances as at a past date rebuild each open amount from wha
     expect([c4('2026-09-21'), c4('2026-09-23'), c4('2026-09-24')]).toEqual(['65490.0000', '0.0000', '65490.0000']);
   });
 });
+
+describe('D-25 statement shows a bounced cheque and its reversal', () => {
+  it('the receipt line sits on the clearing date and the reversal on the bounce date; the balance ends at what is owed', () => {
+    let { w, item, cust } = company(); let inv: string;
+    [w, inv] = document(w, 'sales_invoice', cust, item, '10', '100', { date: '2026-09-01', dueDate: '2026-09-01' });
+    const c = cheque(w, cust, inv, '1000', '2026-09-20');
+    w = chequeTo(c.workspace, c.recordId, 'deposited', '2026-09-21');
+    w = chequeTo(w, c.recordId, 'cleared', '2026-09-22');
+    w = chequeTo(w, c.recordId, 'bounced', '2026-09-24');
+    const s = partyStatement(w, cust, '2026-09-01', '2026-09-30');
+    expect(s.lines.map(l => [l.date, l.reference, l.description, l.debit, l.credit, l.balance])).toEqual([
+      ['2026-09-01', 'INV-2026-0001', 'Sales invoice', '1000.0000', '', '1000.0000'],
+      ['2026-09-22', 'REC-0001', 'Receipt · cheque CHQ-77', '', '1000.0000', '0.0000'],
+      ['2026-09-24', 'REC-0001', 'Cheque bounced · reversal CHQ-77', '1000.0000', '', '1000.0000'],
+    ]);
+    expect(s.closing).toBe(accountBalance(w, '1100'));
+    // A period that starts between clearing and bounce opens at zero.
+    expect(partyStatement(w, cust, '2026-09-23', '2026-09-30')).toMatchObject({ opening: '0.0000', closing: '1000.0000' });
+  });
+
+  it('a cheque that bounced before it cleared never posted, so it is not listed', () => {
+    let { w, item, cust } = company(); let inv: string;
+    [w, inv] = document(w, 'sales_invoice', cust, item, '10', '100');
+    const c = cheque(w, cust, inv, '1000', DAY);
+    w = chequeTo(chequeTo(c.workspace, c.recordId, 'deposited', DAY), c.recordId, 'bounced', DAY);
+    expect(partyStatement(w, cust, '2026-01-01', '2026-12-31').lines.map(l => l.description)).toEqual(['Sales invoice']);
+  });
+
+  it('a bounced cheque paid to a supplier raises what we owe again', () => {
+    let { w, item, sup } = company(); let bill: string;
+    [w, bill] = document(w, 'supplier_invoice', sup, item, '10', '100');
+    const c = cheque(w, sup, bill, '1000', DAY);
+    w = chequeTo(chequeTo(c.workspace, c.recordId, 'deposited', DAY), c.recordId, 'cleared', '2026-10-11');
+    w = chequeTo(w, c.recordId, 'bounced', '2026-10-12');
+    const s = partyStatement(w, sup, '2026-01-01', '2026-12-31');
+    expect(s.lines.map(l => [l.description, l.balance])).toEqual([['Supplier bill', '1000.0000'], ['Payment · cheque CHQ-77', '0.0000'], ['Cheque bounced · reversal CHQ-77', '1000.0000']]);
+    expect(s.closing).toBe(payable(w));
+  });
+
+  it('demo: every customer statement still closes at its aged balance and the AR control', () => {
+    const w = buildDemoWorkspace();
+    const customers = w.parties.filter(p => p.type === 'customer');
+    for (const p of customers) expect(partyStatement(w, p.id, '2000-01-01', '2099-12-31').closing, p.name).toBe(agedRow(w, 'customer', p.id));
+    expect(money(sum(customers.map(p => partyStatement(w, p.id, '2000-01-01', '2099-12-31').closing)))).toBe(accountBalance(w, '1100'));
+  });
+});

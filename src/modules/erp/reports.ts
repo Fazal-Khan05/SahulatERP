@@ -78,12 +78,13 @@ export type StatementLine = { date: string; reference: string; description: stri
 /**
  * Party ledger in PKR. The balance is what the customer owes us, or what we owe the supplier, so both read the same way:
  * invoices and bills raise it (Debit column); receipts, payments, credit notes and returns to the supplier lower it (Credit column).
+ * A cheque that bounced after clearing keeps its receipt line and is followed by a reversal line on the bounce date.
  */
 export function partyStatement(w: Workspace, partyId: string, from: string, to: string): { opening: string; lines: StatementLine[]; closing: string } {
   const party = w.parties.find(p => p.id === partyId);
   const customer = party?.type !== "supplier";
   // Each event carries its effect on the balance: positive raises what is owed, negative lowers it.
-  const events: { date: string; reference: string; description: string; amount: ReturnType<typeof D>; documentId?: string; order: number }[] = [];
+  const events: { date: string; reference: string; description: string; amount: ReturnType<typeof D>; documentId?: string; order: number; step?: number }[] = [];
   for (const d of w.documents) {
     if (d.partyId !== partyId || d.status !== "submitted") continue;
     const value = D(d.total).mul(d.currency === "PKR" ? D(1) : D(d.fxRate));
@@ -92,15 +93,20 @@ export function partyStatement(w: Workspace, partyId: string, from: string, to: 
     if (d.kind === "supplier_invoice") events.push({ date: d.date, reference: d.number, description: "Supplier bill", amount: value, documentId: d.id, order: 1 });
     if (d.kind === "supplier_return") events.push({ date: d.date, reference: d.number, description: "Return to supplier", amount: value.negated(), documentId: d.id, order: 2 });
   }
+  const postings = receiptPostings(w);
   for (const r of w.receipts) {
-    if (r.partyId !== partyId || r.status !== "cleared") continue;
-    const cleared = w.journals.find(j => j.sourceId === `${r.id}:cleared`);
-    const date = cleared?.date ?? r.date;
+    if (r.partyId !== partyId) continue;
+    // Only receipts that posted appear: a cheque counts from its clearing date. One that bounced after clearing keeps its line and gets a reversal line.
+    const { cleared, bounced } = postings.get(r.id)!;
+    if (!cleared) continue;
     // In PKR at each bill's rate, the amount the payment clears from the party's account (any FX difference goes to 5400, not to the party).
     const amount = sum(r.allocations.map(a => { const d = w.documents.find(x => x.id === a.invoiceId); return D(a.amount).mul(d && d.currency !== "PKR" ? D(d.fxRate) : 1); }));
-    events.push({ date, reference: r.number, description: customer ? `Receipt · ${r.method}${r.chequeNo ? ` ${r.chequeNo}` : ""}` : `Payment · ${r.method}`, amount: amount.negated(), order: 3 });
+    const cheque = r.chequeNo ? ` ${r.chequeNo}` : "";
+    events.push({ date: cleared, reference: r.number, description: customer ? `Receipt · ${r.method}${cheque}` : `Payment · ${r.method}${cheque}`, amount: amount.negated(), order: 3 });
+    // On the same day the reversal follows its own receipt line, so a cheque re-received in cash later that day reads in order.
+    if (bounced) events.push({ date: bounced, reference: r.number, description: `Cheque bounced · reversal${cheque}`, amount, order: 3, step: 1 });
   }
-  events.sort((a, b) => a.date.localeCompare(b.date) || a.order - b.order || a.reference.localeCompare(b.reference));
+  events.sort((a, b) => a.date.localeCompare(b.date) || a.order - b.order || a.reference.localeCompare(b.reference) || (a.step ?? 0) - (b.step ?? 0));
   let balance = sum(events.filter(e => e.date < from).map(e => e.amount));
   const opening = money(balance);
   const lines: StatementLine[] = [];

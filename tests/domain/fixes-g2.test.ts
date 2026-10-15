@@ -11,7 +11,9 @@ vi.mock('@/modules/erp/dates', () => import('../../src/modules/erp/dates'));
 vi.mock('@/modules/erp/master-data', () => import('../../src/modules/erp/master-data'));
 import { SettingsView, TaxSettings, settingsPayload } from '../../src/components/settings-view';
 import { readCsvRows } from '../../src/components/csv-import-dialog';
-import { execute } from '../../src/modules/erp/engine';
+import { InventoryView, stockLevels } from '../../src/components/inventory-view';
+import { buildDemoWorkspace } from '../../src/modules/erp/demo';
+import { execute, stock } from '../../src/modules/erp/engine';
 import { blankWorkspace } from '../../src/modules/erp/seed';
 import { toggleModules } from '../../src/modules/erp/modules';
 import type { Actor, Role, ToggleModule, Workspace } from '../../src/modules/erp/types';
@@ -98,6 +100,32 @@ describe('G2 form fixes', () => {
     expect(result.tooMany).toBe(true);
     expect(result.rows).toHaveLength(2000);
     expect(performance.now() - started).toBeLessThan(2000);
+  });
+
+  it('D-36 stockLevels matches the engine stock() for every item and warehouse', () => {
+    const w = buildDemoWorkspace();
+    const levels = stockLevels(w.stockMoves);
+    expect(w.stockMoves.length).toBeGreaterThan(10);
+    for (const item of [...w.items, { id: 'no-such-item' }]) {
+      expect(levels(item.id)).toEqual(stock(w, item.id));
+      for (const warehouse of w.warehouses) expect(levels(item.id, warehouse.id)).toEqual(stock(w, item.id, warehouse.id));
+    }
+  });
+
+  it('D-36 the Stock tab draws 100 rows per table for a large catalogue', () => {
+    const w = buildDemoWorkspace();
+    const warehouses = w.warehouses.slice(0, 3);
+    const items = Array.from({ length: 2000 }, (_, i) => ({ id: `p${i}`, sku: `P-${i}`, name: `Product ${i}`, category: 'General', hsCode: '', unit: 'pcs', price: '1', cost: '1', weight: '1', volume: '1', reorderLevel: 0 }));
+    const stockMoves = items.flatMap(it => warehouses.map(x => ({ id: `${it.id}-${x.id}`, itemId: it.id, warehouseId: x.id, date: '2026-10-01', quantity: '1.0000', value: '1.0000', sourceId: 'synthetic', type: 'adjustment' as const })));
+    const big = { ...w, warehouses, items, stockMoves } as Workspace;
+    const started = performance.now();
+    const html = renderToStaticMarkup(createElement(InventoryView, { workspace: big, actor: owner, busy: '', notice: '', command: async () => ({}), openStockTransfer: () => {} }));
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(html.match(/aria-label="View Product \d+"/g)).toHaveLength(100);
+    expect(html).toContain('Showing 100 of 2,000 products');
+    expect(html).toContain('Showing 100 of 6,000 rows');
+    // A small company shows everything and no "Show more".
+    expect(renderToStaticMarkup(createElement(InventoryView, { workspace: w, actor: owner, busy: '', notice: '', command: async () => ({}), openStockTransfer: () => {} }))).not.toContain('Show 100 more');
   });
 
   it('D-09 with Payroll off the form keeps the saved payroll rates (save_settings replaces every setting)', () => {

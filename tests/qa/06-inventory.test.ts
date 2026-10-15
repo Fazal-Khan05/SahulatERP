@@ -581,7 +581,7 @@ describe('06 inventory (INV)', () => {
     expect(summary(w).inventory).toBe(stockValuation(w).total);
   });
 
-  it('INV-086 Stock tab for 2,000 products × 3 warehouses renders in under 2 s (server-side render alone measured 2.0–3.0 s) [browser part: real browser] [defect]', () => {
+  it('INV-086 Stock tab for 2,000 products × 3 warehouses renders in under 2 s (server-side render alone measured 2.0–3.0 s) [browser part: real browser] [case-corrected: each table draws its first 100 rows with "Show 100 more"; search and filters reach the rest]', () => {
     let w = withLahore(freshCompany());
     w = run(w, 'save_warehouse', { name: 'Port', branchId: 'main' }).workspace;
     const items = Array.from({ length: 2000 }, (_, i) => ({ id: `p${i}`, sku: `P-${i}`, name: `Product ${i}`, category: 'General', hsCode: '', unit: 'pcs', price: '1', cost: '1', weight: '1', volume: '1', reorderLevel: 0 }));
@@ -590,7 +590,12 @@ describe('06 inventory (INV)', () => {
     const start = performance.now();
     const html = invHtml(big);
     expect(performance.now() - start).toBeLessThan(2000);
-    expect(html).toContain('P-1999');
+    expect(html).toContain('2000 of 2000 products');
+    expect(html).toContain('<td>P-99</td>');
+    expect(html).not.toContain('<td>P-100</td>');
+    expect(html).toContain('Showing 100 of 2,000 products');
+    expect(html).toContain('Showing 100 of 6,000 rows');
+    expect(html.match(/>Show 100 more</g)).toHaveLength(2);
   });
 
   it.todo('INV-087 [browser] 50,000 movements for one item: history stays responsive (Item details shows the newest 20)');

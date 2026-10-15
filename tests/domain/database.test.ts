@@ -155,11 +155,11 @@ describe('row-level security', () => {
     expect((await asUser(OWNER, `select user_id from public.memberships where tenant_id = '${DEMO_TENANT}'`)).length).toBe(2);
   });
 
-  it('hides snapshots, journals, salaries and payroll from a salesperson', async () => {
-    for (const table of ['workspace_snapshots', 'journals', 'journal_lines', 'employees', 'payroll_runs', 'audit_events', 'commissions']) {
+  it('hides snapshots, journals, salaries, payroll and documents from a salesperson (the API serves their view)', async () => {
+    for (const table of ['workspace_snapshots', 'journals', 'journal_lines', 'employees', 'payroll_runs', 'audit_events', 'commissions', 'documents']) {
       expect(await asUser(SALES, `select 1 from public.${table}`)).toHaveLength(0);
     }
-    expect((await asUser(SALES, 'select 1 from public.documents')).length).toBeGreaterThan(0);
+    expect((await asUser(OWNER, 'select 1 from public.documents')).length).toBeGreaterThan(0);
   });
 
   it('isolates tenants', async () => {

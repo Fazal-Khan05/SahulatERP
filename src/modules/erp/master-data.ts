@@ -179,7 +179,21 @@ export function csvFields(spec: EntitySpec<never>): FieldSpec[] {
   return spec.key === "employees" ? [...base, { key: "manager", label: "Reports to (name)", type: "text" }] : base;
 }
 
+// A spreadsheet runs a cell starting with one of these as a formula (CSV injection). Plain numbers such as
+// "-60.0000" cannot carry a formula and are written unchanged so they stay numeric.
+const FORMULA_START = /^[=+\-@\t\r]/;
+const PLAIN_NUMBER = /^[+-]?(\d+\.?\d*|\.\d+)$/;
+
 export function toCsv(rows: Record<string, unknown>[], headers: string[]) {
-  const escape = (value: unknown) => { const text = value === undefined || value === null ? "" : String(value); return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text; };
+  const escape = (value: unknown) => {
+    let text = value === undefined || value === null ? "" : String(value);
+    if (FORMULA_START.test(text) && !PLAIN_NUMBER.test(text)) text = `'${text}`;
+    return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+  };
   return [headers.join(","), ...rows.map(row => headers.map(h => escape(row[h])).join(","))].join("\n");
+}
+
+/** Undoes toCsv's formula guard when one of our own exports is imported again ("'+92 300…" → "+92 300…"). */
+export function fromCsvCell(value: string) {
+  return value.startsWith("'") && FORMULA_START.test(value.slice(1)) ? value.slice(1) : value;
 }

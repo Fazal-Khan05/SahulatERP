@@ -467,7 +467,7 @@ test('AUTH-096 Very slow network (3G): login usable, no duplicate submissions', 
 });
 
 // --- Sign-out cases last: Supabase sign-out is global, so each one invalidates every session of the owner.
-test('AUTH-019 Sign out from the sidebar profile returns to login; Back does not show workspace content [documented: sign-out ends every session of the account] [defect]', async ({ browser }) => {
+test('AUTH-019 Sign out from the sidebar profile returns to login; Back does not show workspace content [documented: sign-out ends every session of the account]', async ({ browser }) => {
   // A separate sign-in, so the saved owner session is a different session we can watch.
   const witness = await authState(browser);
   const { context, page } = await loginPage(browser);

@@ -193,9 +193,9 @@ describe('20 data integrity', () => {
     const t = trading(); let current = t.w; let rev = current.revision;
     S.read = async () => ({ workspace: current, revision: rev });
     const body = JSON.stringify({ type: 'create_document', payload: { kind: 'sales_invoice', partyId: t.cust, warehouseId: t.w.warehouses[0].id, date: today(), dueDate: today(), lines: [line(t.item, '1', '1')] }, idempotencyKey: 'dat-011-retry-key' });
-    const first = await (await workspaceRoute.POST(new Request('http://localhost/api/workspace', { method: 'POST', headers: { 'x-tenant-id': 't' }, body }))).json() as { recordId: string; message: string };
+    const first = await (await workspaceRoute.POST(new Request('http://localhost/api/workspace', { method: 'POST', headers: { 'x-tenant-id': 't', 'content-type': 'application/json' }, body }))).json() as { recordId: string; message: string };
     current = S.commits.at(-1)!.workspace; rev++;
-    const retry = await (await workspaceRoute.POST(new Request('http://localhost/api/workspace', { method: 'POST', headers: { 'x-tenant-id': 't' }, body }))).json() as { recordId: string; message: string };
+    const retry = await (await workspaceRoute.POST(new Request('http://localhost/api/workspace', { method: 'POST', headers: { 'x-tenant-id': 't', 'content-type': 'application/json' }, body }))).json() as { recordId: string; message: string };
     expect(current.documents).toHaveLength(1);
     expect(retry.recordId).toBe(first.recordId);
     expect(retry.message).toBe(first.message);
@@ -536,12 +536,15 @@ describe('20 data integrity', () => {
     expect(after.revision).toBe(revision);
     expect(after.workspace.company.name).not.toBe('Crash Co');
   });
-  it('DAT-060 database unreachable → 500 with a generic message; retry later works [defect: status 400 "Unexpected request failure.", not 500]', async () => {
+  it('DAT-060 database unreachable → 500 with a generic message; retry later works', async () => {
     S.read = async () => { throw { message: 'TypeError: fetch failed', details: '', hint: '', code: '' }; };
-    const r1 = await workspaceRoute.POST(new Request('http://localhost/api/workspace', { method: 'POST', headers: { 'x-tenant-id': 't' }, body: JSON.stringify({ type: 'save_company', payload: { name: 'A Co', address: 'x' }, idempotencyKey: 'dat-060-key' }) }));
-    expect((await r1.json() as { message: string }).message).toBe('Unexpected request failure.');
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const r1 = await workspaceRoute.POST(new Request('http://localhost/api/workspace', { method: 'POST', headers: { 'x-tenant-id': 't', 'content-type': 'application/json' }, body: JSON.stringify({ type: 'save_company', payload: { name: 'A Co', address: 'x' }, idempotencyKey: 'dat-060-key' }) }));
+    expect((await r1.json() as { message: string }).message).toBe('Something went wrong on the server. Please try again.');
+    expect(log).toHaveBeenCalled();
+    log.mockRestore();
     const w = freshCompany(); S.read = async () => ({ workspace: w, revision: w.revision });
-    const r2 = await workspaceRoute.POST(new Request('http://localhost/api/workspace', { method: 'POST', headers: { 'x-tenant-id': 't' }, body: JSON.stringify({ type: 'save_company', payload: { name: 'A Co', address: 'x' }, idempotencyKey: 'dat-060-key' }) }));
+    const r2 = await workspaceRoute.POST(new Request('http://localhost/api/workspace', { method: 'POST', headers: { 'x-tenant-id': 't', 'content-type': 'application/json' }, body: JSON.stringify({ type: 'save_company', payload: { name: 'A Co', address: 'x' }, idempotencyKey: 'dat-060-key' }) }));
     expect(r2.status).toBe(200);
     expect(r1.status).toBe(500);
   });
@@ -673,7 +676,9 @@ describe('20 data integrity', () => {
   it('DAT-086 tests run against PGlite with the real migrations', async () => {
     const tables = (await db.query<{ table_name: string }>(`select table_name from information_schema.tables where table_schema = 'public' order by 1`)).rows.map(r => r.table_name);
     expect(tables).toEqual(expect.arrayContaining(['workspace_snapshots', 'documents', 'journals', 'journal_lines', 'follow_ups', 'companies']));
-    expect(migrations().map(([f]) => f)).toHaveLength(5);
+    // Every migration file is applied, including the newest (D-07 role-scoped reads).
+    expect(migrations().map(([f]) => f)).toHaveLength(6);
+    expect((await db.query(`select 1 from pg_proc where proname = 'reads_full_ledger'`)).rows).toHaveLength(1);
   });
   it('DAT-087 pgcrypto is available in the test database', async () => {
     const [{ id }] = (await db.query<{ id: string }>('select gen_random_uuid()::text as id')).rows;
@@ -709,7 +714,7 @@ describe('20 data integrity', () => {
   it('DAT-094 stale tab commits from an old revision [documented: the server re-reads the latest snapshot on every POST, so the command applies on top without a conflict]', async () => {
     let current = freshCompany(); let rev = current.revision;
     S.read = async () => ({ workspace: current, revision: rev });
-    const post = async (name: string, key: string) => { const r = await workspaceRoute.POST(new Request('http://localhost/api/workspace', { method: 'POST', headers: { 'x-tenant-id': 't' }, body: JSON.stringify({ type: 'save_party', payload: { name, type: 'customer', city: '', email: '', taxId: '', registered: false, creditLimit: '0', terms: 0, customerClass: '' }, idempotencyKey: key }) })); current = S.commits.at(-1)!.workspace; rev++; return r.status; };
+    const post = async (name: string, key: string) => { const r = await workspaceRoute.POST(new Request('http://localhost/api/workspace', { method: 'POST', headers: { 'x-tenant-id': 't', 'content-type': 'application/json' }, body: JSON.stringify({ type: 'save_party', payload: { name, type: 'customer', city: '', email: '', taxId: '', registered: false, creditLimit: '0', terms: 0, customerClass: '' }, idempotencyKey: key }) })); current = S.commits.at(-1)!.workspace; rev++; return r.status; };
     expect(await post('Tab One Co', 'dat-094-tab-1')).toBe(200);
     expect(await post('Tab Two Co', 'dat-094-tab-2')).toBe(200);
     expect(current.parties.map(p => p.name)).toEqual(['Tab One Co', 'Tab Two Co']);

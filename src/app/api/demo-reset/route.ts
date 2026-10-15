@@ -16,6 +16,7 @@ export async function POST() {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Reset failed.';
     const status = message === 'AUTH_REQUIRED' ? 401 : message === 'ACCESS_DENIED' ? 403 : 500;
+    if (status === 500) console.error('Demo reset: unexpected failure', error);
     return Response.json({ success: false, message: status === 500 ? 'The demo could not be reset. Nothing was changed.' : 'Sign in as the demo owner first.' }, { status });
   }
 }

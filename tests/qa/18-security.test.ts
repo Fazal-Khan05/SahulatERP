@@ -341,7 +341,7 @@ describe('18 security', () => {
     expect(v.stockMoves.every(m => m.warehouseId.startsWith('khi-'))).toBe(true);
     expect(v.journals).toEqual([]);
   });
-  it('SEC-030 Salesperson scope: API projection (own sales docs, customers, own commissions, zero salaries, no journals/audit/payroll) and the direct RLS path [defect: RLS lets a salesperson read every document in the tenant]', async () => {
+  it('SEC-030 Salesperson scope: API projection (own sales docs, customers, own commissions, zero salaries, no journals/audit/payroll) and the direct RLS path', async () => {
     const v = scopeWorkspace(demo, actor('Salesperson', { employeeId: 'e-4' }));
     expect(v.documents.every(d => ['quotation', 'sales_order', 'delivery', 'sales_invoice', 'credit_note'].includes(d.kind) && d.lines.some(l => l.employeeId === 'e-4' || l.splits.some(s => s.employeeId === 'e-4')))).toBe(true);
     expect(v.parties.every(p => p.type === 'customer')).toBe(true);
@@ -449,10 +449,14 @@ describe('18 security', () => {
     expect(r.status).toBe(400);
     expect(r.json.success).toBe(false);
   });
-  it('SEC-046 Content-Type text/plain is refused with 400 [defect: the body is parsed regardless of content type]', async () => {
+  it('SEC-046 Content-Type text/plain is refused [case-corrected: 415 Unsupported Media Type, not 400]', async () => {
     seed([company(T)], [[T, 'Owner']]);
+    const before = JSON.stringify(stored(T));
     const r = await POST(cmd('save_company', { name: 'Plain Co', address: 'x' }), T, { 'content-type': 'text/plain' });
-    expect(r.status).toBe(400);
+    expect(r.status).toBe(415);
+    expect(r.json.success).toBe(false);
+    expect(JSON.stringify(stored(T))).toBe(before);
+    expect(S.rpcCalls).toBe(0);
   });
   it('SEC-047 GET /api/workspace signed out → 401 [documented: signed-in GET returns the role-scoped workspace]', async () => {
     seed([company(T)], [[T, 'Owner']]); S.user = null;
@@ -500,7 +504,7 @@ describe('18 security', () => {
     expect(p).toMatchObject({ name: '<b onmouseover=alert(1)>Bold</b>', city: '<i>Karachi</i>' });
     expect(renderToStaticMarkup(createElement('td', null, p.name))).toBe('<td>&lt;b onmouseover=alert(1)&gt;Bold&lt;/b&gt;</td>');
   });
-  it('SEC-053 CSV injection: formula-leading cells are neutralised on export [defect: toCsv writes =cmd() verbatim]', () => {
+  it('SEC-053 CSV injection: formula-leading cells are neutralised on export', () => {
     const csv = toCsv([{ name: '=cmd|"/c calc"!A1', note: '+SUM(1,2)', other: '@x', minus: '-2+3' }], ['name', 'note', 'other', 'minus']);
     const cells = csv.split('\n')[1];
     expect(cells).not.toMatch(/(^|,)"?[=+@-]/);
@@ -580,7 +584,7 @@ describe('18 security', () => {
       expect(JSON.stringify(b.json)).not.toMatch(/\n\s+at |\.ts:\d+|node_modules/);
     }
   });
-  it('SEC-068 an unexpected engine exception returns 500 with a generic message and is logged server-side [defect: returns 400 with the raw TypeError text, nothing logged]', async () => {
+  it('SEC-068 an unexpected engine exception returns 500 with a generic message and is logged server-side', async () => {
     const broken = { ...company(T), documents: null } as unknown as Workspace;
     seed([broken], [[T, 'Owner']]);
     const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -691,7 +695,7 @@ describe('18 security', () => {
   it('SEC-088 clickjacking: framing blocked by X-Frame-Options DENY', () => {
     expect(src('next.config.ts')).toContain('{key:"X-Frame-Options",value:"DENY"}');
   });
-  it('SEC-089 open redirect in next= is blocked for every variant [defect: "/\\evil.com" redirects off-site]', async () => {
+  it('SEC-089 open redirect in next= is blocked for every variant', async () => {
     for (const next of ['https://evil.com', '//evil.com', '/\\evil.com', '/\\/evil.com', '%2F%2Fevil.com']) {
       const r = await callbackRoute.GET(new Request(`http://localhost/auth/callback?next=${encodeURIComponent(next)}`));
       expect(new URL(r.headers.get('location')!).host, next).toBe('localhost');
@@ -742,11 +746,13 @@ describe('18 security', () => {
     expect(businessToday(new Date('2026-10-13T19:30:00Z'))).toBe('2026-10-14');
     expect(businessToday(new Date('2026-10-13T18:59:59Z'))).toBe('2026-10-13');
   });
-  it('SEC-095 server logs carry no PII or payloads [documented: only "Empty workspace command body" (method/length/type) and database rejection messages are logged]', () => {
+  it('SEC-095 server logs carry no PII or payloads [documented: only "Empty workspace command body" (method/length/type), database rejection messages and unexpected server failures (the thrown error, never the request body) are logged]', () => {
     const files = execSync('git ls-files src', { cwd: root, encoding: 'utf8' }).split('\n').filter(f => /\.(ts|tsx)$/.test(f));
     const logs = files.flatMap(f => [...src(f).matchAll(/console\.(log|error|warn|info)\(([^;]*)\)/g)].map(m => `${f}: ${m[2]}`));
     expect(logs).toEqual([
-      "src/app/api/workspace/route.ts: 'Workspace commit rejected by database', message",
+      'src/app/api/demo-reset/route.ts: \'Demo reset: unexpected failure\', error',
+      'src/app/api/workspace/errors.ts: `${context}: commit rejected by database`, message',
+      'src/app/api/workspace/errors.ts: `${context}: unexpected failure`, error',
       "src/app/api/workspace/route.ts: 'Empty workspace command body', { method: request.method, length: request.headers.get('content-length'), type: request.headers.get('content-type') }",
     ]);
   });

@@ -407,7 +407,7 @@ describe('01 auth', () => {
     ['AUTH-042', '[browser] reused reset link shows expired state'],
     ['AUTH-043', '[manual] reset link opened in a different browser'],
     ['AUTH-049', '[browser] sign out in one tab; other tab next command gets 401 and shows login'],
-    ['AUTH-050', '[manual] session expiry after refresh-token lapse returns to login'],
+    ['AUTH-050', '[browser] an expired access token is refreshed by the proxy and saved; the member stays signed in (D-77)'],
     ['AUTH-051', '[browser] two accounts in two browser contexts see only their own memberships'],
     ['AUTH-052', '[browser] same account in two tabs; commands from both apply'],
     ['AUTH-053', '[browser] login at 390px: single column, 16px inputs, no horizontal scroll'],

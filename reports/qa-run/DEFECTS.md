@@ -178,3 +178,12 @@ Why: D-23 is S3 even though PRD-031 and PUR-007 are P1: nothing wrong is saved, 
 - **Snapshots:** branding is not snapshotted on documents (PRN-068), and party names are not snapshotted (PTY-086). Compare with the CLAUDE.md requirement for transaction snapshots.
 - **Navigation:** no URL routing for modules or reports (RPT-090, NAV-060), so Back leaves the app.
 - **Perf watch:** DAT-051 (10k documents, under 4 s) passed in the final run but measured 4.27 s in the stopped DAT shard. Treat it as borderline.
+
+## Found during the fix verification (15 October)
+
+**D-77 · S2 · An expiring session is refreshed but not saved, so members can be signed out after about an hour**
+Cases: AUTH-050 (was manual; now automated).
+What happens: when the one-hour access token has expired, the first page render refreshes the session in a Server Component, which cannot write cookies, so the new tokens are dropped. If the member's next request comes more than 10 s later (Supabase's refresh-token reuse window), it reuses the spent refresh token, Supabase revokes the session and the member is signed out. If an API call happens within those 10 s it saves the refresh, so the failure depends on timing and the original browser pass did not catch it.
+Expected: the refreshed session is always saved before the page renders.
+Where: no session-refresh proxy (`src/proxy.ts`, Next.js 16's name for middleware); `src/lib/supabase/server.ts` silently ignores cookie writes from Server Components.
+Fix: a session-refresh proxy that refreshes an expiring session once, before rendering, and writes the new cookies to both the rendering request and the browser (Supabase's recommended SSR pattern).

@@ -1,5 +1,5 @@
 import { expect, test, type Browser, type Page, type Request } from '@playwright/test';
-import { EMAIL, PASSWORD, PHONE, QA_TENANT, authState, gotoApp, savedSessionAlive, seedRich, signedInPage } from './helpers';
+import { EMAIL, PASSWORD, PHONE, QA_TENANT, authState, gotoApp, savedSessionAlive, seedRich, signedInPage, signInOnPage } from './helpers';
 
 // Sign-in, reset and session cases. Uses anonymous contexts for the login page; successful sign-ins and
 // sign-outs are kept few because Supabase rate-limits sign-ins per IP and signs out every session of the user.
@@ -239,6 +239,35 @@ test('AUTH-041 Reset page without a session shows the expired state with a link 
 
 test('AUTH-042 [manual] Reusing the emailed reset link after success shows the expired state', async () => {
   test.skip(true, 'Needs a real emailed recovery link (actual email delivery).');
+});
+
+test('AUTH-050 an expired access token is refreshed and saved by the session proxy, so the member stays signed in past the hour [D-77: Server Components cannot save a refreshed session; without src/proxy.ts the refresh is lost unless a route handler happens to run within Supabase\'s 10 s reuse window]', async ({ browser }) => {
+  test.setTimeout(120_000);
+  // A fresh sign-in of its own, so the refresh tokens it spends never collide with another context's session.
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  await signInOnPage(page);
+  await expect(page.getByRole('heading', { name: 'Welcome back' })).toHaveCount(0);
+  // Age the session: rewrite the stored session so its access token reads as expired (what happens after an hour).
+  const cookies = await context.cookies();
+  const parts = cookies.filter(c => /^sb-.*-auth-token(\.\d+)?$/.test(c.name)).sort((a, b) => a.name.localeCompare(b.name, 'en', { numeric: true }));
+  expect(parts.length).toBeGreaterThan(0);
+  const base = parts[0].name.replace(/\.\d+$/, '');
+  const raw = parts.map(c => c.value).join('');
+  const session = JSON.parse(Buffer.from(raw.replace(/^base64-/, ''), 'base64url').toString('utf8')) as { expires_at: number };
+  session.expires_at = Math.floor(Date.now() / 1000) - 60;
+  await context.clearCookies({ name: new RegExp(`^${base.replace(/[-]/g, '\\-')}(\\.\\d+)?$`) });
+  await context.addCookies([{ ...parts[0], name: base, value: `base64-${Buffer.from(JSON.stringify(session)).toString('base64url')}` }]);
+  // First request after expiry: the server refreshes the session. The refreshed cookies must reach the browser.
+  await page.goto(`/?tenant=${QA_TENANT}`);
+  await expect(page.getByRole('heading', { name: 'Welcome back' })).toHaveCount(0, { timeout: 30_000 });
+  // Past Supabase's 10 s reuse window, an unsaved refresh would now be spent and the session revoked.
+  await page.waitForTimeout(15_000);
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  await expect(page.getByRole('heading', { name: 'Welcome back' })).toHaveCount(0);
+  expect((await context.request.get(`/api/workspace?tenant=${QA_TENANT}`)).status()).toBe(200);
+  await context.close();
 });
 
 test('AUTH-051 [manual] Two accounts in two browsers have independent sessions', async () => {

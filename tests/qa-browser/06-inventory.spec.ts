@@ -89,7 +89,7 @@ test('INV-062 Set-quantity dialog closes on success', async () => {
   await expect(stockRows(page).filter({ hasText: 'QA-FAN' })).toContainText('25 pcs');
 });
 
-test('INV-063 Set-quantity dialog shows the current quantity and value [defect]', async () => {
+test('INV-063 Set-quantity dialog shows the current quantity and value', async () => {
   const { page, context } = s;
   const w = await readWorkspaceApi(context.request);
   const led = w.items.find(i => i.sku === 'QA-LED')!;

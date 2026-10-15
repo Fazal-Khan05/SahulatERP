@@ -357,7 +357,7 @@ test('NAV-027 Clicking a result navigates to its module and opens the record', a
   await expect(page.getByRole('dialog', { name: new RegExp(number) }), 'the invoice opens').toBeVisible({ timeout: 3000 });
 });
 
-test('NAV-028 Search with 20k records stays under 100 ms per keystroke [defect]', async ({ browser }) => {
+test('NAV-028 Search with 20k records stays under 100 ms per keystroke', async ({ browser }) => {
   test.setTimeout(600_000);
   const { w } = richWorkspace();
   const template = w.documents.find(d => d.id === w.documents.find(x => x.status === 'draft' && x.kind === 'sales_invoice')!.id)!;

@@ -115,17 +115,15 @@ function NotificationBell({items,go}:{items:[Module,string,number][];go:(module:
     </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>;
 }
 
-type SearchHit={key:string;title:string;detail:string;module:Module;open?:{document?:string;item?:string}};
+type SearchHit={key:string;title:string;detail:()=>string;module:Module;text:string;open?:{document?:string;item?:string}};
 const salesKinds=['quotation','sales_order','delivery','sales_invoice','credit_note'];
 const documentModule=(kind:string):Module=>salesKinds.includes(kind)?'sales':'purchasing';
 function SearchDialog({open,close,workspace,role,choose}:{open:boolean;close:()=>void;workspace:Workspace;role:Role;choose:(hit:SearchHit)=>void}){
   const [query,setQuery]=useState('');const [active,setActive]=useState(-1);const listId=useId();
   const needle=query.trim().toLocaleLowerCase();
-  const results=useMemo(()=>{if(!needle)return [];const rows:SearchHit[]=[
-    ...workspace.documents.map(d=>({key:d.id,title:d.number,detail:`${d.kind.replaceAll('_',' ')} · ${documentPartyName(workspace,d)} · ${formatMoney(d.total)}`,module:documentModule(d.kind),open:{document:d.id}})),
-    ...workspace.parties.map(p=>({key:p.id,title:p.name,detail:`${p.type} · ${p.city}`,module:(p.type==='customer'?'collections':'purchasing') as Module})),
-    ...workspace.items.map(i=>({key:i.id,title:i.name,detail:`${i.sku} · ${i.category}`,module:'inventory' as Module,open:{item:i.id}})),
-  ];return rows.filter(r=>canView(role,r.module,workspace)&&`${r.title} ${r.detail}`.toLocaleLowerCase().includes(needle)).slice(0,8)},[needle,workspace,role]);
+  // The index is built when the dialog opens (once per workspace snapshot and role); a keystroke only scans it.
+  const index=useMemo(()=>open?searchIndex(workspace,role):[],[open,workspace,role]);
+  const results=useMemo(()=>needle?searchHits(index,needle):[],[index,needle]);
   // ↑/↓ move a highlight while focus stays in the field (aria-activedescendant); Enter opens it, or the first result.
   useEffect(()=>{if(active>=0)document.getElementById(`${listId}-${active}`)?.scrollIntoView({block:'nearest'})},[active,listId]);
   const reset=()=>{setQuery('');setActive(-1)};
@@ -136,8 +134,29 @@ function SearchDialog({open,close,workspace,role,choose}:{open:boolean;close:()=
   };
   return <Dialog open={open} onOpenChange={value=>{if(!value){close();reset()}}}><DialogContent className="search-dialog"><DialogTitle>Search</DialogTitle><DialogDescription>Documents, customers, suppliers and products in this workspace.</DialogDescription>
     <input className="search-input" autoFocus type="search" aria-label="Search the workspace" placeholder="Invoice number, customer, SKU…" aria-controls={listId} aria-activedescendant={active>=0&&active<results.length?`${listId}-${active}`:undefined} value={query} onKeyDown={onKey} onChange={event=>{setQuery(event.target.value);setActive(-1)}}/>
-    <div className="search-results" id={listId} role="list">{needle&&!results.length&&<div className="empty-state">No matches for “{query}”.</div>}{results.map((r,index)=><button key={`${r.module}:${r.key}`} id={`${listId}-${index}`} role="listitem" className="search-result" data-highlighted={index===active?'':undefined} aria-current={index===active||undefined} onClick={()=>pick(r)}><span><strong>{r.title}</strong><small>{r.detail}</small></span><span className="search-module">{labels[r.module]}</span></button>)}</div>
+    <div className="search-results" id={listId} role="list">{needle&&!results.length&&<div className="empty-state">No matches for “{query}”.</div>}{results.map((r,index)=><button key={`${r.module}:${r.key}`} id={`${listId}-${index}`} role="listitem" className="search-result" data-highlighted={index===active?'':undefined} aria-current={index===active||undefined} onClick={()=>pick(r)}><span><strong>{r.title}</strong><small>{r.detail()}</small></span><span className="search-module">{labels[r.module]}</span></button>)}</div>
   </DialogContent></Dialog>;
+}
+const searchCache=new WeakMap<Workspace,Map<Role,SearchHit[]>>();
+/**
+ * Every record the role may open, each with a lower-cased haystack. Built once per workspace snapshot and role
+ * (a new snapshot arrives after every command); details are formatted only for the few results on screen.
+ */
+export function searchIndex(w:Workspace,role:Role):SearchHit[]{
+  const byRole=searchCache.get(w)??new Map<Role,SearchHit[]>();searchCache.set(w,byRole);
+  const cached=byRole.get(role);if(cached)return cached;
+  const index:SearchHit[]=[];const parties=new Map(w.parties.map(p=>[p.id,p]));const amount=new Intl.NumberFormat('en-PK',{maximumFractionDigits:2});
+  for(const d of w.documents){const module=documentModule(d.kind);if(!canView(role,module,w))continue;const kind=d.kind.replaceAll('_',' ');const party=d.partyName||parties.get(d.partyId)?.name||'—';
+    index.push({key:d.id,title:d.number,module,open:{document:d.id},text:`${d.number} ${kind} · ${party} · Rs ${amount.format(Number(d.total))}`.toLocaleLowerCase(),detail:()=>`${kind} · ${party} · ${formatMoney(d.total)}`})}
+  for(const p of w.parties){const module:Module=p.type==='customer'?'collections':'purchasing';if(!canView(role,module,w))continue;const detail=`${p.type} · ${p.city}`;
+    index.push({key:p.id,title:p.name,module,text:`${p.name} ${detail}`.toLocaleLowerCase(),detail:()=>detail})}
+  if(canView(role,'inventory',w))for(const i of w.items){const detail=`${i.sku} · ${i.category}`;
+    index.push({key:i.id,title:i.name,module:'inventory',open:{item:i.id},text:`${i.name} ${detail}`.toLocaleLowerCase(),detail:()=>detail})}
+  byRole.set(role,index);return index;
+}
+/** The first `cap` records whose haystack contains the needle as plain text (no pattern syntax), in index order. */
+export function searchHits(index:SearchHit[],needle:string,cap=8):SearchHit[]{
+  const hits:SearchHit[]=[];for(const entry of index){if(entry.text.includes(needle)){hits.push(entry);if(hits.length===cap)break}}return hits;
 }
 
 export function Workbench({initialWorkspace,actor,memberships}:Props){

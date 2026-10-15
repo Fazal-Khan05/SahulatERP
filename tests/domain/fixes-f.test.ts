@@ -26,7 +26,7 @@ vi.mock('@/modules/erp/money', () => import('../../src/modules/erp/money'));
 vi.mock('@/modules/erp/reports', () => import('../../src/modules/erp/reports'));
 vi.mock('@/modules/erp/types', () => import('../../src/modules/erp/types'));
 vi.mock('@/components/document-preview', () => import('../../src/components/document-preview'));
-import { Workbench } from '../../src/components/workbench';
+import { Workbench, searchHits, searchIndex } from '../../src/components/workbench';
 
 const root = resolve(__dirname, '../..');
 const css = readFileSync(resolve(root, 'src/app/globals.css'), 'utf8');
@@ -159,5 +159,25 @@ describe('agent F shell fixes', () => {
     expect(wb).toContain("data-highlighted={index===active?'':undefined} aria-current={index===active||undefined}");
     // Documents open in the details dialog and products in the product dialog, over their module.
     expect(wb).toContain('const openSearchHit=(hit:SearchHit)=>{go(hit.module);setOpenDocumentId(hit.open?.document??null);setOpenItemId(hit.open?.item??null)};');
+  });
+  it('D-36 search over 10k documents and 10k products: one index per workspace snapshot, capped plain-text scans', () => {
+    const w = buildDemoWorkspace();
+    const doc = w.documents.find(d => d.kind === 'sales_invoice')!; const item = w.items[0];
+    for (let i = 0; i < 10_000; i++) {
+      w.documents.push({ ...doc, id: `bulk-doc-${i}`, number: `INV-2025-${String(i).padStart(5, '0')}` });
+      w.items.push({ ...item, id: `bulk-item-${i}`, sku: `BULK-${String(i).padStart(5, '0')}`, name: `Bulk product ${i}` });
+    }
+    const index = searchIndex(w, 'Owner');
+    expect(index.length).toBeGreaterThan(20_000);
+    expect(searchIndex(w, 'Owner')).toBe(index); // memoised per snapshot and role
+    expect(searchIndex({ ...w }, 'Owner')).not.toBe(index); // a new snapshot (after a command) is indexed afresh
+    const times: number[] = [];
+    for (const q of ['b', 'bulk', 'bulk product 9999', 'inv-2025-0999', 'no such record anywhere', '(.*']) {
+      const t0 = performance.now(); const hits = searchHits(index, q); times.push(performance.now() - t0);
+      expect(hits.length).toBeLessThanOrEqual(8);
+    }
+    expect(Math.max(...times)).toBeLessThan(50);
+    expect(searchHits(index, 'bulk product 9999').map(h => h.title)).toEqual(['Bulk product 9999']);
+    expect(searchHits(index, 'inv-2025-09999').map(h => h.title)).toEqual(['INV-2025-09999']);
   });
 });

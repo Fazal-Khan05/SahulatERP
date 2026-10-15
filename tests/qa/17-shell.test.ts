@@ -99,7 +99,10 @@ describe('17 shell', () => {
   });
   it('NAV-024 search with regex characters is literal (substring includes, no RegExp)', () => {
     const search = wbSource.slice(wbSource.indexOf('function SearchDialog'), wbSource.indexOf('export function Workbench'));
-    expect(search).toContain('.toLocaleLowerCase().includes(needle)');
+    // D-36: the haystack is lower-cased once when the index is built; each keystroke is a plain substring test.
+    expect(search).toContain('.toLocaleLowerCase(),detail:');
+    expect(search).toContain('if(entry.text.includes(needle))');
+    expect(search).toContain('const needle=query.trim().toLocaleLowerCase();');
     expect(search).not.toMatch(/new RegExp|\.match\(|\.test\(/);
   });
   it('NAV-029 bell badge count equals the attention items', () => {

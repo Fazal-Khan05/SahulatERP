@@ -94,7 +94,7 @@ test('ACC-090 Journals are readable on a phone [case-corrected: no separate jour
   } finally { await phone.context.close(); }
 });
 
-test('ACC-091 Debit / credit columns are right-aligned with tabular numerals [defect]', async () => {
+test('ACC-091 Debit / credit columns are right-aligned with tabular numerals', async () => {
   const { page } = s;
   const measure = (selector: string) => page.locator(selector).evaluateAll(els => els.map(el => ({ align: getComputedStyle(el).textAlign, nums: getComputedStyle(el).fontVariantNumeric })));
   const results: Record<string, { align: string; nums: string }[]> = {};

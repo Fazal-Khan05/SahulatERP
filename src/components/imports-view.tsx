@@ -48,7 +48,7 @@ export function ImportsView({ workspace, actor, editable, busy, command }: { wor
       can('allocate_shipment') && pending.length ? <Button key="a" size="sm" disabled={!!busy} onClick={() => command('allocate_shipment', { id: sh.id, date: businessToday() })}>Allocate</Button> : <span key="a">{pending.length ? 'Read only' : 'Complete'}</span>];
   });
   return <section className="stack">
-    <TableCard title="Import shipments" action={actions} heads={['Shipment', 'Supplier', 'Container / GD', 'ETA', 'Status', 'Unallocated', 'Action']} rows={rows}><CostClassGuide/></TableCard>
+    <TableCard title="Import shipments" action={actions} heads={['Shipment', 'Supplier', 'Container / GD', 'ETA', 'Status', 'Unallocated', 'Action']} numeric={[5]} rows={rows}><CostClassGuide/></TableCard>
     {dialog === 'shipment' && <NewShipmentDialog workspace={workspace} busy={busy} command={command} onClose={() => setDialog(null)}/>}
     {dialog === 'cost' && <AddCostDialog workspace={workspace} busy={busy} command={command} onClose={() => setDialog(null)}/>}
   </section>;

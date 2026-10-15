@@ -11,7 +11,7 @@ vi.mock('@/modules/erp/dates', () => import('../../src/modules/erp/dates'));
 import { ImportsView, costClasses } from '../../src/components/imports-view';
 import { PayrollRuns, payrollDate } from '../../src/components/payroll-runs';
 import { execute } from '../../src/modules/erp/engine';
-import { statusTone } from '../../src/components/table-card';
+import { TableCard, statusTone } from '../../src/components/table-card';
 import { buildDemoWorkspace } from '../../src/modules/erp/demo';
 import type { Actor, Role, Workspace } from '../../src/modules/erp/types';
 
@@ -50,7 +50,7 @@ describe('H workspace view fixes', () => {
     }
     w = run(w, 'cancel_payroll', { id: ids['2026-09'] }).w;
     const html = (role: Role, editable = role !== 'Auditor') => renderToStaticMarkup(createElement(PayrollRuns, { workspace: w, actor: actor(role), editable, busy: '', command }));
-    const cells = (markup: string) => [...markup.matchAll(/<tr><td><button[^>]*>(PAY-[\d-]+)<\/button><\/td>(?:<td>[^]*?<\/td>){5}<td>([^]*?)<\/td><\/tr>/g)].map(m => [m[1], m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()]);
+    const cells = (markup: string) => [...markup.matchAll(/<tr><td><button[^>]*>(PAY-[\d-]+)<\/button><\/td>(?:<td[^>]*>[^]*?<\/td>){5}<td>([^]*?)<\/td><\/tr>/g)].map(m => [m[1], m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()]);
     // Newest month first; only draft and reviewed runs offer Cancel run.
     expect(cells(html('Owner'))).toEqual([['PAY-2026-09', 'Cancelled'], ['PAY-2026-08', 'reviewed Cancel run'], ['PAY-2026-07', 'approved Cancel run'], ['PAY-2026-06', 'paid'], ['PAY-2026-05', 'Complete']]);
     expect(cells(html('Payroll Administrator'))).toEqual(cells(html('Owner')));
@@ -73,5 +73,11 @@ describe('H workspace view fixes', () => {
     expect(new Set(['unreleased', 'pending', 'approved', 'recoverable'].slice(0, 3).map(statusTone)).size).toBe(3);
     // Unchanged elsewhere: cheques and shipments.
     expect(['received', 'deposited', 'cleared', 'bounced', 'costed'].map(statusTone)).toEqual(['warning', 'info', 'success', 'danger', 'success']);
+  });
+
+  it('D-67 TableCard right-aligns the amount columns it is given, header included', () => {
+    const html = renderToStaticMarkup(createElement(TableCard, { title: 'Trial balance', heads: ['Code', 'Account', 'Net balance'], numeric: [2], rows: [['1000', 'Bank', 'Rs 5,000']] }));
+    expect(html).toContain('<th>Code</th><th>Account</th><th class="num align-right">Net balance</th>');
+    expect(html).toContain('<td>1000</td><td>Bank</td><td class="num align-right">Rs 5,000</td>');
   });
 });

@@ -499,7 +499,7 @@ describe('18 security', () => {
     expect(p).toMatchObject({ name: '<b onmouseover=alert(1)>Bold</b>', city: '<i>Karachi</i>' });
     expect(renderToStaticMarkup(createElement('td', null, p.name))).toBe('<td>&lt;b onmouseover=alert(1)&gt;Bold&lt;/b&gt;</td>');
   });
-  it('SEC-053 CSV injection: formula-leading cells are neutralised on export [defect: toCsv writes =cmd() verbatim]', () => {
+  it('SEC-053 CSV injection: formula-leading cells are neutralised on export', () => {
     const csv = toCsv([{ name: '=cmd|"/c calc"!A1', note: '+SUM(1,2)', other: '@x', minus: '-2+3' }], ['name', 'note', 'other', 'minus']);
     const cells = csv.split('\n')[1];
     expect(cells).not.toMatch(/(^|,)"?[=+@-]/);

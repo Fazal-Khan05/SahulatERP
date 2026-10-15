@@ -5,9 +5,13 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
+import Papa from 'papaparse';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { scopeWorkspace } from '../../src/modules/erp/access';
 import { buildDemoWorkspace } from '../../src/modules/erp/demo';
+import { execute } from '../../src/modules/erp/engine';
+import { csvFields, customers, fromCsvCell, toCsv } from '../../src/modules/erp/master-data';
+import { toggleModules } from '../../src/modules/erp/modules';
 import { blankWorkspace } from '../../src/modules/erp/seed';
 import { DEMO_TENANT, PARTNER_TENANT, roles, type Role } from '../../src/modules/erp/types';
 
@@ -164,5 +168,47 @@ describe('D-18 auth callback redirect stays on the app origin', () => {
     const res = await callbackRoute.GET(new Request('http://localhost/auth/callback'));
     expect(res.headers.get('location')).toBe('http://localhost/');
     expect(S.exchanged.length).toBeGreaterThan(0);
+  });
+});
+
+// ---------- D-20: CSV formula injection ----------
+describe('D-20 CSV export neutralises formula cells', () => {
+  const column = (csv: string) => Papa.parse<string[]>(csv).data.slice(1).map(r => r[0]);
+
+  it('prefixes every risky leading character with an apostrophe, quoting where needed', () => {
+    const values = ['=cmd|"/c calc"!A1', '+SUM(1,2)', '-2+3', '@SUM(A1)', '\t=1+1', '\r=1+1', '=HYPERLINK("http://x","y")', '+92 300 1234567', '-', '+'];
+    const csv = toCsv(values.map(v => ({ v })), ['v']);
+    expect(column(csv)).toEqual(values.map(v => `'${v}`));
+    expect(toCsv([{ v: '=1' }], ['v'])).toBe("v\n'=1");
+    expect(toCsv([{ v: '\r=1' }], ['v'])).toBe("v\n\"'\r=1\"");
+    expect(toCsv([{ v: '=cmd|"/c calc"!A1' }], ['v'])).toBe(`v\n"'=cmd|""/c calc""!A1"`);
+  });
+
+  it('keeps plain numbers numeric, including negatives, and leaves ordinary text alone', () => {
+    const row = { a: '-60.0000', b: -5, c: '+3', d: '-.5', e: '1234.0000', f: 'LED Panel', g: 'a=b', h: '', i: null, j: undefined, k: 0 };
+    expect(toCsv([row], Object.keys(row))).toBe('a,b,c,d,e,f,g,h,i,j,k\n-60.0000,-5,+3,-.5,1234.0000,LED Panel,a=b,,,,0');
+    expect(toCsv([{ v: '-1,500.00' }], ['v'])).toBe(`v\n"'-1,500.00"`);
+  });
+
+  it('fromCsvCell undoes only the guard toCsv adds', () => {
+    expect(["'=1", "'+92 300 1234567", "'-2+3", "'@x", "'\t1"].map(fromCsvCell)).toEqual(['=1', '+92 300 1234567', '-2+3', '@x', '\t1']);
+    expect(["'quoted", "O'Brien", "''=1", '-5', ''].map(fromCsvCell)).toEqual(["'quoted", "O'Brien", "''=1", '-5', '']);
+  });
+
+  it('an exported customer list imports back unchanged when cells pass through fromCsvCell', () => {
+    const owner = { id: 'u-owner', name: 'Owner', role: 'Owner' as const, branchIds: [] };
+    const company = () => ({ ...blankWorkspace(false), modules: [...toggleModules] });
+    let w = company();
+    const people = [{ name: '=Danger Traders', phone: '+92 300 1234567', city: '-Karachi' }, { name: 'Plain Co', phone: '021-1234567', city: 'Lahore' }];
+    people.forEach((x, i) => {
+      w = execute(w, { type: 'save_party', idempotencyKey: `d20-save-${i}`, payload: { type: 'customer', email: '', taxId: '', registered: false, customerClass: 'Retailer', creditLimit: '0', terms: 30, ...x } }, owner).workspace;
+    });
+    const exported = toCsv(customers.records(w) as never, csvFields(customers as never).map(f => f.key));
+    expect(exported).toContain("'=Danger Traders");
+    const parsed = Papa.parse<Record<string, string>>(exported, { header: true, skipEmptyLines: 'greedy', transformHeader: h => h.trim(), transform: fromCsvCell });
+    const imported = execute(company(), { type: 'import_records', idempotencyKey: 'd20-import', payload: { kind: 'customers', mode: 'create', rows: parsed.data } }, owner).workspace;
+    const pick = (ws: typeof w) => customers.records(ws).map(p => [p.name, p.phone, p.city]);
+    expect(pick(imported)).toEqual(pick(w));
+    expect(pick(imported).map(r => r[0])).toEqual(['=Danger Traders', 'Plain Co']);
   });
 });

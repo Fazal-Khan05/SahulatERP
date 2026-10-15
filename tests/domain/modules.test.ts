@@ -67,9 +67,11 @@ describe('set_modules', () => {
     expect(() => run(off, 'create_document', { kind: 'sales_invoice', partyId: 'c-1', warehouseId: 'khi-main', date: '2026-10-14', dueDate: '2026-11-14', lines: [{ itemId: 'i-1', quantity: '1', price: '10' }] })).not.toThrow();
   });
 
-  it('is allowed for non-owner roles; the API, not the engine, demands the password', () => {
+  it('is Owner/Accountant only after setup (any non-Auditor during setup); the API, not the engine, demands the password', () => {
     const w = buildDemoWorkspace();
-    expect(() => run(w, 'set_modules', { enabled: w.modules.filter(m => m !== 'payroll') }, sales)).not.toThrow();
+    expect(() => run(w, 'set_modules', { enabled: w.modules.filter(m => m !== 'payroll') }, { ...owner, role: 'Accountant' })).not.toThrow();
+    expect(() => run(w, 'set_modules', { enabled: w.modules.filter(m => m !== 'payroll') }, sales)).toThrow(/role does not permit/);
+    expect(() => run({ ...w, setup: { complete: false, step: 3 } }, 'set_modules', { enabled: w.modules.filter(m => m !== 'payroll') }, sales)).not.toThrow();
     expect(() => run(w, 'set_modules', { enabled: w.modules }, { ...owner, role: 'Auditor' })).toThrow(/role does not permit/);
   });
 });

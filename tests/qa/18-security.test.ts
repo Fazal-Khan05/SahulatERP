@@ -759,7 +759,7 @@ describe('18 security', () => {
     expect(set('recovery')).toEqual(['Accountant', 'Auditor', 'Owner', 'Recovery Officer', 'Sales Manager']);
     expect(access).toContain('["Sales Manager", "Recovery Officer"].includes(role) || canReadLedger(role) ? source.followUps');
   });
-  it('SEC-100 eight roles × scripted commands: allow/deny matrix (company, branding and modules are Settings, Owner/Accountant only after setup) [defect: every non-Auditor role may save_company, save_branding and set_modules server-side]', () => {
+  it('SEC-100 eight roles × scripted commands: allow/deny matrix (company, branding and modules are Settings, Owner/Accountant only after setup)', () => {
     let base = freshCompany(); let item: string, cust: string, supp: string, draft: string;
     [base, item] = withItem(base, {}, { quantity: '50', cost: '1' }); [base, cust] = withParty(base); [base, supp] = withParty(base, 'supplier');
     const e = run(base, 'save_employee', { name: 'Rep One', role: 'Rep', territory: 'K', salary: '1', allowance: '0', deduction: '0', attendance: 30, active: true }); base = e.workspace;

@@ -190,3 +190,19 @@ describe('D-04 journals backed by stock movements cannot be reversed', () => {
     expectInvariants(reversed);
   });
 });
+
+describe('D-06 attendance import and the employee form share one 0–30 rule', () => {
+  function staff() {
+    const w = run(freshCompany(), 'save_employee', { name: 'Ayesha', role: 'Salesperson', territory: 'Karachi', salary: '30000', allowance: '0', deduction: '0', attendance: 30, active: true });
+    return { w: w.workspace, id: w.recordId };
+  }
+  it('D-06 31 and -1 are row errors in the import and refused by save_employee; 30 and 0 are accepted', () => {
+    const { w, id } = staff();
+    refused(w, 'import_records', { kind: 'attendance', rows: [{ employeeId: id, attendance: '31' }] }, 'Row 2: Attendance cannot exceed 30 days.');
+    refused(w, 'import_records', { kind: 'attendance', rows: [{ employeeId: id, attendance: '-1' }] }, 'Row 2: Attendance cannot be negative.');
+    const e = w.employees[0];
+    refused(w, 'save_employee', { ...e, attendance: 31 }, 'Attendance cannot exceed 30 days.');
+    expect(run(w, 'import_records', { kind: 'attendance', rows: [{ employeeId: id, attendance: '30' }] }).workspace.employees[0].attendance).toBe(30);
+    expect(run(w, 'import_records', { kind: 'attendance', rows: [{ employeeId: id, attendance: '0' }] }).workspace.employees[0].attendance).toBe(0);
+  });
+});

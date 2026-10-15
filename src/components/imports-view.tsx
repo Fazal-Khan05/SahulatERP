@@ -8,10 +8,11 @@ import { canRun } from '@/modules/erp/engine';
 import { businessToday } from '@/modules/erp/dates';
 import { documentPartyName, documentTitle } from '@/modules/erp/documents';
 import { formatMoney, money, sum } from '@/modules/erp/money';
-import type { Actor, ShipmentCost, Workspace } from '@/modules/erp/types';
+import type { Actor, Shipment, ShipmentCost, Workspace } from '@/modules/erp/types';
 
 type Classification = ShipmentCost['classification'];
 type Basis = ShipmentCost['basis'];
+const shipmentStatuses: [Shipment['status'], string][] = [['in_transit', 'In transit'], ['customs', 'Customs'], ['received', 'Received'], ['costed', 'Costed']];
 
 /** The four cost classes and what allocating each one does to the books. */
 export const costClasses: { value: Classification; label: string; help: string }[] = [
@@ -35,20 +36,29 @@ export function CostClassGuide() {
 /** Imports & costing: shipments from submitted receipts or bills, their landed costs, and allocation. */
 export function ImportsView({ workspace, actor, editable, busy, command }: { workspace: Workspace; actor: Actor; editable: boolean; busy: string; command: CommandFn }) {
   const [dialog, setDialog] = useState<'shipment' | 'cost' | null>(null);
+  const [status, setStatus] = useState('');
   const can = (action: string) => editable && canRun(actor.role, action);
   const shipments = workspace.shipments;
+  // Newest first, optionally one status.
+  const visible = shipments.filter(sh => !status || sh.status === status).reverse();
   const party = (id: string) => workspace.parties.find(p => p.id === id)?.name || '—';
   const actions = <div className="inventory-actions">
     {can('add_shipment_cost') && shipments.length > 0 && <Button variant="outline" onClick={() => setDialog('cost')}><Plus size={16}/>Add cost</Button>}
     {can('create_shipment') && <Button onClick={() => setDialog('shipment')}><Plus size={16}/>New shipment</Button>}
   </div>;
-  const rows = shipments.map(sh => {
+  const toolbar = <div className="list-filters" role="group" aria-label="Shipment filters">
+    <label>Status<select aria-label="Shipment status" value={status} onChange={e => setStatus(e.target.value)}><option value="">All statuses</option>{shipmentStatuses.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+    {status && <button className="list-filter-clear" type="button" onClick={() => setStatus('')}>Clear filters</button>}
+  </div>;
+  const empty = shipments.length ? <>No shipments match this status. <button className="text-button" type="button" onClick={() => setStatus('')}>Reset filters</button></> : 'No records yet.';
+  const rows = visible.map(sh => {
     const pending = sh.costs.filter(cost => !cost.allocated);
     return [sh.number, party(sh.supplierId), `${sh.container} · ${sh.gdNumber}`, sh.eta, <Status key="s" value={sh.status}/>, formatMoney(money(sum(pending.map(c => c.amount)))),
       can('allocate_shipment') && pending.length ? <Button key="a" size="sm" disabled={!!busy} onClick={() => command('allocate_shipment', { id: sh.id, date: businessToday() })}>Allocate</Button> : <span key="a">{pending.length ? 'Read only' : 'Complete'}</span>];
   });
   return <section className="stack">
-    <TableCard title="Import shipments" action={actions} heads={['Shipment', 'Supplier', 'Container / GD', 'ETA', 'Status', 'Unallocated', 'Action']} numeric={[5]} rows={rows}><CostClassGuide/></TableCard>
+    <TableCard title="Import shipments" action={actions} toolbar={toolbar} empty={empty} subtitle={status ? `${visible.length} of ${shipments.length} shipments` : undefined}
+      heads={['Shipment', 'Supplier', 'Container / GD', 'ETA', 'Status', 'Unallocated', 'Action']} numeric={[5]} rows={rows}><CostClassGuide/></TableCard>
     {dialog === 'shipment' && <NewShipmentDialog workspace={workspace} busy={busy} command={command} onClose={() => setDialog(null)}/>}
     {dialog === 'cost' && <AddCostDialog workspace={workspace} busy={busy} command={command} onClose={() => setDialog(null)}/>}
   </section>;

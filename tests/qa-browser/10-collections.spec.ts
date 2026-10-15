@@ -142,10 +142,22 @@ test('COL-070 Cheque register is also visible in Cash & bank with the same data'
   expect(inCashBank).toEqual(inCollections);
 });
 
-test('COL-075 Customer receipts list filters by method/status [defect]', async () => {
+test('COL-075 Customer receipts list filters by method/status', async () => {
   const { page } = s;
   await collections(page);
   await expect(receiptsCard(page).getByRole('combobox', { name: /method|status/i }).first()).toBeVisible({ timeout: 3000 });
+  const method = (row: string[]) => row[3];
+  const read = () => receiptsCard(page).locator('tbody tr').evaluateAll(trs => trs.map(tr => [...tr.querySelectorAll('td')].map(td => td.textContent ?? '')));
+  const all = await read();
+  await receiptsCard(page).getByLabel('Receipt method').selectOption('cheque');
+  const cheques = await read();
+  expect(cheques.length).toBeGreaterThan(0);
+  expect(cheques.length).toBeLessThan(all.length);
+  expect(cheques.every(r => method(r).startsWith('CHQ-'))).toBe(true);
+  await receiptsCard(page).getByLabel('Receipt status').selectOption('bounced');
+  expect((await read()).map(r => r[3])).toEqual(['CHQ-1004']);
+  await receiptsCard(page).getByRole('button', { name: 'Clear filters' }).click();
+  expect(await read()).toEqual(all);
 });
 
 test('COL-076 Search finds a receipt by cheque number [defect]', async () => {

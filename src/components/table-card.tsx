@@ -22,16 +22,23 @@ type TableCardProps = {
   title: string; action?: ReactNode; heads: string[]; rows: ReactNode[][]; children?: ReactNode;
   /** Indexes of the amount columns: right-aligned with tabular numerals, header included. */
   numeric?: number[];
+  /** Filters between the heading and the table. */
+  toolbar?: ReactNode;
+  /** Replaces "N records" under the title, e.g. "3 of 12 receipts". */
+  subtitle?: ReactNode;
+  /** What the table says when it has no rows. */
+  empty?: ReactNode;
 };
 
 /** A titled card holding one scrollable table; `children` render under the table. */
-export function TableCard({ title, action, heads, rows, children, numeric = [] }: TableCardProps) {
+export function TableCard({ title, action, heads, rows, children, numeric = [], toolbar, subtitle, empty = 'No records yet.' }: TableCardProps) {
   const align = (column: number) => numeric.includes(column) ? 'num align-right' : undefined;
   return <section className="card">
-    <div className="card-heading"><div><h2>{title}</h2><p>{rows.length} records</p></div>{action}</div>
+    <div className="card-heading"><div><h2>{title}</h2><p>{subtitle ?? `${rows.length} records`}</p></div>{action}</div>
+    {toolbar}
     <div className="table-scroll" tabIndex={0} role="region" aria-label={`${title} table`}><table>
       <thead><tr>{heads.map((head, column) => <th key={head} className={align(column)}>{head}</th>)}</tr></thead>
-      <tbody>{rows.length ? rows.map((row, index) => <tr key={index}>{row.map((cell, column) => <td key={column} className={align(column)}>{cell}</td>)}</tr>) : <tr><td colSpan={heads.length}><div className="empty-state">No records yet.</div></td></tr>}</tbody>
+      <tbody>{rows.length ? rows.map((row, index) => <tr key={index}>{row.map((cell, column) => <td key={column} className={align(column)}>{cell}</td>)}</tr>) : <tr><td colSpan={heads.length}><div className="empty-state">{empty}</div></td></tr>}</tbody>
     </table></div>
     <p className="table-scroll-hint">Swipe sideways to see every column.</p>
     {children}

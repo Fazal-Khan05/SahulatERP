@@ -94,16 +94,25 @@ test('IMP-057 Attention queue lists shipments with unallocated costs', async () 
   await expect(row).toContainText('1 records');
 });
 
-test('IMP-082 Shipment list is sorted newest first [defect]', async () => {
+test('IMP-082 Shipment list is sorted newest first', async () => {
   const { page } = s;
   await imports(page);
   expect(await rows(page).locator('td:first-child').allInnerTexts()).toEqual(['SHP-2026-002', 'SHP-2026-001']);
 });
 
-test('IMP-083 Shipments can be filtered by status [defect]', async () => {
+test('IMP-083 Shipments can be filtered by status', async () => {
   const { page } = s;
   await imports(page);
-  await expect(card(page).getByRole('combobox', { name: /status/i })).toBeVisible({ timeout: 3000 });
+  const status = card(page).getByRole('combobox', { name: /status/i });
+  await expect(status).toBeVisible({ timeout: 3000 });
+  await status.selectOption('costed');
+  expect(await rows(page).locator('td:first-child').allInnerTexts()).toEqual(['SHP-2026-001']);
+  await expect(card(page).locator('.card-heading p')).toHaveText('1 of 2 shipments');
+  await status.selectOption('in_transit');
+  await expect(rows(page)).toHaveCount(1);
+  await expect(rows(page)).toContainText('No shipments match this status.');
+  await card(page).getByRole('button', { name: 'Clear filters' }).click();
+  await expect(rows(page)).toHaveCount(2);
 });
 
 test('IMP-089 Status badges use a pastel colour per status', async () => {

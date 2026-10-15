@@ -10,6 +10,7 @@ vi.mock('@/modules/erp/engine', () => import('../../src/modules/erp/engine'));
 vi.mock('@/modules/erp/dates', () => import('../../src/modules/erp/dates'));
 import { ImportsView, costClasses } from '../../src/components/imports-view';
 import { PayrollRuns, payrollDate } from '../../src/components/payroll-runs';
+import { CustomerReceipts } from '../../src/components/receipts-list';
 import { execute } from '../../src/modules/erp/engine';
 import { TableCard, statusTone } from '../../src/components/table-card';
 import { buildDemoWorkspace } from '../../src/modules/erp/demo';
@@ -79,5 +80,18 @@ describe('H workspace view fixes', () => {
     const html = renderToStaticMarkup(createElement(TableCard, { title: 'Trial balance', heads: ['Code', 'Account', 'Net balance'], numeric: [2], rows: [['1000', 'Bank', 'Rs 5,000']] }));
     expect(html).toContain('<th>Code</th><th>Account</th><th class="num align-right">Net balance</th>');
     expect(html).toContain('<td>1000</td><td>Bank</td><td class="num align-right">Rs 5,000</td>');
+  });
+
+  it('D-40 customer receipts and shipments have filter bars and list newest first', () => {
+    const w = buildDemoWorkspace();
+    const receipts = renderToStaticMarkup(createElement(CustomerReceipts, { workspace: w, editable: true, onRecord: () => {} }));
+    for (const label of ['aria-label="Receipt method"', 'aria-label="Receipt status"', 'role="group" aria-label="Customer receipt filters"']) expect(receipts).toContain(label);
+    const customerReceipts = w.receipts.filter(r => w.parties.find(p => p.id === r.partyId)?.type !== 'supplier').map(r => r.number);
+    const shown = [...receipts.matchAll(/<tr><td>([^<]+)<\/td>/g)].map(m => m[1]);
+    expect(shown.length).toBeGreaterThan(1);
+    expect(shown).toEqual(customerReceipts.slice().reverse());
+    const imports = renderToStaticMarkup(createElement(ImportsView, { workspace: w, actor: actor('Owner'), editable: true, busy: '', command }));
+    expect(imports).toContain('aria-label="Shipment status"');
+    expect([...imports.matchAll(/<tr><td>(SHP-[^<]+)<\/td>/g)].map(m => m[1])).toEqual(w.shipments.map(sh => sh.number).reverse());
   });
 });

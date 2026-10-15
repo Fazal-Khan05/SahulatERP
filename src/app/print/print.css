@@ -34,21 +34,21 @@
 .doc-title { text-align: right; }
 .doc-title h1, .doc-title-text { margin: 0 0 1.5mm; font-size: 1.7em; font-weight: 700; line-height: 1.2; letter-spacing: .02em; color: var(--doc-accent); text-transform: uppercase; }
 .doc-title-meta { margin-left: auto; border-collapse: collapse; font-size: .92em; }
-.doc-title-meta th { text-align: left; font-weight: 500; color: #6a7889; padding: .3mm 4mm .3mm 0; }
+.doc-title-meta th { text-align: left; font-weight: 500; color: #4a5b6d; padding: .3mm 4mm .3mm 0; }
 .doc-title-meta td { text-align: right; font-weight: 600; white-space: nowrap; }
 .doc-parties { display: flex; justify-content: space-between; gap: 10mm; }
 .doc-parties > div:first-child { display: flex; flex-direction: column; gap: .6mm; min-width: 0; color: #4a5b6d; }
 .doc-parties strong { color: #152234; font-size: 1.05em; }
-.doc-label { display: block; font-size: .72em; letter-spacing: .1em; text-transform: uppercase; color: #8290a0; margin-bottom: 1mm; }
+.doc-label { display: block; font-size: .72em; letter-spacing: .1em; text-transform: uppercase; color: #627285; margin-bottom: 1mm; }
 .doc-meta { display: grid; grid-template-columns: auto auto; align-content: start; gap: 1mm 6mm; margin: 0; font-size: .92em; }
 .doc-meta div { display: contents; }
-.doc-meta dt { color: #6a7889; }
+.doc-meta dt { color: #4a5b6d; }
 .doc-meta dd { margin: 0; font-weight: 600; text-align: right; }
 .doc-lines { width: 100%; border-collapse: collapse; line-height: 1.3; }
 .doc-lines th { text-align: left; font-size: .78em; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: white; background: var(--doc-accent); padding: 2mm 2.5mm; }
 .doc .doc-lines td { padding: 1.4mm 2.5mm; border-bottom: 1px solid #cfd7e0; overflow-wrap: anywhere; }
 .doc-lines td strong { display: block; font-weight: 600; }
-.doc-lines td small { display: block; color: #8290a0; margin-top: .2mm; }
+.doc-lines td small { display: block; color: #627285; margin-top: .2mm; }
 .doc .doc-lines .doc-tail-cell { padding: 5mm 0 0; border: 0; }
 .doc-lines .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .doc-bottom { display: flex; justify-content: space-between; align-items: flex-start; gap: 10mm; }
@@ -62,7 +62,7 @@
 .doc-totals tr.credit td { color: #2d5f9a; }
 .doc-footer { margin-top: 6mm; border-top: 1px solid #cfd7e0; padding-top: 3mm; color: #4a5b6d; font-size: .9em; text-align: left; }
 .doc-footer p { margin: 0 0 2mm; white-space: pre-wrap; }
-.doc-footer small { color: #8290a0; }
+.doc-footer small { color: #627285; }
 /* Drafts and cancelled documents: a banner above the header and a watermark, which Chromium repeats on every printed page. */
 .doc-status-banner { padding: 2mm 3mm; border: 1.5px solid currentColor; border-radius: 1.5mm; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; text-align: center; }
 .doc-status-draft { color: #8a4b00; }

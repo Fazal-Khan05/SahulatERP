@@ -77,6 +77,19 @@ describe('D-24 drafts and cancelled documents are marked', () => {
   });
 });
 
+describe('D-47 printed labels meet 4.5:1 on the white sheet', () => {
+  const luminance = (hex: string) => {
+    const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(s => s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const contrastOnWhite = (hex: string) => 1.05 / (luminance(hex) + 0.05);
+  it.each(['.doc-title-meta th', '.doc-meta dt', '.doc-label', '.doc-lines td small', '.doc-footer small'])('%s', selector => {
+    const rule = printCss.split('\n').find(line => line.startsWith(`${selector} {`))!;
+    const colour = /[{;] color: (#[0-9a-f]{6});/.exec(rule)![1];
+    expect(contrastOnWhite(colour)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
 describe('D-15 reprints use the invoice-time tax snapshot', () => {
   const sell = (w: Workspace, partyId: string) => {
     const created = run(w, 'create_document', { kind: 'sales_invoice', partyId, warehouseId: 'khi-main', date: '2026-10-15', dueDate: '2026-11-14', lines: [{ itemId: 'i-1', quantity: '1', price: '2400', taxRate: '18' }] });

@@ -18,11 +18,33 @@ import { DEMO_TENANT, PARTNER_TENANT, roles, type Role } from '../../src/modules
 type Row = Record<string, unknown>;
 const root = resolve(__dirname, '../..');
 
-const S = vi.hoisted(() => ({ exchanged: [] as string[] }));
+// Route handlers run for real; the session, snapshot store and storage are stand-ins controlled per test.
+const S = vi.hoisted(() => ({
+  exchanged: [] as string[],
+  member: (async () => ({ actor: { id: 'u-d', name: 'D Owner', role: 'Owner', branchIds: [] }, user: { id: 'u-d', email: 'd@qa.example' } })) as (tenant: string | null) => Promise<unknown>,
+  read: (async () => { throw new Error('unset'); }) as (tenant: string) => Promise<unknown>,
+  commit: (async () => true) as (tenant: string, expected: number, workspace: unknown) => Promise<boolean>,
+  commits: 0,
+  events: [] as string[],
+}));
+vi.mock('server-only', () => ({}));
 vi.mock('@/lib/supabase/server', () => ({
   createServerSupabase: async () => ({ auth: { exchangeCodeForSession: async (code: string) => { S.exchanged.push(code); return {}; } } }),
 }));
+vi.mock('@/lib/workspace-store', () => ({
+  requireMember: (tenant: string | null) => { S.events.push('member'); return S.member(tenant); },
+  readWorkspace: (tenant: string) => { S.events.push('read'); return S.read(tenant); },
+  commitWorkspace: (tenant: string, expected: number, workspace: unknown) => { S.commits++; return S.commit(tenant, expected, workspace); },
+}));
+vi.mock('@/lib/password', () => ({ verifyPassword: async () => ({ ok: true }) }));
+vi.mock('@/lib/supabase/admin', () => ({ createAdminSupabase: () => ({ storage: { from: () => ({ remove: async () => ({}), upload: async () => ({ error: null }) }) } }) }));
+vi.mock('@/lib/branding-store', () => import('../../src/lib/branding-store'));
+vi.mock('@/modules/erp/access', () => import('../../src/modules/erp/access'));
+vi.mock('@/modules/erp/engine', () => import('../../src/modules/erp/engine'));
+vi.mock('@/modules/erp/modules', () => import('../../src/modules/erp/modules'));
 import * as callbackRoute from '../../src/app/auth/callback/route';
+import * as uploadRoute from '../../src/app/api/branding/upload/route';
+import * as workspaceRoute from '../../src/app/api/workspace/route';
 
 // ---------- D-07: role-aware reads on the relational projection (PGlite with the real migrations) ----------
 const supabaseStubs = `
@@ -210,5 +232,89 @@ describe('D-20 CSV export neutralises formula cells', () => {
     const pick = (ws: typeof w) => customers.records(ws).map(p => [p.name, p.phone, p.city]);
     expect(pick(imported)).toEqual(pick(w));
     expect(pick(imported).map(r => r[0])).toEqual(['=Danger Traders', 'Plain Co']);
+  });
+});
+
+// ---------- D-30: unexpected failures are 500, generic and logged; refusals stay 4xx ----------
+const TENANT = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const companyWorkspace = () => ({ ...blankWorkspace(false), tenantId: TENANT, modules: [...toggleModules] });
+let keyN = 0;
+const command = (type: string, payload: Row = {}) => ({ type, payload, idempotencyKey: `fixes-d-${++keyN}-${Date.now()}` });
+const jsonPost = (body: unknown, headers: Record<string, string> = { 'content-type': 'application/json' }) =>
+  new Request('http://localhost/api/workspace', { method: 'POST', headers: { 'x-tenant-id': TENANT, ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) });
+async function send(request: Request) {
+  const response = await workspaceRoute.POST(request);
+  return { status: response.status, json: await response.json() as Row };
+}
+function resetStore(workspace: unknown = companyWorkspace()) {
+  S.member = async () => ({ actor: { id: 'u-d', name: 'D Owner', role: 'Owner', branchIds: [] }, user: { id: 'u-d', email: 'd@qa.example' } });
+  S.read = async () => ({ workspace, revision: 1 });
+  S.commit = async () => true;
+  S.commits = 0;
+  S.events = [];
+}
+const GENERIC = 'Something went wrong on the server. Please try again.';
+
+describe('D-30 workspace API error mapping', () => {
+  it('a bug in the engine (TypeError) is a logged 500 with a generic message', async () => {
+    resetStore({ ...companyWorkspace(), documents: null });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const r = await send(jsonPost(command('submit_document', { id: 'x' })));
+    expect(r).toEqual({ status: 500, json: { success: false, message: GENERIC } });
+    expect(log).toHaveBeenCalledWith('Workspace command: unexpected failure', expect.any(TypeError));
+    log.mockRestore();
+  });
+
+  it('the database or network failing is a logged 500, whatever shape the error has', async () => {
+    for (const thrown of [{ message: 'TypeError: fetch failed', code: '' }, new TypeError('fetch failed'), new Error('Workspace not found.'), 'boom']) {
+      resetStore(); S.read = async () => { throw thrown; };
+      const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      expect(await send(jsonPost(command('save_company', { name: 'A Co', address: 'x' }))), JSON.stringify(thrown)).toEqual({ status: 500, json: { success: false, message: GENERIC } });
+      const get = await workspaceRoute.GET(new Request(`http://localhost/api/workspace?tenant=${TENANT}`));
+      expect([get.status, await get.json()]).toEqual([500, { success: false, message: GENERIC }]);
+      expect(log).toHaveBeenCalledTimes(2);
+      log.mockRestore();
+    }
+  });
+
+  it('business refusals and invalid input stay 400 with their message; sign-in and membership stay 401/403', async () => {
+    resetStore();
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const refused = await send(jsonPost(command('submit_document', { id: 'missing' })));
+    expect(refused.status).toBe(400);
+    expect(refused.json.message).toMatch(/not found/);
+    expect((await send(jsonPost(command('drop_all_tables')))).json).toMatchObject({ message: 'Check the highlighted information.' });
+    expect(await send(jsonPost('{"type":'))).toEqual({ status: 400, json: { success: false, message: 'The request is not valid JSON.' } });
+    for (const body of ['null', '[1]', '"text"', '7']) expect(await send(jsonPost(body)), body).toEqual({ status: 400, json: { success: false, message: 'The request must be a JSON object.' } });
+    for (const [code, status] of [['AUTH_REQUIRED', 401], ['ACCESS_DENIED', 403], ['TENANT_REQUIRED', 403]] as const) {
+      S.member = async () => { throw new Error(code); };
+      expect(await send(jsonPost(command('save_company', { name: 'A Co', address: 'x' }))), code).toEqual({ status, json: { success: false, message: code } });
+    }
+    expect(log).not.toHaveBeenCalled();
+    log.mockRestore();
+  });
+
+  it('a change the database refuses keeps its own 500 message', async () => {
+    resetStore(); S.commit = async () => { throw new Error('INTEGRITY:Journal JV-1 is not balanced.'); };
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const r = await send(jsonPost(command('save_company', { name: 'A Co', address: 'x' })));
+    expect(r.status).toBe(500);
+    expect(r.json.message).toBe('The database rejected this change because it would break a financial integrity rule. Nothing was saved.');
+    expect(log).toHaveBeenCalledWith('Workspace command: commit rejected by database', 'INTEGRITY:Journal JV-1 is not balanced.');
+    log.mockRestore();
+  });
+
+  it('branding upload: a body that is not a form is a 400; a storage or database fault is a logged 500', async () => {
+    resetStore();
+    const upload = (body: BodyInit, headers: Record<string, string> = {}) => uploadRoute.POST(new Request('http://localhost/api/branding/upload', { method: 'POST', headers: { 'x-tenant-id': TENANT, ...headers }, body }));
+    const notForm = await upload('kind=logo', { 'content-type': 'text/plain' });
+    expect([notForm.status, (await notForm.json()).message]).toEqual([400, 'Choose a logo or letterhead image.']);
+    const form = new FormData(); form.set('kind', 'logo'); form.set('file', new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0, 0, 0])], 'logo.png', { type: 'image/png' }));
+    S.read = async () => { throw new TypeError('fetch failed'); };
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const fault = await upload(form);
+    expect([fault.status, await fault.json()]).toEqual([500, { success: false, message: GENERIC }]);
+    expect(log).toHaveBeenCalledWith('Branding upload: unexpected failure', expect.any(TypeError));
+    log.mockRestore();
   });
 });

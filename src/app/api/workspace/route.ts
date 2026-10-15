@@ -1,9 +1,9 @@
-import { ZodError } from 'zod';
 import { verifyPassword } from '@/lib/password';
 import { commitWorkspace, readWorkspace, requireMember } from '@/lib/workspace-store';
 import { scopeWorkspace } from '@/modules/erp/access';
 import { execute } from '@/modules/erp/engine';
 import { isToggleModule, withRequirements } from '@/modules/erp/modules';
+import { failureResponse, isRefusal, refusalResponse } from '../errors';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,16 +11,7 @@ function tenantOf(request: Request) {
   return request.headers.get('x-tenant-id') || new URL(request.url).searchParams.get('tenant');
 }
 
-function errorResponse(error: unknown) {
-  if (error instanceof ZodError) return Response.json({ success: false, message: 'Check the highlighted information.', validationErrors: error.flatten() }, { status: 400 });
-  const message = error instanceof Error ? error.message : 'Unexpected request failure.';
-  if (message.startsWith('INTEGRITY:')) {
-    console.error('Workspace commit rejected by database', message);
-    return Response.json({ success: false, message: 'The database rejected this change because it would break a financial integrity rule. Nothing was saved.' }, { status: 500 });
-  }
-  const status = message === 'AUTH_REQUIRED' ? 401 : ['ACCESS_DENIED','TENANT_REQUIRED'].includes(message) ? 403 : message === 'PASSWORD_REQUIRED' ? 401 : 400;
-  return Response.json({ success: false, message }, { status });
-}
+const badRequest = (message: string) => Response.json({ success: false, message }, { status: 400 });
 
 export async function GET(request: Request) {
   try {
@@ -28,7 +19,7 @@ export async function GET(request: Request) {
     const { actor } = await requireMember(tenantId);
     const { workspace } = await readWorkspace(tenantId!);
     return Response.json({ success: true, workspace: scopeWorkspace(workspace, actor), actor });
-  } catch (error) { return errorResponse(error); }
+  } catch (error) { return failureResponse(error, 'Workspace read'); }
 }
 
 export async function POST(request: Request) {
@@ -39,10 +30,12 @@ export async function POST(request: Request) {
     const text = await request.text();
     if (!text) {
       console.error('Empty workspace command body', { method: request.method, length: request.headers.get('content-length'), type: request.headers.get('content-type') });
-      return Response.json({ success: false, message: 'The request reached the server without its data. Please try again.' }, { status: 400 });
+      return badRequest('The request reached the server without its data. Please try again.');
     }
-    const body = JSON.parse(text) as { type?: string; payload?: Record<string, unknown>; confirmPassword?: string };
-    const { confirmPassword, ...command } = body;
+    let body: unknown;
+    try { body = JSON.parse(text); } catch { return badRequest('The request is not valid JSON.'); }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return badRequest('The request must be a JSON object.');
+    const { confirmPassword, ...command } = body as { type?: string; payload?: Record<string, unknown>; confirmPassword?: string };
 
     // Hiding a module needs the member's own password; turning one on does not.
     if (command.type === 'set_modules') {
@@ -54,9 +47,11 @@ export async function POST(request: Request) {
       }
     }
 
-    const result = execute(workspace, command, actor);
+    let result: ReturnType<typeof execute>;
+    try { result = execute(workspace, command, actor); }
+    catch (error) { if (isRefusal(error)) return refusalResponse(error); throw error; }
     if (result.workspace === workspace) return Response.json({ success: true, recordId: result.recordId, message: result.message, warnings: [], workspace: scopeWorkspace(workspace, actor) });
     if (!await commitWorkspace(tenantId!, revision, result.workspace)) return Response.json({ success: false, message: 'Another change was saved first. Refresh and try again.' }, { status: 409 });
     return Response.json({ success: true, recordId: result.recordId, message: result.message, warnings: [], workspace: scopeWorkspace(result.workspace, actor) });
-  } catch (error) { return errorResponse(error); }
+  } catch (error) { return failureResponse(error, 'Workspace command'); }
 }

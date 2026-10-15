@@ -579,7 +579,7 @@ describe('18 security', () => {
       expect(JSON.stringify(b.json)).not.toMatch(/\n\s+at |\.ts:\d+|node_modules/);
     }
   });
-  it('SEC-068 an unexpected engine exception returns 500 with a generic message and is logged server-side [defect: returns 400 with the raw TypeError text, nothing logged]', async () => {
+  it('SEC-068 an unexpected engine exception returns 500 with a generic message and is logged server-side', async () => {
     const broken = { ...company(T), documents: null } as unknown as Workspace;
     seed([broken], [[T, 'Owner']]);
     const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -740,11 +740,13 @@ describe('18 security', () => {
     expect(businessToday(new Date('2026-10-13T19:30:00Z'))).toBe('2026-10-14');
     expect(businessToday(new Date('2026-10-13T18:59:59Z'))).toBe('2026-10-13');
   });
-  it('SEC-095 server logs carry no PII or payloads [documented: only "Empty workspace command body" (method/length/type) and database rejection messages are logged]', () => {
+  it('SEC-095 server logs carry no PII or payloads [documented: only "Empty workspace command body" (method/length/type), database rejection messages and unexpected server failures (the thrown error, never the request body) are logged]', () => {
     const files = execSync('git ls-files src', { cwd: root, encoding: 'utf8' }).split('\n').filter(f => /\.(ts|tsx)$/.test(f));
     const logs = files.flatMap(f => [...src(f).matchAll(/console\.(log|error|warn|info)\(([^;]*)\)/g)].map(m => `${f}: ${m[2]}`));
     expect(logs).toEqual([
-      "src/app/api/workspace/route.ts: 'Workspace commit rejected by database', message",
+      'src/app/api/demo-reset/route.ts: \'Demo reset: unexpected failure\', error',
+      'src/app/api/errors.ts: `${context}: commit rejected by database`, message',
+      'src/app/api/errors.ts: `${context}: unexpected failure`, error',
       "src/app/api/workspace/route.ts: 'Empty workspace command body', { method: request.method, length: request.headers.get('content-length'), type: request.headers.get('content-type') }",
     ]);
   });

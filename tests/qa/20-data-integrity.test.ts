@@ -533,10 +533,13 @@ describe('20 data integrity', () => {
     expect(after.revision).toBe(revision);
     expect(after.workspace.company.name).not.toBe('Crash Co');
   });
-  it('DAT-060 database unreachable → 500 with a generic message; retry later works [defect: status 400 "Unexpected request failure.", not 500]', async () => {
+  it('DAT-060 database unreachable → 500 with a generic message; retry later works', async () => {
     S.read = async () => { throw { message: 'TypeError: fetch failed', details: '', hint: '', code: '' }; };
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const r1 = await workspaceRoute.POST(new Request('http://localhost/api/workspace', { method: 'POST', headers: { 'x-tenant-id': 't' }, body: JSON.stringify({ type: 'save_company', payload: { name: 'A Co', address: 'x' }, idempotencyKey: 'dat-060-key' }) }));
-    expect((await r1.json() as { message: string }).message).toBe('Unexpected request failure.');
+    expect((await r1.json() as { message: string }).message).toBe('Something went wrong on the server. Please try again.');
+    expect(log).toHaveBeenCalled();
+    log.mockRestore();
     const w = freshCompany(); S.read = async () => ({ workspace: w, revision: w.revision });
     const r2 = await workspaceRoute.POST(new Request('http://localhost/api/workspace', { method: 'POST', headers: { 'x-tenant-id': 't' }, body: JSON.stringify({ type: 'save_company', payload: { name: 'A Co', address: 'x' }, idempotencyKey: 'dat-060-key' }) }));
     expect(r2.status).toBe(200);

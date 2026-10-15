@@ -61,7 +61,7 @@ describe('13 Payroll (PAY)', () => {
     let w = freshCompany();
     [w] = addEmployee(w, 'Ayesha');
     expect(payrollConfigured(w)).toBe(false);
-    refused(w, 'create_payroll', { month: MONTH }, 'Enter EOBI and income-tax settings in Settings → Payroll before running payroll.');
+    refused(w, 'create_payroll', { month: MONTH }, 'Enter EOBI and income-tax settings in Settings → Payroll & tax before running payroll.');
   });
 
   it('PAY-002 save settings: employer EOBI 5, employee EOBI 1, base 32,000, tax 5', () => {
@@ -389,7 +389,7 @@ describe('13 Payroll (PAY)', () => {
     w = run(w, 'set_modules', { enabled: [...w.modules, 'payroll'] }).workspace;
     expect(w.modules).toContain('payroll');
     [w] = addEmployee(w, 'Ayesha');
-    refused(w, 'create_payroll', { month: MONTH }, 'Enter EOBI and income-tax settings in Settings → Payroll before running payroll.');
+    refused(w, 'create_payroll', { month: MONTH }, 'Enter EOBI and income-tax settings in Settings → Payroll & tax before running payroll.');
   });
 
   it('PAY-042 salary 0 employee: line with 0 gross; commission still paid', () => {
@@ -435,7 +435,7 @@ describe('13 Payroll (PAY)', () => {
   it('PAY-047 blank statutory settings save, but payroll is refused', () => {
     let w = run(freshCompany(), 'save_settings', { ...SETTINGS, employerEobi: '', employeeEobi: '', eobiBase: '', incomeTaxRate: '' }).workspace;
     [w] = addEmployee(w, 'Ayesha');
-    refused(w, 'create_payroll', { month: MONTH }, 'Enter EOBI and income-tax settings in Settings → Payroll before running payroll.');
+    refused(w, 'create_payroll', { month: MONTH }, 'Enter EOBI and income-tax settings in Settings → Payroll & tax before running payroll.');
   });
 
   it('PAY-048 run numbering [case-corrected: PAY-YYYY-MM (one run per month), not PAY-2026-0001]', () => {

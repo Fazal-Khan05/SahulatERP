@@ -4,7 +4,7 @@ Monthly run per month; statuses draft → reviewed → approved → paid. Needs 
 
 | ID | P | T | Case | Expected |
 |---|---|---|---|---|
-| PAY-001 | P1 | N | Create payroll with no statutory settings | "Enter EOBI and income-tax settings in Settings → Payroll before running payroll." |
+| PAY-001 | P1 | N | Create payroll with no statutory settings | "Enter EOBI and income-tax settings in Settings → Payroll & tax before running payroll." |
 | PAY-002 | P1 | F | Save settings: employer EOBI 5, employee EOBI 1, base 32,000, tax 5 | Saved |
 | PAY-003 | P1 | N | Create payroll with no active employees | "Add active employees before creating payroll." |
 | PAY-004 | P1 | F | Create payroll 2026-10 | Draft run with a line per active employee; gross, EOBI, tax, commission, net |

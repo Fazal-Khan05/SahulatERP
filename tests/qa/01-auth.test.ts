@@ -209,11 +209,12 @@ describe('01 auth', () => {
     expect(text(html)).toContain('Workspace unavailable');
     expect(html).not.toMatch(/at \w+ \(|Error:/);
   });
-  it('AUTH-032 forgot password with empty email is validated client-side before any request [defect]', () => {
-    // reset() is a type="button" handler that calls resetPasswordForEmail(email) without checking the email first.
+  it('AUTH-032 forgot password with empty email is validated client-side before any request', () => {
+    // reset() is a type="button" handler (no native form validation), so it checks the address itself before posting.
     const source = src('src/components/login-screen.tsx');
     const reset = source.slice(source.indexOf('async function reset()'), source.indexOf('return <main'));
     expect(reset).toMatch(/if\s*\(\s*!email/);
+    expect(reset.search(/if\s*\(\s*!email/)).toBeLessThan(reset.indexOf("postAuth('/auth/forgot'"));
   });
   it('AUTH-035 reset page shows "Choose a password of at least 8 characters" (initially checking the link)', () => {
     const t = text(renderToStaticMarkup(createElement(ResetPassword)));

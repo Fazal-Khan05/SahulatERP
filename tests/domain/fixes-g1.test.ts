@@ -69,6 +69,11 @@ describe('D-31 sign-in, reset and password change run on the server', () => {
     expect(S.calls).toEqual([]);
   });
 
+  it('D-50 forgot password with an empty address is refused before Supabase is called', async () => {
+    for (const email of ['', '   ']) expect(await answer(await forgot.POST(post('/auth/forgot', { email })))).toEqual({ status: 400, body: { message: 'Enter your email address first.' } });
+    expect(S.calls).toEqual([]);
+  });
+
   it('D-31 forgot password emails a link back to this app\'s callback and answers the same for unknown or limited addresses', async () => {
     expect(await answer(await forgot.POST(post('/auth/forgot', { email: ' owner@qa.example ' })))).toEqual({ status: 200, body: { ok: true } });
     expect(S.calls).toEqual([['reset', 'owner@qa.example', { redirectTo: 'https://erp.example/auth/callback?next=/account/reset' }]]);

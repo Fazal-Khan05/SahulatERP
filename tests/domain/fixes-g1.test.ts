@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 type AuthError = { message: string; status?: number; code?: string };
 const S = vi.hoisted(() => ({
   user: null as null | { id: string },
+  session: 'session-1',
   calls: [] as [string, ...unknown[]][],
   error: null as null | { message: string; status?: number; code?: string },
 }));
@@ -19,6 +20,7 @@ vi.mock('@/lib/supabase/server', () => ({
   createServerSupabase: async () => ({
     auth: {
       getUser: async () => ({ data: { user: S.user }, error: null }),
+      getClaims: async () => (S.user ? { data: { claims: { sub: S.user.id, session_id: S.session } }, error: null } : { data: null, error: null }),
       signInWithPassword: async (credentials: unknown) => { S.calls.push(['signIn', credentials]); return { data: {}, error: S.error }; },
       resetPasswordForEmail: async (email: string, options: unknown) => { S.calls.push(['reset', email, options]); return { data: {}, error: S.error }; },
       updateUser: async (attributes: unknown) => { S.calls.push(['update', attributes]); return { data: {}, error: S.error }; },
@@ -33,10 +35,10 @@ import { postAuth } from '../../src/lib/supabase/client';
 
 const post = (path: string, body: unknown, type = 'application/json') =>
   new Request(`https://erp.example${path}`, { method: 'POST', headers: { 'content-type': type }, body: typeof body === 'string' ? body : JSON.stringify(body) });
-const answer = async (response: Response) => ({ status: response.status, body: await response.json() as { ok?: boolean; message?: string; ready?: boolean } });
+const answer = async (response: Response) => ({ status: response.status, body: await response.json() as { ok?: boolean; message?: string; ready?: boolean; link?: string } });
 const fail = (error: AuthError) => { S.error = error; };
 
-beforeEach(() => { S.user = null; S.calls = []; S.error = null; jar.clear(); });
+beforeEach(() => { S.user = null; S.session = 'session-1'; S.calls = []; S.error = null; jar.clear(); });
 
 describe('D-31 sign-in, reset and password change run on the server', () => {
   it('D-31 sign-in passes the trimmed email and the exact password to Supabase and answers ok', async () => {
@@ -87,7 +89,20 @@ describe('D-31 sign-in, reset and password change run on the server', () => {
   it('D-31 the reset page learns from the server whether a recovery session exists', async () => {
     expect(await answer(await password.GET())).toEqual({ status: 200, body: { ready: false } });
     S.user = { id: 'u-1' };
-    expect(await answer(await password.GET())).toEqual({ status: 200, body: { ready: true } });
+    expect(await answer(await password.GET())).toMatchObject({ status: 200, body: { ready: true } });
+  });
+
+  it('D-52 the reset page gets a stable name for its reset session, so a refresh after success can show the finished state', async () => {
+    S.user = { id: 'u-1' };
+    const first = (await answer(await password.GET())).body.link!;
+    expect(first).toMatch(/^[0-9a-f]{32}$/);
+    expect(first).not.toContain('session-1');
+    expect((await answer(await password.GET())).body.link).toBe(first);
+    // A new emailed link creates a new session, so its page offers the form again.
+    S.session = 'session-2';
+    expect((await answer(await password.GET())).body.link).not.toBe(first);
+    S.user = null;
+    expect((await answer(await password.GET())).body).toEqual({ ready: false });
   });
 
   it('D-31 a new password needs a session and 8 characters; Supabase refusals are shown in plain words', async () => {

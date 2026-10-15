@@ -407,7 +407,7 @@ test('AUTH-078 Emoji password is sent intact [documented: no account has an emoj
   await context.close();
 });
 
-test('AUTH-084 Refresh on /account/reset after a successful change shows the expired/complete state, not the form [defect]', async ({ browser }) => {
+test('AUTH-084 Refresh on /account/reset after a successful change shows the expired/complete state, not the form', async ({ browser }) => {
   const { context, page } = await signedInPage(browser);
   // The change is stubbed (and uses the current password) so the real password never changes. The password is
   // set by the app's /auth/password route (D-31); its GET (does this browser hold a reset session?) stays real.
@@ -425,6 +425,7 @@ test('AUTH-084 Refresh on /account/reset after a successful change shows the exp
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(1500);
   await expect(page.getByLabel('New password', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Your password was changed.')).toBeVisible();
   await context.close();
 });
 

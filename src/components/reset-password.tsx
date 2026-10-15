@@ -6,8 +6,14 @@ import { Button } from './ui/button';
 
 type State = 'checking' | 'ready' | 'expired' | 'saved';
 
+// The reset session that last set a password here. A refresh, or the same emailed link again, then shows the
+// finished state instead of a second form.
+const CHANGED = 'sahulat-password-changed';
+const changedLink = () => { try { return localStorage.getItem(CHANGED); } catch { return null; } };
+
 export function ResetPassword() {
   const [state, setState] = useState<State>('checking');
+  const [link, setLink] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
@@ -17,8 +23,8 @@ export function ResetPassword() {
   // The session cookies are HttpOnly, so the server answers whether there is one.
   useEffect(() => {
     fetch('/auth/password', { cache: 'no-store' })
-      .then(response => response.json() as Promise<{ ready?: boolean }>)
-      .then(({ ready }) => setState(ready ? 'ready' : 'expired'), () => setState('expired'));
+      .then(response => response.json() as Promise<{ ready?: boolean; link?: string }>)
+      .then(({ ready, link = '' }) => { setLink(link); setState(!ready ? 'expired' : changedLink() === link ? 'saved' : 'ready'); }, () => setState('expired'));
   }, []);
 
   async function submit(event: FormEvent) {
@@ -29,6 +35,7 @@ export function ResetPassword() {
     const error = await postAuth('/auth/password', { password });
     setBusy(false);
     if (error) return setMessage(error);
+    try { localStorage.setItem(CHANGED, link); } catch { /* storage blocked: a refresh shows the form again, nothing worse */ }
     setState('saved');
   }
 

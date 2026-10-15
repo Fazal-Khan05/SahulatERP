@@ -1,12 +1,16 @@
+import { createHash } from 'node:crypto';
 import { readJson, reply, unavailable } from '@/lib/supabase/request';
 import { createServerSupabase } from '@/lib/supabase/server';
 
 const EXPIRED = 'This reset link has expired or was already used. Request a new one from the sign-in page.';
 
-// Whether this browser holds the session that /auth/callback created from an emailed reset link.
+// Whether this browser holds the session that /auth/callback created from an emailed reset link. `link` names
+// that session without exposing it, so the page can tell that this reset already set its password.
 export async function GET() {
-  const { data } = await (await createServerSupabase()).auth.getUser();
-  return Response.json({ ready: Boolean(data.user) }, { headers: { 'cache-control': 'no-store' } });
+  const { data } = await (await createServerSupabase()).auth.getClaims();
+  const session = data?.claims.session_id;
+  const body = session ? { ready: true, link: createHash('sha256').update(session).digest('hex').slice(0, 32) } : { ready: false };
+  return Response.json(body, { headers: { 'cache-control': 'no-store' } });
 }
 
 // Sets the new password for the signed-in (recovery) session.

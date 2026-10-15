@@ -559,7 +559,7 @@ test.describe('document details dialog', () => {
     await expect(rows).toHaveCount(rowsBefore);
   });
 
-  test('PRN-062 details dialog on phone is a bottom sheet that scrolls [documented: the sheet keeps 20px radius on its bottom corners too — globals.css `.dialog-content{border-radius:20px}` (colour layer) overrides the phone sheet rule `…0 0`]', async ({ browser }) => {
+  test('PRN-062 details dialog on phone is a bottom sheet that scrolls', async ({ browser }) => {
     const phone = await signedInPage(browser, { viewport: PHONE, isMobile: true, hasTouch: true });
     try {
       await gotoApp(phone.page);
@@ -574,7 +574,7 @@ test.describe('document details dialog', () => {
       expect(Math.abs(m.bottom - m.vh)).toBeLessThanOrEqual(1);
       expect(m.top).toBeGreaterThan(0);
       expect(parseFloat(m.rTop)).toBeGreaterThan(0);
-      expect(m.rBottom).toBe('20px'); // documented in the title: the later `.dialog-content{border-radius:20px}` rule wins
+      expect(m.rBottom).toBe('0px'); // D-63: square bottom corners so the sheet meets the screen edge
       expect(['auto', 'scroll']).toContain(m.overflowY);
       expect(m.sh).toBeGreaterThan(m.ch);
       const box = (await dialog.boundingBox())!;

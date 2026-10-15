@@ -99,7 +99,10 @@ describe('17 shell', () => {
   });
   it('NAV-024 search with regex characters is literal (substring includes, no RegExp)', () => {
     const search = wbSource.slice(wbSource.indexOf('function SearchDialog'), wbSource.indexOf('export function Workbench'));
-    expect(search).toContain('.toLocaleLowerCase().includes(needle)');
+    // D-36: the haystack is lower-cased once when the index is built; each keystroke is a plain substring test.
+    expect(search).toContain('.toLocaleLowerCase(),detail:');
+    expect(search).toContain('if(entry.text.includes(needle))');
+    expect(search).toContain('const needle=query.trim().toLocaleLowerCase();');
     expect(search).not.toMatch(/new RegExp|\.match\(|\.test\(/);
   });
   it('NAV-029 bell badge count equals the attention items', () => {
@@ -109,9 +112,9 @@ describe('17 shell', () => {
     expect(owner).toContain(`aria-label="Notifications, ${total} items need attention"`);
     expect(owner).toContain(`<span class="bell-count">${total}</span>`);
   });
-  it('NAV-031 attention queues appear when relevant [case-corrected: queues are commission awaiting approval, unallocated shipment costs, open customer invoices, cheques due, follow-ups due and draft sales; there is no low-stock or overdue supplier-bill queue]', () => {
+  it('NAV-031 attention queues appear when relevant [case-corrected: queues are commission awaiting approval, unallocated shipment costs, overdue supplier bills (D-42, for roles that pay suppliers), open customer invoices, cheques due, follow-ups due and draft sales; there is no low-stock queue]', () => {
     const queues = [...wbSource.slice(wbSource.indexOf('function attentionItems'), wbSource.indexOf('function WorkspaceSwitcher')).matchAll(/\['(\w+)','([A-Z][^']+)'/g)].map(m => m[2]);
-    expect(queues).toEqual(['Commission awaiting approval', 'Shipment costs unallocated', 'Open customer invoices', 'Cheques due for deposit or clearing', 'Recovery follow-ups due', 'Draft sales documents to submit']);
+    expect(queues).toEqual(['Commission awaiting approval', 'Shipment costs unallocated', 'Overdue supplier bills', 'Open customer invoices', 'Cheques due for deposit or clearing', 'Recovery follow-ups due', 'Draft sales documents to submit']);
     let w = freshCompany(); let item: string, cust: string; [w, item] = withItem(w, {}, { quantity: '5', cost: '1' }); [w, cust] = withParty(w);
     [w] = withDocument(w, 'sales_invoice', cust, [{ itemId: item, quantity: '1', price: '10' }], {}, false);
     expect(attention(shell(w))).toEqual([['Draft sales documents to submit', 1]]);
@@ -141,8 +144,8 @@ describe('17 shell', () => {
     const values = [...owner.matchAll(/<div class="metric-label">([^<]+)<span[\s\S]*?<\/span><\/div><strong>([^<]+)<\/strong>/g)].map(m => [m[1], m[2]]);
     expect(values).toEqual([['Total sales', formatMoney(s.sales)], ['Collections', formatMoney(s.collections)], ['Outstanding receivables', formatMoney(s.receivables)], ['Inventory value', formatMoney(s.inventory)]]);
   });
-  it('NAV-037 metric cards stagger in by 40ms; reduced motion has no stagger [defect: cards never set --i, so every delay is 0]', () => {
-    expect(css).toContain('.metric-grid>.metric-card{animation:view-in var(--duration-slow) var(--ease-out) both;animation-delay:calc(var(--i,0) * 40ms)}');
+  it('NAV-037 metric cards stagger in by 40ms; reduced motion has no stagger', () => {
+    expect(css).toContain('.metric-grid>.metric-card{animation:view-in var(--duration-slow) var(--ease-out) backwards;animation-delay:calc(var(--i,0) * 40ms)}');
     expect(owner).toMatch(/class="metric-card" style="--i:1"/);
   });
   it('NAV-038 sales & collections chart [case-corrected: weekly totals up to 12 weeks ending at the latest activity, not 6 months; bars violet (accent) and cyan (accent-2) with legend]', () => {
@@ -200,7 +203,7 @@ describe('17 shell', () => {
     expect(shell(freshCompany())).not.toContain('Branch filter');
   });
   it('NAV-049 notice: success neutral (role=status) vs error red (role=alert)', () => {
-    expect(wbSource).toContain("{notice&&<div className={noticeError?'error-note':'form-note'} role={noticeError?'alert':'status'}>{notice}</div>}");
+    expect(wbSource).toContain("{notice&&<div className={noticeError?'error-note':'form-note'} role={noticeError?'alert':'status'}>{notice}<button type=\"button\" className=\"notice-dismiss\" aria-label=\"Dismiss message\" onClick={()=>setNotice('')}>");
   });
   it('NAV-055 drawer applies safe-area padding', () => {
     expect(css).toContain('.sidebar.mobile-open{padding-bottom:calc(14px + env(safe-area-inset-bottom,0px))}');

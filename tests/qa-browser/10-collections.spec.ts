@@ -160,7 +160,7 @@ test('COL-075 Customer receipts list filters by method/status', async () => {
   expect(await read()).toEqual(all);
 });
 
-test('COL-076 Search finds a receipt by cheque number [defect]', async () => {
+test('COL-076 Search finds a receipt by cheque number', async () => {
   const { page } = s;
   await home(page);
   await page.keyboard.press('ControlOrMeta+k');

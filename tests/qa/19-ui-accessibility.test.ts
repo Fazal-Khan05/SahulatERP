@@ -107,7 +107,7 @@ describe('19 ui accessibility', () => {
     expect(ratio('#ffffff', token('accent'))).toBeGreaterThanOrEqual(4.5);
     expect(ratio('#ffffff', token('accent-hover'))).toBeGreaterThanOrEqual(4.5);
   });
-  it('UIX-024 badges (green/amber/red/violet/cyan on pastels) ≥ 4.5:1 [defect: danger badge #d92d20 on #fee9e7 is 4.15:1]', () => {
+  it('UIX-024 badges (green/amber/red/violet/cyan on pastels) ≥ 4.5:1', () => {
     const badges: Record<string, [string, string]> = {
       success: [token('success-text'), token('success-soft')], warning: [token('warning-text'), token('warning-soft')], danger: [token('danger'), token('danger-soft')],
       info: [token('accent-2-text'), token('accent-2-soft')], draft: [token('draft-text'), token('draft-soft')], neutral: [token('text-muted'), token('surface-sunken')],
@@ -125,11 +125,13 @@ describe('19 ui accessibility', () => {
     expect(css).toContain('::placeholder{color:var(--text-subtle)}');
     expect(ratio(token('text-subtle'), '#ffffff')).toBeGreaterThanOrEqual(3);
   });
-  it('UIX-027 setup footer (white 88% on the tinted scrim over the page) ≥ 4.5:1 [defect: ≈1.9:1 at worst against the light page behind the scrim]', () => {
+  it('UIX-027 setup footer (white 88% on its navy backdrop over the tinted scrim and the page) ≥ 4.5:1', () => {
     expect(css).toContain('background:linear-gradient(180deg,rgba(16,31,82,.30),rgba(16,31,82,.44))');
-    expect(css).toContain('.setup-foot{margin:0;color:rgba(255,255,255,.88)');
-    const page = rgb(token('background'));
-    const worst = Math.min(...[0.30, 0.44].map(a => { const bg = over([16, 31, 82], a, page); return ratio(over([255, 255, 255], 0.88, bg), bg); }));
+    const foot = css.match(/\.setup-foot\{margin:0;color:rgba\(255,255,255,\.88\);[^}]*background:rgba\(16,31,82,(\.\d+)\)/);
+    expect(foot).not.toBeNull();
+    const backdrop = Number(foot![1]);
+    // Worst case: the lightest page (the blurred workspace or plain white) behind the lightest end of the scrim.
+    const worst = Math.min(...[rgb(token('background')), rgb('#ffffff')].flatMap(page => [0.30, 0.44].map(a => { const bg = over([16, 31, 82], backdrop, over([16, 31, 82], a, page)); return ratio(over([255, 255, 255], 0.88, bg), bg); })));
     expect(worst).toBeGreaterThanOrEqual(4.5);
   });
   it('UIX-031 skip-to-content link [documented: not present]', () => {
@@ -192,7 +194,7 @@ describe('19 ui accessibility', () => {
     expect(tokensCss).toContain('@media (prefers-reduced-motion: reduce) {\n  :root { --duration-fast: 0ms; --duration-base: 0ms; --duration-slow: 0ms; }');
   });
   it('UIX-046 reduced motion: provisioning ring slows to 3 s', () => {
-    expect(css).toContain('@media(prefers-reduced-motion:reduce){.provision-ring{animation-duration:3s}');
+    expect(css).toContain('@media(prefers-reduced-motion:reduce){.provision-ring{animation-duration:3s!important;animation-iteration-count:infinite!important}');
   });
   it('UIX-047 UI animation durations ≤ 320 ms with ease-out curves [documented: spinners, skeleton pulse, provisioning ring and the 800 ms setup reveal are longer by design]', () => {
     expect([token('duration-fast'), token('duration-base'), token('duration-slow')]).toEqual(['120ms', '200ms', '320ms']);
@@ -221,7 +223,7 @@ describe('19 ui accessibility', () => {
   it('UIX-052 search dialog has no animation', () => {
     expect(css).toContain('.search-dialog[data-state=open],.search-dialog[data-state=closed]{animation:none}');
   });
-  it('UIX-053 metric cards stagger by 40 ms [defect: no card sets --i, so all delays are 0]', () => {
+  it('UIX-053 metric cards stagger by 40 ms', () => {
     expect(css).toContain('animation-delay:calc(var(--i,0) * 40ms)');
     expect(demoHtml).toMatch(/class="metric-card" style="--i:\d"/);
   });
@@ -330,7 +332,7 @@ describe('19 ui accessibility', () => {
     ['UIX-058', '[browser] dates YYYY-MM-DD in tables, friendly in top bar'],
     ['UIX-059', '[browser] empty states offer a next action'],
     ['UIX-060', '[browser] error copy is plain English and names the fix'],
-    ['UIX-062', '[browser] computed radii follow 6/10/14/20 (legacy rules in globals.css still declare 5/7/9px)'],
+    ['UIX-062', '[browser] computed radii follow 6/10/14/20'],
     ['UIX-071', '[browser] desktop zoom 200% without overlap'],
     ['UIX-072', '[manual] Windows high-contrast mode keeps borders visible'],
     ['UIX-073', '[manual] Safari desktop matches Chrome'],

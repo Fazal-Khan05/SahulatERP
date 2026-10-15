@@ -63,7 +63,7 @@ test('PUR-069 Supplier payments tab lists payments with status', async () => {
   await expect(row).toContainText('Rs 14,000');
 });
 
-test('PUR-070 Overdue supplier bill appears in the attention queue [defect]', async () => {
+test('PUR-070 Overdue supplier bill appears in the attention queue', async () => {
   const { page } = s;
   await home(page);
   const attention = page.locator('section.card').filter({ has: page.getByRole('heading', { name: 'Needs your attention' }) });

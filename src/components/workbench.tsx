@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
   ArrowDownLeft, Bell, Boxes, Check, ChevronDown, ChevronRight, CircleDollarSign, ClipboardList,
@@ -10,6 +10,7 @@ import {
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
 import { DocumentDetails } from './document-details';
+import { ItemDetails } from './item-details';
 import { DocumentEditor } from './document-editor';
 import { DocumentsList } from './documents-list';
 import { PaymentDialog } from './document-dialogs';
@@ -52,10 +53,14 @@ const addDays=(date:string,days:number)=>{const value=new Date(`${date}T00:00:00
 const receivable=(w:Workspace)=>w.documents.filter(d=>d.kind==='sales_invoice'&&d.status==='submitted');
 const openBalance=(w:Workspace)=>money(sum(receivable(w).map(d=>D.max(0,outstanding(d)))));
 const clearedCollections=(w:Workspace)=>w.receipts.filter(r=>r.status==='cleared'&&w.parties.find(p=>p.id===r.partyId)?.type==='customer');
+// A 401 that is not a password check means the session ended (for example, signed out in another tab).
+const sessionEnded=(status:number,result:{passwordRequired?:boolean;message?:string}|null)=>status===401&&!result?.passwordRequired&&result?.message!=='PASSWORD_REQUIRED';
 
 function attentionItems(w:Workspace,role:Role){const now=today();return ([
   ['commissions','Commission awaiting approval',w.commissions.filter(c=>D(c.released).gt(c.paid)&&!c.approved).length],
   ['imports','Shipment costs unallocated',w.shipments.reduce((n,sh)=>n+sh.costs.filter(c=>!c.allocated).length,0)],
+  // Payables past their due date, for the roles that pay suppliers.
+  ['purchasing','Overdue supplier bills',canRun(role,'create_receipt')?w.documents.filter(d=>d.kind==='supplier_invoice'&&d.status==='submitted'&&d.dueDate<now&&D(outstanding(d)).gt(0)).length:0],
   ['collections','Open customer invoices',receivable(w).filter(d=>D(outstanding(d)).gt(0)).length],
   ['collections','Cheques due for deposit or clearing',w.receipts.filter(r=>r.method==='cheque'&&['received','deposited'].includes(r.status)&&r.dueDate<=now).length],
   ['collections','Recovery follow-ups due',w.followUps.filter(f=>f.nextDate<=now).length],
@@ -111,40 +116,104 @@ function NotificationBell({items,go}:{items:[Module,string,number][];go:(module:
     </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>;
 }
 
-function SearchDialog({open,close,workspace,role,go}:{open:boolean;close:()=>void;workspace:Workspace;role:Role;go:(module:Module)=>void}){
-  const [query,setQuery]=useState('');
+type SearchHit={key:string;title:string;detail:()=>string;module:Module;text:string;open?:{document?:string;item?:string}};
+const salesKinds=['quotation','sales_order','delivery','sales_invoice','credit_note'];
+const documentModule=(kind:string):Module=>salesKinds.includes(kind)?'sales':'purchasing';
+const receiptModule=(party?:{type:string}):Module=>party?.type==='supplier'?'purchasing':'collections';
+/** Record id → the module it lives in, so a journal can be traced to the record that posted it. */
+function recordModules(w:Workspace){
+  const modules=new Map<string,Module>();const parties=new Map(w.parties.map(p=>[p.id,p]));
+  for(const d of w.documents)modules.set(d.id,documentModule(d.kind));
+  for(const i of w.items)modules.set(i.id,'inventory');
+  for(const r of w.receipts)modules.set(r.id,receiptModule(parties.get(r.partyId)));
+  for(const sh of w.shipments)modules.set(sh.id,'imports');
+  for(const run of w.payrolls)modules.set(run.id,'payroll');
+  return modules;
+}
+function SearchDialog({open,close,workspace,role,choose}:{open:boolean;close:()=>void;workspace:Workspace;role:Role;choose:(hit:SearchHit)=>void}){
+  const [query,setQuery]=useState('');const [active,setActive]=useState(-1);const listId=useId();
   const needle=query.trim().toLocaleLowerCase();
-  const results=useMemo(()=>{if(!needle)return [];const salesKinds=['quotation','sales_order','delivery','sales_invoice','credit_note'];const rows:{key:string;title:string;detail:string;module:Module}[]=[
-    ...workspace.documents.map(d=>({key:d.id,title:d.number,detail:`${d.kind.replaceAll('_',' ')} · ${documentPartyName(workspace,d)} · ${formatMoney(d.total)}`,module:(salesKinds.includes(d.kind)?'sales':'purchasing') as Module})),
-    ...workspace.parties.map(p=>({key:p.id,title:p.name,detail:`${p.type} · ${p.city}`,module:(p.type==='customer'?'collections':'purchasing') as Module})),
-    ...workspace.items.map(i=>({key:i.id,title:i.name,detail:`${i.sku} · ${i.category}`,module:'inventory' as Module})),
-  ];return rows.filter(r=>canView(role,r.module,workspace)&&`${r.title} ${r.detail}`.toLocaleLowerCase().includes(needle)).slice(0,8)},[needle,workspace,role]);
-  return <Dialog open={open} onOpenChange={value=>{if(!value){close();setQuery('')}}}><DialogContent className="search-dialog"><DialogTitle>Search</DialogTitle><DialogDescription>Documents, customers, suppliers and products in this workspace.</DialogDescription>
-    <input className="search-input" autoFocus type="search" aria-label="Search the workspace" placeholder="Invoice number, customer, SKU…" value={query} onChange={event=>setQuery(event.target.value)}/>
-    <div className="search-results" role="list">{needle&&!results.length&&<div className="empty-state">No matches for “{query}”.</div>}{results.map(r=><button key={`${r.module}:${r.key}`} role="listitem" className="search-result" onClick={()=>{go(r.module);close();setQuery('')}}><span><strong>{r.title}</strong><small>{r.detail}</small></span><span className="search-module">{labels[r.module]}</span></button>)}</div>
+  // The index is built when the dialog opens (once per workspace snapshot and role); a keystroke only scans it.
+  const index=useMemo(()=>open?searchIndex(workspace,role):[],[open,workspace,role]);
+  const extras=[canView(role,'collections',workspace)||canView(role,'purchasing',workspace)?'receipts and cheques':'',canView(role,'imports',workspace)?'shipments':'',canReadLedger(role)&&canView(role,'accounting',workspace)?'journals':''].filter(Boolean);
+  const alsoSearched=extras.length>1?`${extras.slice(0,-1).join(', ')} and ${extras.at(-1)}`:extras[0];
+  const results=useMemo(()=>needle?searchHits(index,needle):[],[index,needle]);
+  // ↑/↓ move a highlight while focus stays in the field (aria-activedescendant); Enter opens it, or the first result.
+  useEffect(()=>{if(active>=0)document.getElementById(`${listId}-${active}`)?.scrollIntoView({block:'nearest'})},[active,listId]);
+  const reset=()=>{setQuery('');setActive(-1)};
+  const pick=(hit:SearchHit)=>{close();reset();choose(hit)};
+  const onKey=(event:ReactKeyboardEvent<HTMLInputElement>)=>{
+    if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();if(!results.length)return;const step=event.key==='ArrowDown'?1:-1;setActive(index=>index<0?(step>0?0:results.length-1):(index+step+results.length)%results.length)}
+    else if(event.key==='Enter'&&results.length){event.preventDefault();pick(results[Math.max(active,0)])}
+  };
+  return <Dialog open={open} onOpenChange={value=>{if(!value){close();reset()}}}><DialogContent className="search-dialog"><DialogTitle>Search</DialogTitle><DialogDescription>Documents, customers, suppliers and products in this workspace.{alsoSearched&&` Also ${alsoSearched}.`}</DialogDescription>
+    <input className="search-input" autoFocus type="search" aria-label="Search the workspace" placeholder="Invoice number, customer, SKU…" aria-controls={listId} aria-activedescendant={active>=0&&active<results.length?`${listId}-${active}`:undefined} value={query} onKeyDown={onKey} onChange={event=>{setQuery(event.target.value);setActive(-1)}}/>
+    <div className="search-results" id={listId} role="list">{needle&&!results.length&&<div className="empty-state">No matches for “{query}”.</div>}{results.map((r,index)=><button key={`${r.module}:${r.key}`} id={`${listId}-${index}`} role="listitem" className="search-result" data-highlighted={index===active?'':undefined} aria-current={index===active||undefined} onClick={()=>pick(r)}><span><strong>{r.title}</strong><small>{r.detail()}</small></span><span className="search-module">{labels[r.module]}</span></button>)}</div>
   </DialogContent></Dialog>;
+}
+const searchCache=new WeakMap<Workspace,Map<Role,SearchHit[]>>();
+/**
+ * Every record the role may open, each with a lower-cased haystack. Built once per workspace snapshot and role
+ * (a new snapshot arrives after every command); receipt, shipment and journal details are formatted only for the
+ * few results on screen.
+ * Receipts are found by number or cheque number, shipments by number, container or GD number, and journals (ledger
+ * roles only) by number or memo, unless the record that posted the journal sits in a module the role cannot see.
+ */
+export function searchIndex(w:Workspace,role:Role):SearchHit[]{
+  const byRole=searchCache.get(w)??new Map<Role,SearchHit[]>();searchCache.set(w,byRole);
+  const cached=byRole.get(role);if(cached)return cached;
+  const index:SearchHit[]=[];const parties=new Map(w.parties.map(p=>[p.id,p]));
+  for(const d of w.documents){const module=documentModule(d.kind);if(!canView(role,module,w))continue;const kind=d.kind.replaceAll('_',' ');const party=d.partyName||parties.get(d.partyId)?.name||'—';
+    // formatMoney reuses cached formatters, so formatting every total while indexing stays cheap; it prints the document currency.
+    const detail=`${kind} · ${party} · ${formatMoney(d.total,d.currency)}`;
+    index.push({key:d.id,title:d.number,module,open:{document:d.id},text:`${d.number} ${detail}`.toLocaleLowerCase(),detail:()=>detail})}
+  for(const p of w.parties){const module:Module=p.type==='customer'?'collections':'purchasing';if(!canView(role,module,w))continue;const detail=`${p.type} · ${p.city}`;
+    index.push({key:p.id,title:p.name,module,text:`${p.name} ${detail}`.toLocaleLowerCase(),detail:()=>detail})}
+  if(canView(role,'inventory',w))for(const i of w.items){const detail=`${i.sku} · ${i.category}`;
+    index.push({key:i.id,title:i.name,module:'inventory',open:{item:i.id},text:`${i.name} ${detail}`.toLocaleLowerCase(),detail:()=>detail})}
+  for(const r of w.receipts){const party=parties.get(r.partyId);const module=receiptModule(party);if(!canView(role,module,w))continue;const how=r.method==='cheque'?`cheque ${r.chequeNo}`:r.method;
+    index.push({key:r.id,title:r.number,module,text:`${r.number} ${r.chequeNo}`.toLocaleLowerCase(),detail:()=>`${how} · ${party?.name??'—'} · ${formatMoney(r.amount)} · ${r.status}`})}
+  if(canView(role,'imports',w))for(const sh of w.shipments){const supplier=parties.get(sh.supplierId)?.name??'—';
+    index.push({key:sh.id,title:sh.number,module:'imports',text:`${sh.number} ${sh.container} ${sh.gdNumber}`.toLocaleLowerCase(),detail:()=>`${sh.container} · ${sh.gdNumber} · ${supplier} · ${sh.status.replaceAll('_',' ')}`})}
+  if(canReadLedger(role)&&canView(role,'accounting',w)){const sources=recordModules(w);for(const j of w.journals){const source=sources.get(j.sourceId.split(':')[0]);if(source&&!canView(role,source,w))continue;
+    index.push({key:j.id,title:j.number,module:'accounting',text:`${j.number} ${j.memo}`.toLocaleLowerCase(),detail:()=>`${j.date} · ${j.memo}${j.status==='draft'?' · draft':''}`})}}
+  byRole.set(role,index);return index;
+}
+/** The first `cap` records whose haystack contains the needle as plain text (no pattern syntax), in index order. */
+export function searchHits(index:SearchHit[],needle:string,cap=8):SearchHit[]{
+  const hits:SearchHit[]=[];for(const entry of index){if(entry.text.includes(needle)){hits.push(entry);if(hits.length===cap)break}}return hits;
 }
 
 export function Workbench({initialWorkspace,actor,memberships}:Props){
   const [workspace,setWorkspace]=useState(initialWorkspace);const [active,setActive]=useState<Module>('dashboard');
-  const [mobile,setMobile]=useState(false);
+  const [mobile,setMobile]=useState(false);const menuButton=useRef<HTMLButtonElement>(null);
+  // Escape closes the phone drawer (unless a menu or dialog above it takes the key) and returns focus to the menu button.
+  useEffect(()=>{if(!mobile)return;const onKey=(event:KeyboardEvent)=>{if(event.key!=='Escape'||document.querySelector('[role=menu],[role=dialog]'))return;setMobile(false);menuButton.current?.focus()};window.addEventListener('keydown',onKey);return ()=>window.removeEventListener('keydown',onKey)},[mobile]);
   // Finishing setup unblurs the workspace behind the card once; later loads render normally.
   const [revealed,setRevealed]=useState(false);const wasSettingUp=useRef(!initialWorkspace.setup.complete);const [modal,setModal]=useState<Modal>(null);const [stockTransferOpen,setStockTransferOpen]=useState(false);const [busy,setBusy]=useState('');const [notice,setNotice]=useState('');const [role,setRole]=useState<Role>(actor.role);
   const [branch,setBranch]=useState('');const [searchOpen,setSearchOpen]=useState(false);const [resetOpen,setResetOpen]=useState(false);
+  // A search result opens its record over its module: documents in the details dialog, products in the product dialog.
+  const [openDocumentId,setOpenDocumentId]=useState<string|null>(null);const [openItemId,setOpenItemId]=useState<string|null>(null);
   // Navigation stays disabled until React has hydrated so a click on the server-rendered page is never lost.
   const [ready,setReady]=useState(false);useEffect(()=>setReady(true),[]);
   const previewing=role!==actor.role;
   // Role preview shows the data that role would actually receive, not just its screens.
   const view=useMemo(()=>{let w=workspace;if(previewing){const employeeId=role==='Salesperson'?w.documents.flatMap(d=>d.lines.map(l=>l.employeeId)).find(Boolean):actor.employeeId;w=scopeWorkspace(w,{...actor,role,employeeId})}if(branch)w=filterBranch(w,branch);return w},[workspace,previewing,role,branch,actor]);
-  const viewActor:Actor={...actor,role};const ledgerView=canReadLedger(role)&&!branch;
+  const viewActor:Actor={...actor,role};
+  // Ledger figures only for members who receive the journals: the server withholds them from branch-limited members.
+  const ledgerView=canReadLedger(role)&&!branch&&!actor.branchIds.length;
   const attention=attentionItems(view,role);
   useEffect(()=>{const onKey=(event:KeyboardEvent)=>{if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='k'){event.preventDefault();setSearchOpen(true)}};window.addEventListener('keydown',onKey);return ()=>window.removeEventListener('keydown',onKey)},[]);
   // Commands carry an idempotency key, so a response that never reached us as JSON (proxy error, dev-server
   // recompile, dropped connection) can be retried once without risking a double posting.
   async function postCommand(body:string){const send=()=>fetch('/api/workspace',{method:'POST',headers:{'content-type':'application/json','x-tenant-id':workspace.tenantId},body});let response=await send();let result:Record<string,unknown>|null=null;try{result=await response.json()}catch{result=null}if(result===null||(response.status>=500&&!result?.message)){await new Promise(r=>setTimeout(r,600));response=await send();try{result=await response.json()}catch{result={success:false,message:'The server did not respond properly. Please try again.'}}}return {response,result:result as {success?:boolean;message?:string;passwordRequired?:boolean;recordId?:string;workspace?:Workspace}};}
-  async function command(type:string,payload:Record<string,unknown>,options?:{confirmPassword?:string}):Promise<{ok:boolean;message:string;passwordRequired?:boolean;recordId?:string;workspace?:Workspace}>{setBusy(type);setNotice('');setNoticeError(false);try{const {response,result}=await postCommand(JSON.stringify({type,payload,idempotencyKey:crypto.randomUUID(),...(options?.confirmPassword?{confirmPassword:options.confirmPassword}:{})}));if(!response.ok||!result.success){if(!result.passwordRequired){setNotice(result.message||'The change could not be saved.');setNoticeError(true);}return {ok:false,message:result.message||'The change could not be saved.',passwordRequired:!!result.passwordRequired}}if(result.workspace)setWorkspace(result.workspace);setNotice(result.message??'');if(type==='follow_up')setModal(null);if(type==='stock_transfer')setStockTransferOpen(false);return {ok:true,message:result.message??'',recordId:result.recordId,workspace:result.workspace}}catch(error){const message=error instanceof Error?error.message:'The change could not be saved.';setNotice(message);setNoticeError(true);return {ok:false,message}}finally{setBusy('')}}
-  async function resetDemo(){setBusy('reset');setNotice('');try{const response=await fetch('/api/demo-reset',{method:'POST'});const result=await response.json();if(response.ok)setWorkspace(result.workspace);setNotice(response.ok?result.message:result.message||'The demo could not be reset.')}finally{setBusy('');setResetOpen(false)}}
+  async function command(type:string,payload:Record<string,unknown>,options?:{confirmPassword?:string}):Promise<{ok:boolean;message:string;passwordRequired?:boolean;recordId?:string;workspace?:Workspace}>{setBusy(type);setNotice('');setNoticeError(false);try{const {response,result}=await postCommand(JSON.stringify({type,payload,idempotencyKey:crypto.randomUUID(),...(options?.confirmPassword?{confirmPassword:options.confirmPassword}:{})}));if(!response.ok||!result.success){if(sessionEnded(response.status,result)){signInAgain();return {ok:false,message:'Your session has ended. Please sign in again.'}}if(!result.passwordRequired){setNotice(result.message||'The change could not be saved.');setNoticeError(true);}return {ok:false,message:result.message||'The change could not be saved.',passwordRequired:!!result.passwordRequired}}if(result.workspace)setWorkspace(result.workspace);setNotice(result.message??'');if(type==='follow_up')setModal(null);if(type==='stock_transfer')setStockTransferOpen(false);return {ok:true,message:result.message??'',recordId:result.recordId,workspace:result.workspace}}catch(error){const message=error instanceof Error?error.message:'The change could not be saved.';setNotice(message);setNoticeError(true);return {ok:false,message}}finally{setBusy('')}}
+  // The server renders the sign-in screen for this same address; after signing in the member lands back in this company.
+  function signInAgain(){setNotice('Your session has ended. Taking you to sign in…');setNoticeError(false);window.location.assign(`/?tenant=${encodeURIComponent(workspace.tenantId)}`)}
+  async function resetDemo(){setBusy('reset');setNotice('');try{const response=await fetch('/api/demo-reset',{method:'POST'});const result=await response.json();if(sessionEnded(response.status,result)){signInAgain();return}if(response.ok)setWorkspace(result.workspace);setNotice(response.ok?result.message:result.message||'The demo could not be reset.')}finally{setBusy('');setResetOpen(false)}}
   const go=(module:Module)=>{setActive(module);setMobile(false)};
+  const openSearchHit=(hit:SearchHit)=>{go(hit.module);setOpenDocumentId(hit.open?.document??null);setOpenItemId(hit.open?.item??null)};
+  const openDocument=openDocumentId?view.documents.find(d=>d.id===openDocumentId):undefined;
   const changeRole=(next:Role)=>{setRole(next);if(!canView(next,active,workspace))setActive('dashboard')};
   useEffect(()=>{if(!canView(role,active,workspace))setActive('dashboard')},[workspace.modules,role,active,workspace]);
   const initials=actor.name.split(/\s+/).map(word=>word[0]).join('').slice(0,2).toUpperCase();
@@ -152,14 +221,18 @@ export function Workbench({initialWorkspace,actor,memberships}:Props){
   const headerAction=headerActions[active];
   // The wizard keeps its provisioning screen up for a moment after setup completes, then the workspace is revealed.
   const [noticeError,setNoticeError]=useState(false);
+  // Once setup is complete the card closes; a notice raised while it was open (for example "Setup is already
+  // complete." when another session finished first) must not follow the member onto Overview.
+  useEffect(()=>{if(workspace.setup.complete){setNotice('');setNoticeError(false)}},[workspace.setup.complete]);
   const [provisioning,setProvisioning]=useState(false);const settingUp=!workspace.setup.complete||provisioning;
   useEffect(()=>{if(wasSettingUp.current&&!settingUp){wasSettingUp.current=false;setRevealed(true);const t=setTimeout(()=>setRevealed(false),900);return()=>clearTimeout(t);}if(settingUp)wasSettingUp.current=true;},[settingUp]);
   if(settingUp&&actor.role==='Auditor')return <main className="loading-screen"><div><h1>{workspace.company.name} is being set up</h1><p>The company owner has not finished setup yet. Try again later.</p><form action="/auth/signout" method="post"><button className="button button-outline">Sign out</button></form></div></main>;
   return <>{settingUp&&<SetupWizard workspace={workspace} actor={actor} memberships={memberships} onWorkspace={setWorkspace} command={command} onProvisioning={setProvisioning}/>}<div className={`app-shell ${settingUp?'setup-backdrop':revealed?'setup-reveal':''}`} inert={settingUp||undefined} aria-hidden={settingUp||undefined}>{mobile&&<button type="button" className="sidebar-scrim" aria-label="Dismiss menu" onClick={()=>setMobile(false)}/>}<aside id="app-navigation" className={`sidebar ${mobile?'mobile-open':''}`}><button type="button" className="sidebar-close" aria-label="Close menu" onClick={()=>setMobile(false)}><X size={18}/></button><a className="brand" href="/"><span className="brand-mark">S</span><span>Sahulat<span className="brand-light">ERP</span></span></a><WorkspaceSwitcher workspace={workspace} memberships={memberships}/><div className="nav-label">WORKSPACE</div><nav>{nav.filter(item=>canView(role,item.key,view)).map(({key,label,icon:Icon})=><button key={key} data-module={key} className={active===key?'nav-item active':'nav-item'} disabled={!ready} onClick={()=>go(key)}><span className="nav-icon"><Icon size={16}/></span><span>{label}</span>{key==='commissions'&&<span className="new-label">LIVE</span>}</button>)}</nav><div className="sidebar-bottom"><div className="demo-note"><Sparkles size={17}/><div><strong>All changes saved</strong><small>Saved as you work</small></div></div><form action="/auth/signout" method="post"><button className="profile"><span className="avatar">{initials}</span><div><strong>{actor.name}</strong><small>{actor.role}</small></div><LogOut size={15}/></button></form></div></aside>
-    <div className="main-shell"><header className="topbar"><div className="breadcrumb"><button type="button" className="mobile-menu" aria-label={mobile?'Close navigation':'Open navigation'} aria-expanded={mobile} aria-controls="app-navigation" onClick={()=>setMobile(value=>!value)}>{mobile?<X size={19}/>:<Menu size={19}/>}</button><span>Workspace</span><ChevronRight size={14}/><strong>{labels[active]}</strong></div><div className="topbar-right"><span className="topbar-date">{new Date().toLocaleDateString('en-PK',{weekday:'short',day:'numeric',month:'short',timeZone:'Asia/Karachi'})}</span>{previewing&&<span className="preview-chip"><Eye size={14}/>Previewing as {role}<button type="button" onClick={()=>changeRole(actor.role)}>Exit preview</button></span>}<button type="button" className="search-hint" onClick={()=>setSearchOpen(true)} aria-label="Search anything (Control or Command K)"><Search size={16}/> Search anything <kbd>⌘ K</kbd></button><span className="topbar-divider"/><NotificationBell items={attention} go={go}/><span className="mini-avatar" aria-hidden="true">{initials}</span></div></header>
+    <div className="main-shell"><header className="topbar"><div className="breadcrumb"><button ref={menuButton} type="button" className="mobile-menu" aria-label={mobile?'Close navigation':'Open navigation'} aria-expanded={mobile} aria-controls="app-navigation" onClick={()=>setMobile(value=>!value)}>{mobile?<X size={19}/>:<Menu size={19}/>}</button><span>Workspace</span><ChevronRight size={14}/><strong>{labels[active]}</strong></div><div className="topbar-right"><span className="topbar-date">{new Date().toLocaleDateString('en-PK',{weekday:'short',day:'numeric',month:'short',timeZone:'Asia/Karachi'})}</span>{previewing&&<span className="preview-chip"><Eye size={14}/>Previewing as {role}<button type="button" onClick={()=>changeRole(actor.role)}>Exit preview</button></span>}<button type="button" className="search-hint" onClick={()=>setSearchOpen(true)} aria-label="Search anything (Control or Command K)"><Search size={16}/> Search anything <kbd>⌘ K</kbd></button><span className="topbar-divider"/><NotificationBell items={attention} go={go}/><span className="mini-avatar" aria-hidden="true">{initials}</span></div></header>
       <main className="main-content"><div className="page-heading"><div><h1>{labels[active]}{workspace.demo&&<span className="live-tag">Demo workspace</span>}</h1><p>{descriptions[active]}</p></div><div className="heading-actions"><BranchPicker workspace={workspace} branch={branch} setBranch={setBranch} allowed={actor.branchIds}/>{headerAction&&canEdit(role,active)&&<Button onClick={()=>setModal(headerAction.modal)}><Plus size={17}/>{headerAction.label}</Button>}</div></div>
         {branch&&canReadLedger(role)&&['dashboard','accounting','reports'].includes(active)&&<div className="simulation-note">Showing {workspace.branches.find(b=>b.id===branch)?.name} operations. General-ledger balances are company-wide and are not split by branch.</div>}
-        {notice&&<div className={noticeError?'error-note':'form-note'} role={noticeError?'alert':'status'}>{notice}</div>}
+        {/* The notice sticks under the top bar, so it is in view after an action anywhere on a long page. */}
+        {notice&&<div className={noticeError?'error-note':'form-note'} role={noticeError?'alert':'status'}>{notice}<button type="button" className="notice-dismiss" aria-label="Dismiss message" onClick={()=>setNotice('')}><X size={15}/></button></div>}
         <div key={active} className="view-enter"><View active={active} workspace={view} ledgerView={ledgerView} actor={viewActor} busy={busy} notice={notice} command={command} open={setModal} openStockTransfer={openStockTransfer} go={go} reset={()=>setResetOpen(true)} role={role} realRole={actor.role} setRole={changeRole} onWorkspace={setWorkspace} fullWorkspace={workspace}/></div>
         <footer className="page-footer"><span>SAHULAT ERP <span>Made for the way you do business.</span></span><span>PKR · Asia/Karachi</span></footer></main></div>
     <TransactionDialog modal={modal==='followup'?modal:null} close={()=>setModal(null)} workspace={view} busy={busy} command={command}/>
@@ -168,7 +241,9 @@ export function Workbench({initialWorkspace,actor,memberships}:Props){
     {modal==='receipt'&&<PaymentDialog open partyType="customer" workspace={view} busy={busy} onClose={()=>setModal(null)} command={command}/>}
     {modal==='payment'&&<PaymentDialog open partyType="supplier" workspace={view} busy={busy} onClose={()=>setModal(null)} command={command}/>}
     <StockTransferDialog open={stockTransferOpen} onClose={()=>setStockTransferOpen(false)} workspace={view} actor={viewActor} busy={busy} notice={stockTransferOpen?notice:''} command={command}/>
-    <SearchDialog open={searchOpen} close={()=>setSearchOpen(false)} workspace={view} role={role} go={go}/>
+    <SearchDialog open={searchOpen} close={()=>setSearchOpen(false)} workspace={view} role={role} choose={openSearchHit}/>
+    <DocumentDetails key={openDocumentId??'none'} workspace={view} actor={viewActor} documentId={openDocument?openDocument.id:null} editable={!!openDocument&&canEdit(role,documentModule(openDocument.kind))} busy={busy} command={command} onClose={()=>setOpenDocumentId(null)}/>
+    {openItemId&&<ItemDetails key={openItemId} workspace={view} actor={viewActor} itemId={openItemId} initialMode="view" onClose={()=>setOpenItemId(null)} command={command} busy={busy} notice={notice}/>}
     <Dialog open={resetOpen} onOpenChange={setResetOpen}><DialogContent className="confirm-dialog"><DialogTitle>Reset the demo company?</DialogTitle><DialogDescription>Every change made in {workspace.company.name} since the last reset — documents, payments, stock, payroll and journals — will be replaced with the original synthetic data. Your other workspaces are not affected. This cannot be undone.</DialogDescription><div className="form-actions"><Button variant="outline" onClick={()=>setResetOpen(false)}>Cancel</Button><Button variant="destructive" disabled={busy==='reset'} onClick={resetDemo}>{busy==='reset'?<Loader2 className="spin" size={16}/>:<RefreshCw size={16}/>}Reset demo data</Button></div></DialogContent></Dialog>
   </div></>;
 }
@@ -219,7 +294,7 @@ function BranchesAndWarehouses({workspace,editable,busy,command}:{workspace:Work
     <ul className="branch-list">{workspace.branches.map(b=><li key={b.id}>{renaming?.id===b.id?<form className="branch-inline" onSubmit={async e=>{e.preventDefault();const r=await command('save_branch',{id:b.id,name:renaming.name});if(r.ok)setRenaming(null)}}><input aria-label={`Rename ${b.name}`} value={renaming.name} onChange={e=>setRenaming({id:b.id,name:e.target.value})} autoFocus/><Button size="sm" type="submit" disabled={!!busy}>Save</Button><Button size="sm" type="button" variant="ghost" onClick={()=>setRenaming(null)}>Cancel</Button></form>:<><strong>{b.name}</strong><small>{workspace.warehouses.filter(w=>w.branchId===b.id).length} warehouse(s)</small>{editable&&<Button size="sm" variant="ghost" aria-label={`Rename ${b.name}`} onClick={()=>setRenaming({id:b.id,name:b.name})}>Rename</Button>}</>}</li>)}</ul>
     {editable&&<form className="branch-inline" onSubmit={async e=>{e.preventDefault();const r=await command('save_branch',{name:branchName});if(r.ok)setBranchName('')}}><input aria-label="New branch name" placeholder="New branch name" value={branchName} onChange={e=>setBranchName(e.target.value)} required minLength={2}/><Button size="sm" type="submit" disabled={!!busy||branchName.trim().length<2}><Plus size={14}/>Add branch</Button></form>}
   </div></section><MasterDataView spec={entitySpecs.warehouses as never} workspace={workspace} editable={editable} busy={busy} command={command}/></div>}
-function Metrics({values}:{values:[string,string][]}){const icons=[ShoppingBag,ArrowDownLeft,CreditCard,Package];return <div className="metric-grid">{values.map(([name,value],index)=>{const Icon=icons[index];return <section className="metric-card" key={name}><div className="metric-label">{name}<span className="metric-icon"><Icon size={18}/></span></div><strong>{value}</strong><small>From posted records</small></section>})}</div>}
+function Metrics({values}:{values:[string,string][]}){const icons=[ShoppingBag,ArrowDownLeft,CreditCard,Package];return <div className="metric-grid">{values.map(([name,value],index)=>{const Icon=icons[index];return <section className="metric-card" key={name} style={{'--i':index} as CSSProperties}><div className="metric-label">{name}<span className="metric-icon"><Icon size={18}/></span></div><strong>{value}</strong><small>From posted records</small></section>})}</div>}
 
 function TransactionDialog({modal,close,workspace,busy,command}:{modal:Modal;close:()=>void;workspace:Workspace;busy:string;command:(type:string,payload:Record<string,unknown>)=>Promise<unknown>}){const now=today();
   async function submit(event:FormEvent<HTMLFormElement>){event.preventDefault();const form=new FormData(event.currentTarget);const v=(key:string)=>String(form.get(key)||'');await command('follow_up',{partyId:v('partyId'),note:v('note'),nextDate:v('nextDate')});}

@@ -562,7 +562,7 @@ describe('08 Purchasing, foreign currency, supplier payments (PUR)', () => {
   });
 
   it.todo('PUR-069 [browser] Supplier payments tab lists payments with status');
-  it.todo('PUR-070 [browser] overdue bill in the attention queue (code review: workbench.tsx attentionItems has no supplier-bill entry — likely fails)');
+  it.todo('PUR-070 [browser] overdue bill in the attention queue');
   it.todo('PUR-071 [browser] Receive dialog shows remaining per line');
 
   it('PUR-072 Receive with one line at 0: the dialog drops it; converting only the other line works [browser: dialog behaviour]', () => {

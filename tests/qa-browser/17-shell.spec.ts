@@ -4,6 +4,8 @@ import {
   seedRich, setupWorkspace, sharedSession, keepSignedIn, signedInPage, writeQaWorkspace,
 } from './helpers';
 import { scopeWorkspace } from '../../src/modules/erp/access';
+import { businessToday } from '../../src/modules/erp/dates';
+import { outstanding } from '../../src/modules/erp/engine';
 import type { Workspace } from '../../src/modules/erp/types';
 
 // Shell: navigation, search, notifications, workspace switcher, Overview (docs/qa/cases/17-shell.md).
@@ -187,13 +189,17 @@ test('NAV-014 Ctrl+K and ⌘K open search instantly with no dialog animation', a
   }
 });
 
-test('NAV-015 Search "INV-2026" lists documents; Enter opens the first [defect]', async () => {
+test('NAV-015 Search "INV-2026" lists documents; Enter opens the first [case-corrected: since D-39 the journals whose memo names an INV-2026 invoice also match; the invoices are listed first]', async () => {
   const { page } = s;
   await home(page);
   await search(page, 'INV-2026');
   const titles = await resultTitles(page);
-  expect(titles.length).toBeGreaterThan(0);
-  for (const t of titles) expect(t).toMatch(/^INV-2026-\d{4}$/);
+  const modules = await results(page).locator('.search-module').allInnerTexts();
+  const documents = modules.filter(m => m === 'Sales').length;
+  expect(documents).toBeGreaterThan(0);
+  expect(modules.slice(0, documents).every(m => m === 'Sales'), 'documents come first').toBe(true);
+  for (const t of titles.slice(0, documents)) expect(t).toMatch(/^INV-2026-\d{4}$/);
+  for (const [i, m] of modules.entries()) if (i >= documents) { expect(m).toBe('Accounting'); await expect(results(page).nth(i).locator('small')).toContainText('INV-2026'); }
   await expect(results(page).first().locator('.search-module')).toHaveText('Sales');
   await searchInput(page).press('Enter');
   // Expected: the first document opens (dialog closes and the invoice is shown).
@@ -201,7 +207,7 @@ test('NAV-015 Search "INV-2026" lists documents; Enter opens the first [defect]'
   await expect(page.getByRole('dialog', { name: new RegExp(titles[0]) })).toBeVisible({ timeout: 3000 });
 });
 
-test('NAV-016 Search a customer name lists the customer and their documents', async () => {
+test('NAV-016 Search a customer name lists the customer and their documents [case-corrected: since D-39 a journal whose memo names the customer (an expense "for the Metro Home Stores order") is listed too]', async () => {
   const { page, context } = s;
   await home(page);
   const w = await readWorkspaceApi(context.request);
@@ -210,7 +216,9 @@ test('NAV-016 Search a customer name lists the customer and their documents', as
   await search(page, F.metro);
   const titles = await resultTitles(page);
   expect(titles).toContain(F.metro);
-  expect(titles.filter(t => t !== F.metro).sort()).toEqual(docs.sort());
+  const modules = await results(page).locator('.search-module').allInnerTexts();
+  expect(titles.filter((t, i) => t !== F.metro && modules[i] !== 'Accounting').sort()).toEqual(docs.sort());
+  for (const [i, m] of modules.entries()) if (m === 'Accounting') await expect(results(page).nth(i).locator('small')).toContainText(F.metro);
   await expect(results(page).filter({ hasText: 'customer · Lahore' }).locator('.search-module')).toHaveText('Collections');
   await closeSearch(page);
 });
@@ -322,7 +330,7 @@ test('NAV-025 Urdu search matches', async () => {
   await closeSearch(page);
 });
 
-test('NAV-026 Arrow keys move the selection; Escape closes [defect]', async () => {
+test('NAV-026 Arrow keys move the selection; Escape closes', async () => {
   const { page } = s;
   await home(page);
   await search(page, 'INV-2026');
@@ -345,19 +353,20 @@ test('NAV-026 Arrow keys move the selection; Escape closes [defect]', async () =
   await expect(searchDialog(page)).toHaveCount(0);
 });
 
-test('NAV-027 Clicking a result navigates to its module and opens the record [defect]', async () => {
+test('NAV-027 Clicking a result navigates to its module and opens the record', async () => {
   const { page, context } = s;
   await home(page);
   const w = await readWorkspaceApi(context.request);
   const number = numberOf(w, ids.inv1);
   await search(page, number);
-  await results(page).filter({ hasText: number }).click();
+  // The invoice itself (its journals mention the number too since D-39).
+  await results(page).filter({ has: page.locator('strong', { hasText: new RegExp(`^${number}$`) }) }).click();
   await expect(searchDialog(page)).toHaveCount(0);
   await expect(breadcrumb(page)).toHaveText('Sales');
   await expect(page.getByRole('dialog', { name: new RegExp(number) }), 'the invoice opens').toBeVisible({ timeout: 3000 });
 });
 
-test('NAV-028 Search with 20k records stays under 100 ms per keystroke [defect]', async ({ browser }) => {
+test('NAV-028 Search with 20k records stays under 100 ms per keystroke', async ({ browser }) => {
   test.setTimeout(600_000);
   const { w } = richWorkspace();
   const template = w.documents.find(d => d.id === w.documents.find(x => x.status === 'draft' && x.kind === 'sales_invoice')!.id)!;
@@ -408,15 +417,18 @@ test('NAV-028 Search with 20k records stays under 100 ms per keystroke [defect]'
 
 // ============================================================ notifications
 
-test('NAV-030 Bell menu lists the attention queues with counts; clicking one opens its module [documented: one row per queue labelled "{count} · {Module}" rather than grouped headings; queues are commission awaiting approval, unallocated shipment costs, open customer invoices, cheques due, follow-ups due, draft sales]', async () => {
-  const { page } = s;
+test('NAV-030 Bell menu lists the attention queues with counts; clicking one opens its module [documented: one row per queue labelled "{count} · {Module}" rather than grouped headings; queues are commission awaiting approval, unallocated shipment costs, overdue supplier bills (D-42), open customer invoices, cheques due, follow-ups due, draft sales]', async () => {
+  const { page, context } = s;
   await home(page);
+  // Bills past due on the business day the test runs (the fixture's later bills fall due in October 2026).
+  const w = await readWorkspaceApi(context.request);
+  const overdueBills = w.documents.filter(d => d.kind === 'supplier_invoice' && d.status === 'submitted' && d.dueDate < businessToday() && Number(outstanding(d)) > 0).length;
   await bell(page).click();
   const menu = page.getByRole('menu');
   await expect(menu.locator('.workspace-menu-label')).toHaveText('NEEDS ATTENTION');
   const rows = menu.getByRole('menuitem');
   const expected: [string, string, number][] = [
-    ['Commission awaiting approval', 'Commissions', 1], ['Shipment costs unallocated', 'Imports & costing', 1],
+    ['Commission awaiting approval', 'Commissions', 1], ['Shipment costs unallocated', 'Imports & costing', 1], ['Overdue supplier bills', 'Purchasing', overdueBills],
     ['Open customer invoices', 'Collections', 5], ['Cheques due for deposit or clearing', 'Collections', 2],
     ['Recovery follow-ups due', 'Collections', 1], ['Draft sales documents to submit', 'Sales', 1],
   ];
@@ -543,7 +555,7 @@ test('NAV-053 Phone: tapping an item closes the drawer and navigates', async ({ 
   await context.close();
 });
 
-test('NAV-054 Phone: Escape closes the drawer [defect]', async ({ browser }) => {
+test('NAV-054 Phone: Escape closes the drawer', async ({ browser }) => {
   const { context, page } = await phoneSession(browser);
   await page.getByRole('button', { name: 'Open navigation' }).tap();
   await expect(page.locator('.sidebar.mobile-open')).toBeVisible();
@@ -832,12 +844,12 @@ test('NAV-074 Workspace menu scales in from the trigger origin', async () => {
 
 // ============================================================ phone menus, long names, small heights
 
-test('NAV-080 Search dialog on phone is full width with a 16px input [defect]', async ({ browser }) => {
+test('NAV-080 Search dialog on phone is full width with a 16px input', async ({ browser }) => {
   const { context, page } = await phoneSession(browser);
   await page.getByRole('button', { name: /^Search anything/ }).tap();
   await expect(searchDialog(page)).toBeVisible();
   await searchDialog(page).evaluate(el => Promise.all(el.getAnimations().map(a => a.finished)));
-  // The phone rule input{font-size:16px} loses to .search-dialog .search-input{font-size:var(--text-md)}.
+  // D-61: .search-dialog .search-input is 16px on touch/phone (it used to override the global 16px input rule).
   expect.soft(await searchInput(page).evaluate(el => getComputedStyle(el).fontSize), 'search input is 16px on a touch phone').toBe('16px');
   await expect(searchInput(page)).toBeFocused();
   await searchInput(page).fill(F.metro);
@@ -846,7 +858,7 @@ test('NAV-080 Search dialog on phone is full width with a 16px input [defect]', 
   const layout = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, layoutViewport: innerWidth, screen: visualViewport!.width }));
   test.info().annotations.push({ type: 'measured', description: `sheet ${Math.round(b.width)} px wide; ${JSON.stringify(layout)}` });
   expect(Math.round(b.x)).toBe(0);
-  // On a touch phone the top bar overflows the 390 px screen, the layout viewport widens and the sheet with it.
+  // D-35: the top bar no longer overflows the 390 px screen, so the layout viewport and the sheet stay 390 px.
   expect.soft(Math.round(b.width), 'search sheet matches the 390 px screen').toBe(PHONE.width);
   expect.soft(layout.scrollWidth, 'no horizontal overflow behind the sheet').toBeLessThanOrEqual(PHONE.width);
   await context.close();
@@ -871,7 +883,7 @@ test('NAV-081 Bell menu fits on a phone', async ({ browser }) => {
   await context.close();
 });
 
-test('NAV-082 A long company name is truncated with an ellipsis in the switcher [defect]', async () => {
+test('NAV-082 A long company name is truncated with an ellipsis in the switcher', async () => {
   const { page } = s;
   const longName = 'Haji Abdul Rehman Muhammad Siddique International Importers and Distributors (Private) Limited';
   const r = richWorkspace();

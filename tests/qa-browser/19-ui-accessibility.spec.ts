@@ -48,7 +48,7 @@ const overlaps = (page: Page, selector: string) => page.evaluate(sel => {
 test.describe('layout, keyboard and accessibility on the busy company', () => {
   test.beforeAll(async () => { await writeQaWorkspace(richWorkspace().w); });
 
-  test('UIX-001 every module at 390×844 has no horizontal page scroll [defect]', async ({ browser }) => {
+  test('UIX-001 every module at 390×844 has no horizontal page scroll', async ({ browser }) => {
     const s = await open(browser, { viewport: PHONE, hasTouch: true });
     const bad: string[] = [];
     for (const m of MODULES) {
@@ -57,8 +57,7 @@ test.describe('layout, keyboard and accessibility on the busy company', () => {
       if (scroll > inner) bad.push(`${m}: scrollWidth ${scroll} > ${inner} (${(await sticksOut(s.page, inner)).join('; ')})`);
     }
     saveEvidence('uix-001-phone-overflow.json', bad);
-    // Actual: the top bar does not shrink — "Workspace › <Module>" plus search, bell and avatar push the avatar off-screen
-    // whenever the module name cannot wrap (Commissions, Purchasing, Collections, Accounting …).
+    // D-35: on a phone the top bar keeps only the menu button, the module name (ellipsis), search and the bell.
     expect(bad).toEqual([]);
     await s.context.close();
   });
@@ -84,7 +83,7 @@ test.describe('layout, keyboard and accessibility on the busy company', () => {
     await s.context.close();
   });
 
-  test('UIX-003 768×1024 tablet: sidebar shown beside readable content, no horizontal scroll [defect]', async ({ browser }) => {
+  test('UIX-003 768×1024 tablet: sidebar shown beside readable content, no horizontal scroll', async ({ browser }) => {
     const s = await open(browser, { viewport: { width: 768, height: 1024 }, hasTouch: true });
     const bad: string[] = [];
     for (const m of MODULES) {
@@ -96,7 +95,7 @@ test.describe('layout, keyboard and accessibility on the busy company', () => {
       if (l.small) bad.push(`${m}: ${l.small} text nodes under 11px`);
     }
     saveEvidence('uix-003-tablet.json', bad);
-    // Actual: Overview keeps four metric cards in a row; "Rs 217,354.…" spills out of its card and widens the page to ~799 px.
+    // D-62: below 960 px the metric tiles wrap two per row, so long amounts stay inside their cards.
     expect(bad).toEqual([]);
     await s.context.close();
   });
@@ -114,7 +113,7 @@ test.describe('layout, keyboard and accessibility on the busy company', () => {
     await s.context.close();
   });
 
-  test('UIX-005 320px width is usable and wraps (drawer, dialogs, no horizontal scroll) [defect]', async ({ browser }) => {
+  test('UIX-005 320px width is usable and wraps (drawer, dialogs, no horizontal scroll)', async ({ browser }) => {
     const s = await open(browser, { viewport: { width: 320, height: 640 }, hasTouch: true });
     const bad: string[] = [];
     for (const m of MODULES) {
@@ -200,7 +199,7 @@ test.describe('layout, keyboard and accessibility on the busy company', () => {
     await s.context.close();
   });
 
-  test('UIX-029 keyboard focus is visible everywhere (violet ring) [defect]', async ({ browser }) => {
+  test('UIX-029 keyboard focus is visible everywhere (violet ring)', async ({ browser }) => {
     const s = await open(browser, { viewport: DESKTOP });
     const { page } = s;
     const missing: string[] = [];
@@ -210,7 +209,8 @@ test.describe('layout, keyboard and accessibility on the busy company', () => {
         await page.keyboard.press('Tab');
         const f = await page.evaluate(() => {
           const e = document.activeElement as HTMLElement;
-          if (!e || e === document.body) return null;
+          // The Next.js dev-tools button (nextjs-portal) only exists under `next dev`; it is not product UI.
+          if (!e || e === document.body || e.tagName === 'NEXTJS-PORTAL') return null;
           const cs = getComputedStyle(e);
           const ring = (cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) >= 1) ? cs.outlineColor : /rgba?\(107, 61, 245/.test(cs.boxShadow) ? 'box-shadow' : '';
           return { key: `${e.tagName.toLowerCase()}.${String(e.className).split(' ')[0]} "${(e.getAttribute('aria-label') ?? e.innerText ?? '').trim().slice(0, 25)}"`, ring };
@@ -337,7 +337,7 @@ test.describe('layout, keyboard and accessibility on the busy company', () => {
     await s.context.close();
   });
 
-  test('UIX-062 a single radius scale 6/10/14/20 (no stray radii) [defect]', async ({ browser }) => {
+  test('UIX-062 a single radius scale 6/10/14/20 (no stray radii)', async ({ browser }) => {
     const s = await open(browser, { viewport: DESKTOP });
     const { page } = s;
     const stray = new Map<string, string>();
@@ -424,7 +424,7 @@ test.describe('layout, keyboard and accessibility on the busy company', () => {
     await s.context.close();
   });
 
-  test('UIX-089 notices are readable on phone [defect]', async ({ browser }) => {
+  test('UIX-089 notices are readable on phone', async ({ browser }) => {
     const s = await open(browser, { viewport: PHONE, isMobile: true, hasTouch: true });
     const { page } = s;
     await goModule(page, 'Sales');
@@ -440,12 +440,12 @@ test.describe('layout, keyboard and accessibility on the busy company', () => {
     expect(m.left).toBeGreaterThanOrEqual(0);
     expect(m.right).toBeLessThanOrEqual(m.vw);
     expect(m.sw).toBeLessThanOrEqual(m.cw);
-    // Actual: the notice is rendered in the page flow above the heading; after acting on a row further down it is off-screen.
+    // D-46: the notice sticks under the top bar, so it is on screen after acting on a row further down.
     await expect(notice, 'the notice is on screen after the action').toBeInViewport();
     await s.context.close();
   });
 
-  test('UIX-092 axe-core: no serious or critical violations on any module (desktop and phone) [defect]', async ({ browser }) => {
+  test('UIX-092 axe-core: no serious or critical violations on any module (desktop and phone)', async ({ browser }) => {
     const found: string[] = [];
     for (const [name, options] of [['desktop', { viewport: DESKTOP }], ['phone', { viewport: PHONE, isMobile: true, hasTouch: true }]] as const) {
       const s = await open(browser, options);
@@ -499,7 +499,7 @@ test.describe('long and Urdu names', () => {
   test.afterAll(async () => { await s?.context.close(); });
   const customerRow = (page: Page, name: string) => page.locator('section.card').filter({ has: page.getByRole('heading', { name: 'Customers', level: 2 }) }).locator('tbody tr').filter({ hasText: name });
 
-  test('UIX-083 long names truncate with an ellipsis in fixed-width spots (workspace switcher) [defect]', async () => {
+  test('UIX-083 long names truncate with an ellipsis in fixed-width spots (workspace switcher)', async () => {
     const { page } = s;
     await home(page);
     const spots = await page.evaluate(() => [...document.querySelectorAll('.sidebar *')].filter(e => e.children.length === 0 && (e.textContent ?? '').includes('Al-Noor')).map(e => {
@@ -515,7 +515,7 @@ test.describe('long and Urdu names', () => {
     const menu = await menuName.evaluate(el => ({ ellipsis: getComputedStyle(el).textOverflow, clipped: el.scrollWidth > el.clientWidth }));
     await page.keyboard.press('Escape');
     expect(menu).toEqual({ ellipsis: 'ellipsis', clipped: true });
-    // Actual: the sidebar workspace switcher wraps the 115-character name over several lines instead of truncating it.
+    // D-58: the sidebar switcher keeps the name on one line with an ellipsis.
     for (const spot of spots) expect({ cls: spot.cls, ellipsis: spot.ellipsis, nowrap: spot.nowrap }).toEqual({ cls: spot.cls, ellipsis: 'ellipsis', nowrap: 'nowrap' });
   });
 
@@ -627,13 +627,12 @@ test.describe('setup wizard on a phone', () => {
     await s.context.close();
   });
 
-  test('UIX-099 setup card is full-screen on phone [defect]', async ({ browser }) => {
+  test('UIX-099 setup card is full-screen on phone', async ({ browser }) => {
     for (const step of [1, 3] as const) {
       const s = await wizard(browser, step);
       const m = await s.page.locator('.setup-card').evaluate(el => { const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height, radius: getComputedStyle(el).borderTopLeftRadius, vw: window.innerWidth, vh: window.innerHeight, page: document.documentElement.scrollWidth }; });
       saveEvidence(`uix-099-step-${step}.json`, m);
-      // Actual: the blurred workspace behind the card is 407 px wide (top bar + empty "Recent sales" table), so mobile
-      // Chrome zooms the page out and the card no longer fills the screen.
+      // D-35: the blurred workspace behind the card used to be 407 px wide because of the top bar.
       expect(m.page, `step ${step}: nothing behind the card widens the page`).toBeLessThanOrEqual(390);
       expect(m.left, `step ${step}`).toBe(0);
       expect(m.top, `step ${step}`).toBe(0);

@@ -20,10 +20,10 @@ test('IMP-035 Shipment list columns: shipment, supplier, container/GD, ETA, stat
   await expect(rows(page).filter({ hasText: 'SHP-2026-001' }).locator('td').nth(6)).toHaveText('Complete');
 });
 
-test('IMP-037 Customs / GD lookup (simulated) returns a result [defect]', async () => {
+test('IMP-037 no customs/GD lookup is offered [case-corrected: withdrawn — real customs lookups are out of scope (test plan §2) and simulated lookups were removed from the product; the GD number is entered by hand]', async () => {
   const { page } = s;
   await imports(page);
-  await expect(page.getByRole('button', { name: /GD|customs|lookup/i })).toBeVisible({ timeout: 3000 });
+  await expect(page.getByRole('button', { name: /GD lookup|customs lookup/i })).toHaveCount(0);
 });
 
 test('IMP-053 Shipment table on phone shows the scroll hint', async ({ browser }) => {

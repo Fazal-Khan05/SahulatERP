@@ -342,7 +342,7 @@ describe('09 Imports and landed cost (IMP)', () => {
     expect(pending.toFixed(4)).toBe('300.0000');
   });
 
-  it.todo('IMP-037 [browser] customs/GD lookup (simulated) result (code review: no customs lookup exists anywhere in src — likely fails)');
+  it.todo('IMP-037 [browser] customs/GD lookup withdrawn from scope — the browser pass asserts no lookup is offered');
 
   it('IMP-038 allocation journal: Dr 1200 / 1300 / 1400 / 5300, Cr 2000; balanced; one journal per allocation', () => {
     const { w: w0, grn } = withGrn();

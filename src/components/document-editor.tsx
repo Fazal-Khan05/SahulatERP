@@ -119,15 +119,13 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
       if (!created.ok || !created.recordId) return setError(created.message);
       partyId = created.recordId;
     } else if (!partyId) {
-      // Not saved: book to one shared walk-in account and print the typed name on the document.
+      // Not saved: the server books it to the shared walk-in account (creating it on first use, so any role that can create the document can do this) and prints the typed name.
       const walkIn = walkInName(partyType);
       const shared = workspace.parties.find(p => p.type === partyType && p.name.trim().toLowerCase() === walkIn.toLowerCase());
       if (shared?.archived) return setError(`${walkIn} is archived. Restore it in ${sales ? 'Sales → Customers' : 'Purchasing → Suppliers'} first.`);
-      if (shared) partyId = shared.id;
-      else { const created = await newParty(walkIn); if (!created.ok || !created.recordId) return setError(created.message); partyId = created.recordId; }
       printedName = name;
     }
-    const payload = { kind, partyId, ...(printedName ? { partyName: printedName } : {}), warehouseId, date, dueDate, currency: sales ? 'PKR' : currency, fxRate: sales ? '1' : fxRate, notes, ...(creditOverride.trim() ? { creditOverride: creditOverride.trim() } : {}), lines: payloadLines };
+    const payload = { kind, ...(partyId ? { partyId } : { walkIn: true }), ...(printedName ? { partyName: printedName } : {}), warehouseId, date, dueDate, currency: sales ? 'PKR' : currency, fxRate: sales ? '1' : fxRate, notes, ...(creditOverride.trim() ? { creditOverride: creditOverride.trim() } : {}), lines: payloadLines };
     const result = draftId ? await command('update_document', { id: draftId, ...payload }) : await command('create_document', payload);
     if (!result.ok) return setError(result.message);
     const id = draftId ?? result.recordId ?? null;

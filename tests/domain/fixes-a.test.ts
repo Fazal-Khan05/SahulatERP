@@ -1,6 +1,6 @@
 /** Regression tests for the QA defects fixed by agent A (engine money). Titles start with the defect ID. */
 import { describe, expect, it } from 'vitest';
-import { accountBalance, expectInvariants, firstWarehouse, freshCompany, refused, run, today, withDocument, withItem, withParty } from '../qa/helpers';
+import { accountBalance, actor, expectInvariants, firstWarehouse, freshCompany, owner, refused, run, today, withDocument, withItem, withParty } from '../qa/helpers';
 import { stock } from '../../src/modules/erp/engine';
 import { D } from '../../src/modules/erp/money';
 import type { Workspace } from '../../src/modules/erp/types';
@@ -220,5 +220,42 @@ describe('D-27 an omitted line taxRate comes from Settings', () => {
     expect([bare(taxed).lines[0].taxRate, bare(taxed).tax]).toEqual(['16', '16.0000']);
     expect(bare(taxed, { taxRate: '0' }).tax).toBe('0.0000');
     expect(bare(taxed, { taxRate: '5' }).tax).toBe('5.0000');
+  });
+});
+
+describe('D-28 "No, don\'t save" books to the shared walk-in account inside create_document', () => {
+  const doc = (t: ReturnType<typeof trading>, kind: string, extra: Record<string, unknown>, who = owner) =>
+    run(t.w, 'create_document', { kind, walkIn: true, warehouseId: t.wh, date: today(), dueDate: today(), lines: [line(t.item, '1', '10')], ...extra }, who);
+  it('D-28 any role allowed to create the document gets the walk-in account created once and reused', () => {
+    const t = trading();
+    const grn = doc(t, 'goods_receipt', { partyName: 'Lorry driver Akram' }, actor('Warehouse Manager'));
+    const supplierAccount = grn.workspace.parties.filter(p => p.name === 'Walk-in supplier');
+    expect(supplierAccount).toEqual([expect.objectContaining({ type: 'supplier', customerClass: 'Importer', terms: 30, creditLimit: '0' })]);
+    expect(docOf(grn.workspace, grn.recordId)).toMatchObject({ partyId: supplierAccount[0].id, partyName: 'Lorry driver Akram' });
+    expect('walkIn' in docOf(grn.workspace, grn.recordId)).toBe(false);
+    const sm = actor('Sales Manager');
+    const first = doc(t, 'quotation', { partyName: 'Rashid' }, sm);
+    const second = run(first.workspace, 'create_document', { kind: 'quotation', walkIn: true, partyName: 'Bilal', warehouseId: t.wh, date: today(), dueDate: today(), lines: [line(t.item)] }, sm);
+    expect(second.workspace.parties.filter(p => p.name === 'Walk-in customer')).toHaveLength(1);
+    expect(second.workspace.documents.filter(d => d.kind === 'quotation').map(d => d.partyName)).toEqual(['Rashid', 'Bilal']);
+  });
+  it('D-28 refusals: no name, an archived walk-in account, a role that cannot create documents', () => {
+    const t = trading();
+    const payload = (partyName: string) => ({ kind: 'sales_invoice', walkIn: true, partyName, warehouseId: t.wh, date: today(), dueDate: today(), lines: [line(t.item)] });
+    refused(t.w, 'create_document', payload(' '), "Enter the customer's name.");
+    const first = doc(t, 'sales_invoice', { partyName: 'Rashid' });
+    const shared = first.workspace.parties.find(p => p.name === 'Walk-in customer')!;
+    const archived = run(first.workspace, 'set_archived', { kind: 'party', id: shared.id, archived: true }).workspace;
+    refused(archived, 'create_document', payload('Bilal'), 'Walk-in customer is archived. Restore it first.');
+    refused(t.w, 'create_document', payload('Bilal'), 'Your role does not permit this action.', actor('Recovery Officer'));
+  });
+  it('D-28 updating a walk-in draft with the same contract keeps one account and the typed name; it posts like any invoice', () => {
+    const t = trading();
+    const first = doc(t, 'sales_invoice', { partyName: 'Rashid' });
+    const updated = run(first.workspace, 'update_document', { id: first.recordId, walkIn: true, partyName: 'Rashid Ali', warehouseId: t.wh, date: today(), dueDate: today(), lines: [line(t.item, '3', '10')] });
+    expect(updated.workspace.parties.filter(p => p.name === 'Walk-in customer')).toHaveLength(1);
+    const posted = run(updated.workspace, 'submit_document', { id: first.recordId }).workspace;
+    expect(docOf(posted, first.recordId)).toMatchObject({ status: 'submitted', partyName: 'Rashid Ali', total: '30.0000' });
+    expectInvariants(posted);
   });
 });

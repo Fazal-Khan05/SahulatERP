@@ -295,7 +295,7 @@ test('AUTH-060 Browser Back after signing in does not show the login form while 
   await context.close();
 });
 
-test('AUTH-061 Sign in while offline: clear network error; retry works when online [defect]', async ({ browser }) => {
+test('AUTH-061 Sign in while offline: clear network error; retry works when online', async ({ browser }) => {
   const { context, page } = await loginPage(browser);
   await context.setOffline(true);
   await attempt(page, EMAIL, PASSWORD);
@@ -306,6 +306,7 @@ test('AUTH-061 Sign in while offline: clear network error; retry works when onli
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible({ timeout: 60_000 });
   // A clear network error names the connection; the raw fetch error does not.
   expect(message, `offline message was "${message}"`).toMatch(/network|connection|offline|internet/i);
+  expect(message.trim()).toBe('No internet connection. Check your connection and try again.');
   await context.close();
 });
 

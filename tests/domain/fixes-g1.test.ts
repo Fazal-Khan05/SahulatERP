@@ -29,6 +29,7 @@ vi.mock('@/lib/supabase/server', () => ({
 import * as signin from '../../src/app/auth/signin/route';
 import * as forgot from '../../src/app/auth/forgot/route';
 import * as password from '../../src/app/auth/password/route';
+import { postAuth } from '../../src/lib/supabase/client';
 
 const post = (path: string, body: unknown, type = 'application/json') =>
   new Request(`https://erp.example${path}`, { method: 'POST', headers: { 'content-type': type }, body: typeof body === 'string' ? body : JSON.stringify(body) });
@@ -140,5 +141,25 @@ describe('D-31 sign-in, reset and password change run on the server', () => {
     } finally { vi.unstubAllGlobals(); vi.unstubAllEnvs(); }
     expect(jar.size).toBeGreaterThan(0);
     for (const [name, { options }] of jar) expect(options, name).toMatchObject({ httpOnly: true, secure: true, sameSite: 'lax', path: '/' });
+  });
+});
+
+describe('D-49 the login screen explains a lost connection', () => {
+  it('D-49 an unanswered request reads "No internet connection", an answered one shows the server message', async () => {
+    const answers: (() => Promise<Response>)[] = [
+      async () => { throw new TypeError('Failed to fetch'); },
+      async () => Response.json({ message: 'Invalid login credentials' }, { status: 401 }),
+      async () => new Response('<html>Internal Server Error</html>', { status: 500 }),
+      async () => Response.json({ ok: true }),
+    ];
+    const seen: string[] = [];
+    vi.stubGlobal('fetch', async (path: string, init: RequestInit) => { seen.push(`${init.method} ${path} ${new Headers(init.headers).get('content-type')}`); return answers.shift()!(); });
+    try {
+      expect(await postAuth('/auth/signin', { email: 'a@qa.example', password: 'x' })).toBe('No internet connection. Check your connection and try again.');
+      expect(await postAuth('/auth/signin', { email: 'a@qa.example', password: 'x' })).toBe('Invalid login credentials');
+      expect(await postAuth('/auth/signin', { email: 'a@qa.example', password: 'x' })).toBe('Something went wrong. Try again in a moment.');
+      expect(await postAuth('/auth/signin', { email: 'a@qa.example', password: 'x' })).toBeNull();
+    } finally { vi.unstubAllGlobals(); }
+    expect(new Set(seen)).toEqual(new Set(['POST /auth/signin application/json']));
   });
 });

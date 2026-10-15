@@ -8,7 +8,8 @@ export async function postAuth(path: string, body: Record<string, string>): Prom
     if (response.ok) return null;
     const data = await response.json().catch(() => null) as { message?: string } | null;
     return data?.message || 'Something went wrong. Try again in a moment.';
-  } catch (error) {
-    return error instanceof Error ? error.message : 'Something went wrong. Try again in a moment.';
+  } catch {
+    // fetch only rejects when the request never got an answer (offline, DNS, dropped connection), never on an HTTP error.
+    return 'No internet connection. Check your connection and try again.';
   }
 }

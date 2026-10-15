@@ -210,6 +210,9 @@ export function Workbench({initialWorkspace,actor,memberships}:Props){
   const headerAction=headerActions[active];
   // The wizard keeps its provisioning screen up for a moment after setup completes, then the workspace is revealed.
   const [noticeError,setNoticeError]=useState(false);
+  // Once setup is complete the card closes; a notice raised while it was open (for example "Setup is already
+  // complete." when another session finished first) must not follow the member onto Overview.
+  useEffect(()=>{if(workspace.setup.complete){setNotice('');setNoticeError(false)}},[workspace.setup.complete]);
   const [provisioning,setProvisioning]=useState(false);const settingUp=!workspace.setup.complete||provisioning;
   useEffect(()=>{if(wasSettingUp.current&&!settingUp){wasSettingUp.current=false;setRevealed(true);const t=setTimeout(()=>setRevealed(false),900);return()=>clearTimeout(t);}if(settingUp)wasSettingUp.current=true;},[settingUp]);
   if(settingUp&&actor.role==='Auditor')return <main className="loading-screen"><div><h1>{workspace.company.name} is being set up</h1><p>The company owner has not finished setup yet. Try again later.</p><form action="/auth/signout" method="post"><button className="button button-outline">Sign out</button></form></div></main>;

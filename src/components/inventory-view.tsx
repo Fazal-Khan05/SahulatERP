@@ -27,7 +27,7 @@ export function stockLevels(moves: Workspace['stockMoves']) {
 /** Rows rendered per table before "Show more": large catalogues stay quick to draw; search and filters reach the rest. */
 export const inventoryPageSize = 100;
 
-function ShowMore({ shown, total, noun, onMore }: { shown: number; total: number; noun: string; onMore: () => void }) {
+export function ShowMore({ shown, total, noun, onMore }: { shown: number; total: number; noun: string; onMore: () => void }) {
   if (shown >= total) return null;
   return <div className="card-body inventory-row-actions"><Button size="sm" variant="outline" onClick={onMore}>Show {Math.min(inventoryPageSize, total - shown)} more</Button><small className="muted">Showing {shown.toLocaleString('en-PK')} of {total.toLocaleString('en-PK')} {noun}</small></div>;
 }

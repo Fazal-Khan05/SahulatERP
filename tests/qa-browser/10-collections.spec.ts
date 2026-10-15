@@ -142,10 +142,22 @@ test('COL-070 Cheque register is also visible in Cash & bank with the same data'
   expect(inCashBank).toEqual(inCollections);
 });
 
-test('COL-075 Customer receipts list filters by method/status [defect]', async () => {
+test('COL-075 Customer receipts list filters by method/status', async () => {
   const { page } = s;
   await collections(page);
   await expect(receiptsCard(page).getByRole('combobox', { name: /method|status/i }).first()).toBeVisible({ timeout: 3000 });
+  const method = (row: string[]) => row[3];
+  const read = () => receiptsCard(page).locator('tbody tr').evaluateAll(trs => trs.map(tr => [...tr.querySelectorAll('td')].map(td => td.textContent ?? '')));
+  const all = await read();
+  await receiptsCard(page).getByLabel('Receipt method').selectOption('cheque');
+  const cheques = await read();
+  expect(cheques.length).toBeGreaterThan(0);
+  expect(cheques.length).toBeLessThan(all.length);
+  expect(cheques.every(r => method(r).startsWith('CHQ-'))).toBe(true);
+  await receiptsCard(page).getByLabel('Receipt status').selectOption('bounced');
+  expect((await read()).map(r => r[3])).toEqual(['CHQ-1004']);
+  await receiptsCard(page).getByRole('button', { name: 'Clear filters' }).click();
+  expect(await read()).toEqual(all);
 });
 
 test('COL-076 Search finds a receipt by cheque number', async () => {
@@ -200,7 +212,7 @@ test('COL-094 Receipt row actions show only valid transitions [documented: recei
   }
 });
 
-test('COL-084 5,000 receipts: Collections list and aging render in under 2 s [defect]', async () => {
+test('COL-084 5,000 receipts: Collections list and aging render in under 2 s [case-corrected: the receipts table draws the newest 100 with "Show 100 more"; the filters reach the rest]', async () => {
   test.setTimeout(240_000);
   const { page } = s;
   const r = richWorkspace();
@@ -208,15 +220,24 @@ test('COL-084 5,000 receipts: Collections list and aging render in under 2 s [de
   for (let i = 0; i < 5000; i++) r.w.receipts.push({ ...structuredClone(template), id: `bulk-rcpt-${i}`, number: `REC-${String(10000 + i)}`, amount: '1.0000', allocations: [] });
   await writeQaWorkspace(r.w);
   await gotoApp(page);
+  const total = r.w.receipts.filter(x => r.w.parties.find(p => p.id === x.partyId)?.type !== 'supplier').length;
   let started = Date.now();
   await openModule(page, 'Collections');
-  await expect(receiptsCard(page).locator('tbody tr')).toHaveCount(r.w.receipts.filter(x => r.w.parties.find(p => p.id === x.partyId)?.type !== 'supplier').length);
+  await expect(receiptsCard(page).locator('tbody tr')).toHaveCount(100);
   const list = Date.now() - started;
+  await expect(receiptsCard(page).locator('tbody tr').first().locator('td').first()).toHaveText('REC-14999');
+  await expect(receiptsCard(page)).toContainText(`Showing 100 of ${total.toLocaleString('en-PK')} receipts`);
+  started = Date.now();
+  await receiptsCard(page).getByRole('button', { name: 'Show 100 more' }).click();
+  await expect(receiptsCard(page).locator('tbody tr')).toHaveCount(200);
+  const more = Date.now() - started;
+  await receiptsCard(page).getByLabel('Receipt status').selectOption('bounced');
+  await expect(receiptsCard(page).locator('tbody tr')).toHaveCount(1);
   started = Date.now();
   await openModule(page, 'Reports');
   await page.getByRole('button', { name: 'Aged receivables' }).click();
   await expect(page.locator('tfoot')).toContainText('Total');
   const aging = Date.now() - started;
-  test.info().annotations.push({ type: 'measured', description: `Collections list ${list} ms, aged receivables ${aging} ms with 5,000+ receipts` });
-  expect(Math.max(list, aging)).toBeLessThan(2000);
+  test.info().annotations.push({ type: 'measured', description: `Collections list ${list} ms, next 100 rows ${more} ms, aged receivables ${aging} ms with 5,000+ receipts` });
+  expect(Math.max(list, more, aging)).toBeLessThan(2000);
 });

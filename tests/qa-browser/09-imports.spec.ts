@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { F, PHONE, gotoApp, home, openModule, richWorkspace, sharedSession, signedInPage, writeQaWorkspace, type Session, keepSignedIn } from './helpers';
+import { F, PHONE, gotoApp, home, openModule, readWorkspaceApi, richWorkspace, sharedSession, signedInPage, writeQaWorkspace, type Session, keepSignedIn } from './helpers';
 
 let s: Session;
 test.beforeAll(async ({ browser }) => { s = await sharedSession(browser); });
@@ -36,20 +36,42 @@ test('IMP-053 Shipment table on phone shows the scroll hint', async ({ browser }
   expect(scrolls).toBe(true);
 });
 
-test('IMP-054 Add-cost dialog: amount empty with a placeholder [defect]', async () => {
-  const { page } = s;
+test('IMP-054 Add-cost dialog: amount empty with a placeholder', async () => {
+  const { page, context } = s;
   await imports(page);
-  // Engine-pass finding: the Imports view has no control to create a shipment or add a cost.
   const add = page.getByRole('button', { name: /add cost|new shipment|create shipment/i });
   await expect(add.first()).toBeVisible({ timeout: 3000 });
   await add.first().click();
-  await expect(page.getByRole('dialog').getByLabel(/amount/i)).toHaveValue('');
+  const dialog = page.getByRole('dialog', { name: 'Add shipment cost' });
+  await expect(dialog.getByLabel(/amount/i)).toHaveValue('');
+  await expect(dialog.getByLabel(/amount/i)).toHaveAttribute('placeholder', '0.00');
+  // Saving the dialog adds an unallocated cost to the chosen shipment.
+  try {
+    await dialog.getByLabel('Shipment').selectOption({ label: `SHP-2026-002 · ${F.localSupplier} · TGHU7654321` });
+    await dialog.getByLabel('Cost', { exact: true }).fill('Clearing agent');
+    await dialog.getByLabel(/amount/i).fill('1500');
+    await dialog.getByRole('radio', { name: /^Expense/ }).check();
+    await expect(dialog.getByLabel('Share across lines')).toHaveCount(0);
+    await dialog.getByRole('button', { name: 'Add cost' }).click();
+    await expect(dialog).toHaveCount(0, { timeout: 30_000 });
+    await expect(rows(page).filter({ hasText: 'SHP-2026-002' }).locator('td').nth(5)).toHaveText('Rs 6,500');
+    const cost = (await readWorkspaceApi(context.request)).shipments.find(x => x.number === 'SHP-2026-002')!.costs.at(-1);
+    expect({ ...cost, amount: Number(cost?.amount) }).toMatchObject({ label: 'Clearing agent', amount: 1500, classification: 'expense', allocated: false });
+  } finally {
+    await writeQaWorkspace(richWorkspace().w);
+    await gotoApp(page);
+  }
 });
 
-test('IMP-055 Classification help text explains each class [defect]', async () => {
+test('IMP-055 Classification help text explains each class', async () => {
   const { page } = s;
   await imports(page);
   for (const text of [/inventory/i, /recoverable/i, /deposit/i, /expense/i]) await expect(page.locator('main')).toContainText(text, { timeout: 2000 });
+  // The Add cost dialog explains each class next to its choice.
+  await page.getByRole('button', { name: 'Add cost' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Add shipment cost' });
+  for (const [name, help] of [['Inventory', /stock value/], ['Recoverable tax', /claim back/], ['Deposit', /refunded/], ['Expense', /profit and loss/]] as const) await expect(dialog.getByRole('radio', { name: new RegExp(`^${name}`) })).toHaveAccessibleName(help);
+  await page.keyboard.press('Escape');
 });
 
 test('IMP-056 Search finds a shipment by number or container', async () => {
@@ -72,16 +94,25 @@ test('IMP-057 Attention queue lists shipments with unallocated costs', async () 
   await expect(row).toContainText('1 records');
 });
 
-test('IMP-082 Shipment list is sorted newest first [defect]', async () => {
+test('IMP-082 Shipment list is sorted newest first', async () => {
   const { page } = s;
   await imports(page);
   expect(await rows(page).locator('td:first-child').allInnerTexts()).toEqual(['SHP-2026-002', 'SHP-2026-001']);
 });
 
-test('IMP-083 Shipments can be filtered by status [defect]', async () => {
+test('IMP-083 Shipments can be filtered by status', async () => {
   const { page } = s;
   await imports(page);
-  await expect(card(page).getByRole('combobox', { name: /status/i })).toBeVisible({ timeout: 3000 });
+  const status = card(page).getByRole('combobox', { name: /status/i });
+  await expect(status).toBeVisible({ timeout: 3000 });
+  await status.selectOption('costed');
+  expect(await rows(page).locator('td:first-child').allInnerTexts()).toEqual(['SHP-2026-001']);
+  await expect(card(page).locator('.card-heading p')).toHaveText('1 of 2 shipments');
+  await status.selectOption('in_transit');
+  await expect(rows(page)).toHaveCount(1);
+  await expect(rows(page)).toContainText('No shipments match this status.');
+  await card(page).getByRole('button', { name: 'Clear filters' }).click();
+  await expect(rows(page)).toHaveCount(2);
 });
 
 test('IMP-089 Status badges use a pastel colour per status', async () => {

@@ -364,6 +364,26 @@ test('NAV-027 Clicking a result navigates to its module and opens the record', a
   await expect(searchDialog(page)).toHaveCount(0);
   await expect(breadcrumb(page)).toHaveText('Sales');
   await expect(page.getByRole('dialog', { name: new RegExp(number) }), 'the invoice opens').toBeVisible({ timeout: 3000 });
+  // A supplier opens Purchasing on its Suppliers tab, also when Purchasing is already open on another tab.
+  const pickSupplier = async () => {
+    await page.keyboard.press('ControlOrMeta+k');
+    await searchInput(page).fill(F.supplier);
+    await results(page).filter({ hasText: 'supplier · ' }).click();
+    await expect(breadcrumb(page)).toHaveText('Purchasing');
+    await expect(page.getByRole('tab', { name: 'Suppliers' })).toHaveAttribute('aria-selected', 'true');
+  };
+  await home(page);
+  await pickSupplier();
+  await page.getByRole('tab', { name: 'Documents' }).click();
+  await pickSupplier();
+  // A product opens Inventory on its Products tab with the product's details.
+  await page.keyboard.press('ControlOrMeta+k');
+  await searchInput(page).fill('QA-KET');
+  await results(page).first().click();
+  await expect(breadcrumb(page)).toHaveText('Inventory');
+  await expect(page.getByRole('dialog', { name: new RegExp(F.kettle) })).toBeVisible({ timeout: 3000 });
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('tab', { name: 'Products' })).toHaveAttribute('aria-selected', 'true');
 });
 
 test('NAV-028 Search with 20k records stays under 100 ms per keystroke', async ({ browser }) => {
@@ -447,12 +467,20 @@ test('NAV-030 Bell menu lists the attention queues with counts; clicking one ope
   }
 });
 
-test('NAV-076 "Draft sales documents to submit" opens Sales filtered to drafts [defect]', async () => {
+test('NAV-076 "Draft sales documents to submit" opens Sales filtered to drafts', async () => {
   const { page } = s;
   await home(page);
   await page.locator('.attention-row').filter({ hasText: 'Draft sales documents to submit' }).click();
   await expect(breadcrumb(page)).toHaveText('Sales');
   await expect(page.getByLabel('Document status'), 'status filter preset to Draft').toHaveValue('draft', { timeout: 3000 });
+  // The bell's entry does the same; opening Sales from the menu shows every status.
+  await home(page);
+  await bell(page).click();
+  await page.getByRole('menuitem').filter({ hasText: 'Draft sales documents to submit' }).click();
+  await expect(page.getByLabel('Document status')).toHaveValue('draft');
+  await home(page);
+  await openModule(page, 'Sales');
+  await expect(page.getByLabel('Document status')).toHaveValue('');
 });
 
 // ============================================================ branch picker, notices
@@ -481,9 +509,16 @@ test('NAV-048 Branch picker filters the views to the chosen branch', async () =>
   await openModule(page, 'Inventory');
   const ledRow = page.locator('tbody tr').filter({ hasText: 'QA-LED' }).first();
   await expect(ledRow).toContainText('18 pcs');
+  // The ledger is company-wide: with a branch picked, Accounting explains instead of showing balances (like Reports).
+  await openModule(page, 'Accounting');
+  await expect(page.getByRole('heading', { name: 'The general ledger is company-wide' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Trial balance' })).toHaveCount(0);
+  await openModule(page, 'Inventory');
   await picker.click();
   await page.getByRole('menuitem', { name: 'All branches' }).click();
   await expect(ledRow).not.toContainText('18 pcs');
+  await openModule(page, 'Accounting');
+  await expect(page.getByRole('heading', { name: 'Trial balance' })).toBeVisible();
   await openModule(page, 'Sales');
   await expect(salesRows(page)).toHaveCount(all);
   await reseed(page);

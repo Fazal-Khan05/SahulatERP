@@ -15,14 +15,14 @@ type Kind = Document['kind'];
 const salesKinds: Kind[] = ['quotation', 'sales_order', 'delivery', 'sales_invoice', 'credit_note'];
 const purchaseKinds: Kind[] = ['purchase_order', 'goods_receipt', 'supplier_invoice', 'supplier_return'];
 
-/** Filtered document list for Sales or Purchasing with View / Convert / Submit / Print and a "New" menu per kind. */
-export function DocumentsList({ side, workspace, actor, editable, busy, command }: { side: 'sales' | 'purchasing'; workspace: Workspace; actor: Actor; editable: boolean; busy: string; command: CommandFn }) {
+/** Filtered document list for Sales or Purchasing with View / Convert / Submit / Print and a "New" menu per kind. `initialStatus` presets the status filter (e.g. "draft" when opened from "Draft sales documents to submit"). */
+export function DocumentsList({ side, workspace, actor, editable, busy, command, initialStatus = '' }: { side: 'sales' | 'purchasing'; workspace: Workspace; actor: Actor; editable: boolean; busy: string; command: CommandFn; initialStatus?: string }) {
   const kinds = side === 'sales' ? salesKinds : purchaseKinds;
   const creatable = (side === 'sales' ? ['sales_invoice', 'quotation', 'sales_order', 'delivery'] : ['purchase_order', 'goods_receipt', 'supplier_invoice']) as Exclude<Kind, 'credit_note' | 'supplier_return'>[];
   const partyType = side === 'sales' ? 'customer' : 'supplier';
   const [query, setQuery] = useState('');
   const [kind, setKind] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState(initialStatus);
   const [partyId, setPartyId] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');

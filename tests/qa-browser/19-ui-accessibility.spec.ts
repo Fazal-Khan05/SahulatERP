@@ -559,7 +559,7 @@ test.describe('long and Urdu names', () => {
 
 // ====================================================================== empty company
 test.describe('empty company', () => {
-  test('UIX-059 empty states offer a next action [defect]', async ({ browser }) => {
+  test('UIX-059 empty states offer a next action', async ({ browser }) => {
     await writeQaWorkspace(freshBuilder().w);
     const s = await open(browser, { viewport: DESKTOP });
     const bad: string[] = [];

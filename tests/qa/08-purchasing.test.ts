@@ -681,7 +681,7 @@ describe('08 Purchasing, foreign currency, supplier payments (PUR)', () => {
     refused(w, 'create_shipment', { documentId: grn }, 'Imports & costing is turned off for this company. Turn it on in Settings → Features.');
   });
 
-  it('PUR-090 Imports on: shipment can be created from a submitted GRN and bill [browser: "Create shipment" button — code review found no create_shipment call anywhere in src/components]', () => {
+  it('PUR-090 Imports on: shipment can be created from a submitted GRN and bill [browser: Imports & costing → New shipment, tests/qa-browser/08-purchasing.spec.ts]', () => {
     const { w, grn, bill } = usdBill();
     expect(run(w, 'create_shipment', { documentId: grn }).workspace.shipments).toHaveLength(1);
     expect(run(w, 'create_shipment', { documentId: bill }).workspace.shipments).toHaveLength(1);

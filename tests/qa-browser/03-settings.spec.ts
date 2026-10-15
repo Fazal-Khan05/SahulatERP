@@ -194,7 +194,7 @@ test('SET-090 Error notice from a failed save is red', async () => {
   const note = page.locator('.main-content > .error-note');
   await expect(note).toBeVisible({ timeout: 30_000 });
   const st = await note.evaluate(el => ({ color: getComputedStyle(el).color, bg: getComputedStyle(el).backgroundColor, role: el.getAttribute('role') }));
-  expect(st).toEqual({ color: 'rgb(217, 45, 32)', bg: 'rgb(254, 233, 231)', role: 'alert' });
+  expect(st).toEqual({ color: 'rgb(180, 35, 24)', bg: 'rgb(254, 233, 231)', role: 'alert' }); // --danger is red-700 since D-47 (5.6:1 on the pastel)
   await gotoApp(page);
 });
 
@@ -208,7 +208,7 @@ test('SET-091 Success notice is neutral (not red)', async () => {
   const st = await note.evaluate(el => ({ cls: el.className, color: getComputedStyle(el).color, bg: getComputedStyle(el).backgroundColor }));
   expect(st.cls).toContain('form-note');
   expect(st.bg).not.toBe('rgb(254, 233, 231)');
-  expect(st.color).not.toBe('rgb(217, 45, 32)');
+  expect(st.color).not.toBe('rgb(180, 35, 24)');
 });
 
 test('SET-092 Notice clears when the next command starts', async () => {

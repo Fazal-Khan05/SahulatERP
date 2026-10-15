@@ -484,7 +484,7 @@ test('AUTH-019 Sign out from the sidebar profile returns to login; Back does not
   await context.close();
 });
 
-test('AUTH-049 Sign out in one tab; the other tab\'s next command gets 401 and the UI shows the login [documented: sign-out ends every session of the account] [defect]', async ({ browser }) => {
+test('AUTH-049 Sign out in one tab; the other tab\'s next command gets 401 and the UI shows the login [documented: sign-out ends every session of the account]', async ({ browser }) => {
   const { context, page } = await signedInPage(browser);
   const other = await context.newPage();
   await gotoApp(page, APP); await gotoApp(other, APP);

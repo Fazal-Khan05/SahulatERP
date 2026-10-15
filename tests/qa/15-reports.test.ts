@@ -371,14 +371,14 @@ describe('15 Reports (RPT)', () => {
     expect(profitAndLoss(view, '2026-01-01', '2026-12-31')).toEqual(profitAndLoss(w, '2026-01-01', '2026-12-31'));
   });
 
-  it('RPT-044 branch-limited Accountant: ledger reports are not offered (journals are not sent) [defect]', () => {
+  it('RPT-044 branch-limited Accountant: ledger reports are not offered (journals are not sent)', () => {
     const w = buildDemoWorkspace();
     const view = scopeWorkspace(w, actor('Accountant', { branchIds: ['karachi'] }));
     expect(view.journals).toEqual([]);
     // With no journals the P&L shows nothing although the company has revenue.
     expect(profitAndLoss(view, '2026-01-01', '2026-12-31').totalRevenue).toBe('0.0000');
     expect(D(profitAndLoss(w, '2026-01-01', '2026-12-31').totalRevenue).gt(0)).toBe(true);
-    // Expected: ledgerView is off for branch-limited members; actually it depends only on role and the branch picker.
+    // ledgerView is off for branch-limited members (D-13), so the empty journal set is never shown as a real P&L.
     expect(source('src/components/workbench.tsx')).toMatch(/const ledgerView=[^;]*branchIds/);
   });
 

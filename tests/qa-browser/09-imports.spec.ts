@@ -52,7 +52,7 @@ test('IMP-055 Classification help text explains each class [defect]', async () =
   for (const text of [/inventory/i, /recoverable/i, /deposit/i, /expense/i]) await expect(page.locator('main')).toContainText(text, { timeout: 2000 });
 });
 
-test('IMP-056 Search finds a shipment by number or container [defect]', async () => {
+test('IMP-056 Search finds a shipment by number or container', async () => {
   const { page } = s;
   await home(page);
   await page.keyboard.press('ControlOrMeta+k');

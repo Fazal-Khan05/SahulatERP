@@ -56,7 +56,7 @@ test('CSH-050 Negative balance is styled red', async () => {
   expect(isRed(colours.table), `table colour ${colours.table} is red`).toBe(true);
 });
 
-test('CSH-051 Cash & bank dialogs open as bottom sheets on a phone [defect]', async ({ browser }) => {
+test('CSH-051 Cash & bank dialogs open as bottom sheets on a phone', async ({ browser }) => {
   const phone = await signedInPage(browser, { viewport: PHONE, hasTouch: true, isMobile: true, reducedMotion: 'reduce' });
   const { page } = phone;
   const boxes: Record<string, unknown> = {};
@@ -213,7 +213,7 @@ test('CSH-094 Tapping an account on a phone opens its activity [case-corrected: 
   } finally { await phone.context.close(); }
 });
 
-test('CSH-095 Card hover lift only with a mouse [defect]', async ({ browser }) => {
+test('CSH-095 Card hover lift only with a mouse', async ({ browser }) => {
   // Touch: no hover styles at all (no sticky hover after a tap).
   let touched: { transform: string; shadow: string } | undefined;
   const touch = await signedInPage(browser, { viewport: PHONE, hasTouch: true, isMobile: true, reducedMotion: 'reduce' });
@@ -233,6 +233,7 @@ test('CSH-095 Card hover lift only with a mouse [defect]', async ({ browser }) =
   const card = accountCard(page, 'Main bank account');
   await page.waitForTimeout(1000); // entrance cascade finished
   await card.hover();
+  await card.evaluate(el => Promise.all(el.getAnimations().map(a => a.finished))); // read the settled lift, not mid-transition
   const hovered = await card.evaluate(el => ({ transform: getComputedStyle(el).transform, shadow: getComputedStyle(el).boxShadow, animation: getComputedStyle(el).animationName, fill: getComputedStyle(el).animationFillMode }));
   await page.mouse.move(5, 5);
   test.info().annotations.push({ type: 'actual', description: `touch after tap: ${JSON.stringify(touched)}; mouse hover: ${JSON.stringify(hovered)}` });

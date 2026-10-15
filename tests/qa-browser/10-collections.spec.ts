@@ -148,7 +148,7 @@ test('COL-075 Customer receipts list filters by method/status [defect]', async (
   await expect(receiptsCard(page).getByRole('combobox', { name: /method|status/i }).first()).toBeVisible({ timeout: 3000 });
 });
 
-test('COL-076 Search finds a receipt by cheque number [defect]', async () => {
+test('COL-076 Search finds a receipt by cheque number', async () => {
   const { page } = s;
   await home(page);
   await page.keyboard.press('ControlOrMeta+k');

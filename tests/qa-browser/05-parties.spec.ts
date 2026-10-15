@@ -196,7 +196,7 @@ test('PTY-090 [manual] Suggestions on iOS Safari: datalist works or free text st
   test.skip(true, 'Needs iOS Safari on real hardware; Chromium only in this run.');
 });
 
-test('PTY-098 10,000 customers: the suggestion datalist stays usable [defect]', async () => {
+test('PTY-098 10,000 customers: the suggestion datalist stays usable (capped at 50, filtered by the typed text)', async () => {
   test.setTimeout(240_000);
   const { page } = s;
   const r = richWorkspace();
@@ -204,13 +204,15 @@ test('PTY-098 10,000 customers: the suggestion datalist stays usable [defect]', 
   await writeQaWorkspace(r.w);
   await gotoApp(page);
   await newInvoice(page);
-  await expect(editor(page).locator('datalist option')).toHaveCount(r.w.parties.filter(p => p.type === 'customer').length);
+  await expect(editor(page).locator('datalist option')).toHaveCount(50);
   const input = editor(page).getByLabel('Customer', { exact: true });
   await input.click();
   const started = Date.now();
   await page.keyboard.type('Bulk Customer 09876');
   const perKey = (Date.now() - started) / 'Bulk Customer 09876'.length;
   await expect(hint(page)).toHaveText('Karachi · +92 300 0009876 · 30-day terms');
+  await expect(editor(page).locator('datalist option')).toHaveCount(1);
+  await expect(editor(page).locator('datalist option[value="Bulk Customer 09876"]')).toHaveCount(1);
   test.info().annotations.push({ type: 'measured', description: `${Math.round(perKey)} ms per keystroke with 10,004 customers` });
   await closeAll(page);
   expect(perKey).toBeLessThan(150);

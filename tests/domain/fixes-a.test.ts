@@ -1,9 +1,21 @@
 /** Regression tests for the QA defects fixed by agent A (engine money). Titles start with the defect ID. */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { createElement, type ReactNode } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+vi.mock('@/lib/utils', () => import('../../src/lib/utils'));
+vi.mock('@/modules/erp/dates', () => import('../../src/modules/erp/dates'));
+vi.mock('@/modules/erp/documents', () => import('../../src/modules/erp/documents'));
+vi.mock('@/modules/erp/money', () => import('../../src/modules/erp/money'));
+// Radix renders dialogs into a portal, which server rendering skips; plain wrappers let the editor's markup be inspected.
+vi.mock('../../src/components/ui/dialog', () => {
+  const wrap = (tag: string) => ({ children }: { children?: ReactNode }) => createElement(tag, null, children);
+  return { Dialog: ({ open, children }: { open?: boolean; children?: ReactNode }) => open ? createElement('div', null, children) : null, DialogContent: wrap('div'), DialogTitle: wrap('h2'), DialogDescription: wrap('p') };
+});
+import { DocumentEditor } from '../../src/components/document-editor';
 import { accountBalance, actor, expectInvariants, firstWarehouse, freshCompany, owner, refused, run, today, withDocument, withItem, withParty } from '../qa/helpers';
 import { stock } from '../../src/modules/erp/engine';
 import { D } from '../../src/modules/erp/money';
-import type { Workspace } from '../../src/modules/erp/types';
+import type { Document, Workspace } from '../../src/modules/erp/types';
 
 const line = (itemId: string, quantity = '1', price = '100', extra: Record<string, unknown> = {}) => ({ itemId, quantity, price, discount: '0', taxRate: '0', employeeId: '', splits: [], ...extra });
 
@@ -257,5 +269,28 @@ describe('D-28 "No, don\'t save" books to the shared walk-in account inside crea
     const posted = run(updated.workspace, 'submit_document', { id: first.recordId }).workspace;
     expect(docOf(posted, first.recordId)).toMatchObject({ status: 'submitted', partyName: 'Rashid Ali', total: '30.0000' });
     expectInvariants(posted);
+  });
+});
+
+describe('D-36 the invoice editor caps customer suggestions', () => {
+  function crowded(count: number) {
+    const t = trading();
+    const w: Workspace = { ...t.w, parties: [...t.w.parties] };
+    for (let i = 0; i < count; i++) w.parties.push({ id: `bulk-${i}`, name: `Bulk Customer ${String(i).padStart(5, '0')}`, type: 'customer', city: 'Karachi', email: '', taxId: '', registered: false, creditLimit: '0', terms: 30, customerClass: 'Retailer', phone: '' });
+    return w;
+  }
+  const html = (w: Workspace, existing?: Document) => renderToStaticMarkup(createElement(DocumentEditor, { open: true, kind: 'sales_invoice', existing, workspace: w, actor: owner, busy: '', onClose: () => {}, command: async () => ({ ok: true, message: '' }) }));
+  const options = (markup: string) => [...markup.matchAll(/<option value="(Bulk Customer [^"]*|customer [^"]*)"/g)].map(m => m[1]);
+  it('D-36 with 10,000 customers an empty field suggests 50 names, and a typed name narrows the list to matches', () => {
+    const w = crowded(10_000);
+    expect(options(html(w))).toHaveLength(50);
+    const draft = run(w, 'create_document', { kind: 'sales_invoice', partyId: 'bulk-9876', warehouseId: firstWarehouse(w), date: today(), dueDate: today(), lines: [line(w.items[0].id)] });
+    const editing = html(draft.workspace, docOf(draft.workspace, draft.recordId));
+    expect(options(editing)).toEqual(['Bulk Customer 09876']);
+  });
+  it('D-36 a small customer list is suggested in full and archived customers stay hidden', () => {
+    const w = crowded(3);
+    w.parties[w.parties.length - 1] = { ...w.parties[w.parties.length - 1], archived: true };
+    expect(options(html(w))).toHaveLength(3);
   });
 });

@@ -66,6 +66,8 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
 
   const matchedParty = useMemo(() => { const needle = partyName.trim().toLowerCase(); return needle ? parties.find(p => p.name.trim().toLowerCase() === needle) : undefined; }, [partyName, parties]);
   const isNewParty = partyName.trim().length >= 2 && !matchedParty;
+  // Suggest at most 50 names containing what was typed: rendering every party made typing slow with thousands of customers.
+  const suggestions = useMemo(() => { const needle = partyName.trim().toLowerCase(); return (needle ? parties.filter(p => p.name.toLowerCase().includes(needle)) : parties).slice(0, 50); }, [partyName, parties]);
 
   const totals = useMemo(() => {
     let net = D(0), tax = D(0);
@@ -146,7 +148,7 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
       <div className="editor-head field-grid">
         <label className={singleLocation ? 'full-width' : undefined}>{partyLabel}
           <input aria-label={partyLabel} list={listId} value={partyName} onChange={e => changePartyName(e.target.value)} placeholder={`Type a name — existing ${partyType}s are suggested`} autoComplete="off" required/>
-          <datalist id={listId}>{parties.map(p => <option key={p.id} value={p.name}>{[p.city, p.phone].filter(Boolean).join(' · ')}</option>)}</datalist>
+          <datalist id={listId}>{suggestions.map(p => <option key={p.id} value={p.name}>{[p.city, p.phone].filter(Boolean).join(' · ')}</option>)}</datalist>
           {isNewParty && <small className="field-hint party-new"><UserPlus size={13}/> New {partyType}. You can choose whether to save them.</small>}
           {matchedParty && <small className="field-hint">{[matchedParty.city, matchedParty.phone, matchedParty.terms ? `${matchedParty.terms}-day terms` : ''].filter(Boolean).join(' · ') || 'Existing ' + partyType}</small>}
         </label>

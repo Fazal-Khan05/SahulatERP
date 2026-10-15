@@ -603,7 +603,7 @@ describe('05 parties (PTY)', () => {
     expect(w.documents[0].taxSnapshot).toMatchObject({ registered: true, taxId: '1234567-8' });
   });
 
-  it.todo('PTY-098 [browser] 10,000 customers: suggestion datalist still usable (or capped with search)');
+  it.todo('PTY-098 [browser] 10,000 customers: suggestion datalist still usable (capped at 50 and filtered by the typed text in document-editor.tsx)');
 
   it('PTY-099 supplier statement shows bill, return and payment with a running balance (payment reduces the balance) [defect]', () => {
     let { w, item } = stocked(); let bill: string;

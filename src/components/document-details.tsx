@@ -27,7 +27,11 @@ export function DocumentDetails({ workspace, actor, documentId, editable, busy, 
   const [editing, setEditing] = useState(false);
   const [converting, setConverting] = useState(false);
   const [returning, setReturning] = useState(false);
-  const doc = workspace.documents.find(d => d.id === documentId);
+  // A document opened from the chain replaces this one in the dialog until the caller opens another or it closes.
+  const [opened, setOpened] = useState<{ from: string | null; id: string } | null>(null);
+  if (opened && opened.from !== documentId) setOpened(null);
+  const currentId =opened && opened.from === documentId ? opened.id : documentId;
+  const doc = workspace.documents.find(d => d.id === currentId);
   if (!doc) return null;
   const view = documentView(workspace, doc);
   const source = workspace.documents.find(d => d.id === doc.parentId);
@@ -43,11 +47,20 @@ export function DocumentDetails({ workspace, actor, documentId, editable, busy, 
   /** Amounts of this document (lines, totals, its payments) are in its own currency. */
   const amount = (value: string) => formatMoney(value, doc.currency);
   const pkrTotal = view.totals.find(t => t.currency === 'PKR' && doc.currency !== 'PKR');
-  const title =doc.kind === 'sales_invoice' ? `Invoice ${doc.number}` : `${documentTitle(doc.kind)} ${doc.number}`;
+  const title = doc.kind === 'sales_invoice' ? `Invoice ${doc.number}` : `${documentTitle(doc.kind)} ${doc.number}`;
   const printable = ['credit_note', 'supplier_return'].includes(doc.kind) ? doc.kind : doc.kind;
+  const chainRow = (linked: Document) => <div className="invoice-related-row" key={linked.id}>
+    <span><button type="button" className="text-button" aria-label={`Open ${documentTitle(linked.kind).toLowerCase()} ${linked.number}`} onClick={event => {
+      // The clicked row is replaced, so keep keyboard focus in the dialog and show the linked document from its top.
+      const dialog = event.currentTarget.closest<HTMLElement>('[role=dialog]');
+      dialog?.focus(); dialog?.scrollTo({ top: 0 });
+      setOpened({ from: documentId, id: linked.id });
+    }}><strong>{linked.number}</strong></button><small>{documentTitle(linked.kind)} · {linked.date} · {label(linked.status)}</small></span>
+    <strong>{formatMoney(linked.total, linked.currency)}</strong>
+  </div>;
 
   return <>
-    <Dialog open={!editing} onOpenChange={open => { if (!open) onClose(); }}>
+    <Dialog open={!editing} onOpenChange={open => { if (!open) { setOpened(null); onClose(); } }}>
       <DialogContent className="invoice-dialog">
         <div className="invoice-heading">
           <div><span className="invoice-eyebrow">{documentTitle(doc.kind).toUpperCase()}</span><DialogTitle>{title}</DialogTitle><DialogDescription>Issued {doc.date}{doc.dueDate ? ` · Due ${doc.dueDate}` : ''}</DialogDescription></div>
@@ -76,8 +89,8 @@ export function DocumentDetails({ workspace, actor, documentId, editable, busy, 
           <div className="invoice-related">
             {doc.notes && <section><h3>Notes</h3><p style={{ whiteSpace: 'pre-wrap' }}>{doc.notes}</p></section>}
             {(source || children.length > 0) && <section><h3>Document chain</h3>
-              {source && <div className="invoice-related-row"><span><strong>{source.number}</strong><small>{documentTitle(source.kind)} · {source.date} · {label(source.status)}</small></span><strong>{formatMoney(source.total, source.currency)}</strong></div>}
-              {children.map(c => <div className="invoice-related-row" key={c.id}><span><strong>{c.number}</strong><small>{documentTitle(c.kind)} · {c.date} · {label(c.status)}</small></span><strong>{formatMoney(c.total, c.currency)}</strong></div>)}
+              {source && chainRow(source)}
+              {children.map(chainRow)}
               {nextKind[doc.kind] && doc.status === 'submitted' && <p>{remaining ? 'Not yet fully converted.' : 'Fully converted.'}</p>}
             </section>}
             {['sales_invoice', 'supplier_invoice'].includes(doc.kind) && <section><h3>{doc.kind === 'sales_invoice' ? 'Receipts' : 'Payments'}</h3>

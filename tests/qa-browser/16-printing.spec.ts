@@ -446,7 +446,7 @@ test.describe('document details dialog', () => {
     return details(page);
   }
 
-  test('PRN-056 details show the QUO → SO → DN → INV chain and its links open each document [defect]', async () => {
+  test('PRN-056 details show the QUO → SO → DN → INV chain and its links open each document', async () => {
     const { page } = s;
     const [quo, so, dn, inv] = [s.ids.quo, s.ids.so, s.ids.dn, s.ids.chainInv].map(num);
     let dialog = await openDetails(page, s.ids.so);
@@ -456,7 +456,7 @@ test.describe('document details dialog', () => {
     dialog = await openDetails(page, s.ids.dn);
     await expect(section(dialog, 'Document chain')).toContainText(so);
     await expect(section(dialog, 'Document chain')).toContainText(inv);
-    // "Links work": a chain row should open the linked document. Actual: plain text rows, nothing to click.
+    // "Links work": a chain row opens the linked document in the dialog.
     const target = section(dialog, 'Document chain').locator('.invoice-related-row').filter({ hasText: inv });
     await expect(target.locator('a, button'), 'chain row is a link').toHaveCount(1);
     await target.locator('a, button').click();

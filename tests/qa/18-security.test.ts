@@ -341,7 +341,7 @@ describe('18 security', () => {
     expect(v.stockMoves.every(m => m.warehouseId.startsWith('khi-'))).toBe(true);
     expect(v.journals).toEqual([]);
   });
-  it('SEC-030 Salesperson scope: API projection (own sales docs, customers, own commissions, zero salaries, no journals/audit/payroll) and the direct RLS path [defect: RLS lets a salesperson read every document in the tenant]', async () => {
+  it('SEC-030 Salesperson scope: API projection (own sales docs, customers, own commissions, zero salaries, no journals/audit/payroll) and the direct RLS path', async () => {
     const v = scopeWorkspace(demo, actor('Salesperson', { employeeId: 'e-4' }));
     expect(v.documents.every(d => ['quotation', 'sales_order', 'delivery', 'sales_invoice', 'credit_note'].includes(d.kind) && d.lines.some(l => l.employeeId === 'e-4' || l.splits.some(s => s.employeeId === 'e-4')))).toBe(true);
     expect(v.parties.every(p => p.type === 'customer')).toBe(true);

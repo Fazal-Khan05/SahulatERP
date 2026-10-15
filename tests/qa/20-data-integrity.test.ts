@@ -670,7 +670,9 @@ describe('20 data integrity', () => {
   it('DAT-086 tests run against PGlite with the real migrations', async () => {
     const tables = (await db.query<{ table_name: string }>(`select table_name from information_schema.tables where table_schema = 'public' order by 1`)).rows.map(r => r.table_name);
     expect(tables).toEqual(expect.arrayContaining(['workspace_snapshots', 'documents', 'journals', 'journal_lines', 'follow_ups', 'companies']));
-    expect(migrations().map(([f]) => f)).toHaveLength(5);
+    // Every migration file is applied, including the newest (D-07 role-scoped reads).
+    expect(migrations().map(([f]) => f)).toHaveLength(6);
+    expect((await db.query(`select 1 from pg_proc where proname = 'reads_full_ledger'`)).rows).toHaveLength(1);
   });
   it('DAT-087 pgcrypto is available in the test database', async () => {
     const [{ id }] = (await db.query<{ id: string }>('select gen_random_uuid()::text as id')).rows;

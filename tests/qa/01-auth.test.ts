@@ -329,10 +329,12 @@ describe('01 auth', () => {
     const html = renderToStaticMarkup(createElement(Workbench, el.props as never));
     expect(text(html)).toContain('Demo workspace');
   });
-  it('AUTH-083 controls are disabled until hydrated so no click is lost [defect: login "Sign in securely" is enabled in server HTML; workbench nav is disabled]', () => {
+  it('AUTH-083 controls are disabled until hydrated so no click is lost (login buttons and workbench nav)', () => {
     const wb = renderToStaticMarkup(createElement(Workbench, { initialWorkspace: buildDemoWorkspace(), actor: { id: 'o', name: 'Owner', role: 'Owner', branchIds: [] }, memberships: [] }));
     expect([...wb.matchAll(/<button data-module="[^"]+" class="nav-item[^"]*"( disabled="")?/g)].every(m => m[1])).toBe(true);
-    expect(loginHtml()).toMatch(/<button type="submit"[^>]*disabled=""/);
+    const login = loginHtml();
+    expect(login).toMatch(/<button class="button button-primary" type="submit" disabled="">/);
+    expect(login).toMatch(/<button type="button" class="text-button" disabled="">Forgot your password\?<\/button>/);
   });
   it('AUTH-087 JavaScript disabled: static login renders and a native submit carries no credentials (inputs have no name)', () => {
     const html = loginHtml();

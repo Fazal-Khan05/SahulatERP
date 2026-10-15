@@ -199,7 +199,7 @@ test.describe('layout, keyboard and accessibility on the busy company', () => {
     await s.context.close();
   });
 
-  test('UIX-029 keyboard focus is visible everywhere (violet ring) [defect]', async ({ browser }) => {
+  test('UIX-029 keyboard focus is visible everywhere (violet ring)', async ({ browser }) => {
     const s = await open(browser, { viewport: DESKTOP });
     const { page } = s;
     const missing: string[] = [];
@@ -209,7 +209,8 @@ test.describe('layout, keyboard and accessibility on the busy company', () => {
         await page.keyboard.press('Tab');
         const f = await page.evaluate(() => {
           const e = document.activeElement as HTMLElement;
-          if (!e || e === document.body) return null;
+          // The Next.js dev-tools button (nextjs-portal) only exists under `next dev`; it is not product UI.
+          if (!e || e === document.body || e.tagName === 'NEXTJS-PORTAL') return null;
           const cs = getComputedStyle(e);
           const ring = (cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) >= 1) ? cs.outlineColor : /rgba?\(107, 61, 245/.test(cs.boxShadow) ? 'box-shadow' : '';
           return { key: `${e.tagName.toLowerCase()}.${String(e.className).split(' ')[0]} "${(e.getAttribute('aria-label') ?? e.innerText ?? '').trim().slice(0, 25)}"`, ring };

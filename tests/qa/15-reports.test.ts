@@ -123,7 +123,7 @@ describe('15 Reports (RPT)', () => {
 
   it.todo('RPT-011 [browser] statement print is branded with company header and period');
 
-  it('RPT-012 supplier statement: bills, returns and payments move the balance in the right direction [defect]', () => {
+  it('RPT-012 supplier statement: bills, returns and payments move the balance in the right direction', () => {
     let { w, item, sup } = base(); let bill: string;
     [w, bill] = withDocument(w, 'supplier_invoice', sup, [line(item, '10', '100')]);
     w = run(w, 'return_document', { id: bill, date: T, lines: [{ lineId: w.documents.find(d => d.id === bill)!.lines[0].id, quantity: '1' }] }).workspace;

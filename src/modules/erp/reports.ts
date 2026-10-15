@@ -40,34 +40,38 @@ export function agedBalances(w: Workspace, partyType: "customer" | "supplier", a
 }
 
 export type StatementLine = { date: string; reference: string; description: string; debit: string; credit: string; balance: string; documentId?: string };
-/** Party ledger in PKR: invoices debit a customer (credit a supplier), receipts/payments and returns the reverse. */
+/**
+ * Party ledger in PKR. The balance is what the customer owes us, or what we owe the supplier, so both read the same way:
+ * invoices and bills raise it (Debit column); receipts, payments, credit notes and returns to the supplier lower it (Credit column).
+ */
 export function partyStatement(w: Workspace, partyId: string, from: string, to: string): { opening: string; lines: StatementLine[]; closing: string } {
   const party = w.parties.find(p => p.id === partyId);
-  const sign = party?.type === "supplier" ? -1 : 1;
+  const customer = party?.type !== "supplier";
+  // Each event carries its effect on the balance: positive raises what is owed, negative lowers it.
   const events: { date: string; reference: string; description: string; amount: ReturnType<typeof D>; documentId?: string; order: number }[] = [];
   for (const d of w.documents) {
     if (d.partyId !== partyId || d.status !== "submitted") continue;
-    const fx = d.currency === "PKR" ? D(1) : D(d.fxRate);
-    if (d.kind === "sales_invoice") events.push({ date: d.date, reference: d.number, description: "Sales invoice", amount: D(d.total).mul(fx), documentId: d.id, order: 1 });
-    if (d.kind === "credit_note") events.push({ date: d.date, reference: d.number, description: "Credit note", amount: D(d.total).mul(fx).negated(), documentId: d.id, order: 2 });
-    if (d.kind === "supplier_invoice") events.push({ date: d.date, reference: d.number, description: "Supplier bill", amount: D(d.total).mul(fx).negated(), documentId: d.id, order: 1 });
-    if (d.kind === "supplier_return") events.push({ date: d.date, reference: d.number, description: "Return to supplier", amount: D(d.total).mul(fx), documentId: d.id, order: 2 });
+    const value = D(d.total).mul(d.currency === "PKR" ? D(1) : D(d.fxRate));
+    if (d.kind === "sales_invoice") events.push({ date: d.date, reference: d.number, description: "Sales invoice", amount: value, documentId: d.id, order: 1 });
+    if (d.kind === "credit_note") events.push({ date: d.date, reference: d.number, description: "Credit note", amount: value.negated(), documentId: d.id, order: 2 });
+    if (d.kind === "supplier_invoice") events.push({ date: d.date, reference: d.number, description: "Supplier bill", amount: value, documentId: d.id, order: 1 });
+    if (d.kind === "supplier_return") events.push({ date: d.date, reference: d.number, description: "Return to supplier", amount: value.negated(), documentId: d.id, order: 2 });
   }
   for (const r of w.receipts) {
     if (r.partyId !== partyId || r.status !== "cleared") continue;
     const cleared = w.journals.find(j => j.sourceId === `${r.id}:cleared`);
     const date = cleared?.date ?? r.date;
+    // In PKR at each bill's rate, the amount the payment clears from the party's account (any FX difference goes to 5400, not to the party).
     const amount = sum(r.allocations.map(a => { const d = w.documents.find(x => x.id === a.invoiceId); return D(a.amount).mul(d && d.currency !== "PKR" ? D(d.fxRate) : 1); }));
-    events.push({ date, reference: r.number, description: sign > 0 ? `Receipt · ${r.method}${r.chequeNo ? ` ${r.chequeNo}` : ""}` : `Payment · ${r.method}`, amount: amount.negated(), order: 3 });
+    events.push({ date, reference: r.number, description: customer ? `Receipt · ${r.method}${r.chequeNo ? ` ${r.chequeNo}` : ""}` : `Payment · ${r.method}`, amount: amount.negated(), order: 3 });
   }
   events.sort((a, b) => a.date.localeCompare(b.date) || a.order - b.order || a.reference.localeCompare(b.reference));
-  let balance = sum(events.filter(e => e.date < from).map(e => e.amount.mul(sign)));
+  let balance = sum(events.filter(e => e.date < from).map(e => e.amount));
   const opening = money(balance);
   const lines: StatementLine[] = [];
   for (const e of events.filter(e => e.date >= from && e.date <= to)) {
-    const signed = e.amount.mul(sign);
-    balance = balance.plus(signed);
-    lines.push({ date: e.date, reference: e.reference, description: e.description, debit: signed.gt(0) ? money(signed) : "", credit: signed.lt(0) ? money(signed.negated()) : "", balance: money(balance), documentId: e.documentId });
+    balance = balance.plus(e.amount);
+    lines.push({ date: e.date, reference: e.reference, description: e.description, debit: e.amount.gt(0) ? money(e.amount) : "", credit: e.amount.lt(0) ? money(e.amount.negated()) : "", balance: money(balance), documentId: e.documentId });
   }
   return { opening, lines, closing: money(balance) };
 }

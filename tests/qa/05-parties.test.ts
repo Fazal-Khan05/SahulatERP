@@ -598,7 +598,7 @@ describe('05 parties (PTY)', () => {
 
   it.todo('PTY-098 [browser] 10,000 customers: suggestion datalist still usable (or capped with search)');
 
-  it('PTY-099 supplier statement shows bill, return and payment with a running balance (payment reduces the balance) [defect]', () => {
+  it('PTY-099 supplier statement shows bill, return and payment with a running balance (payment reduces the balance)', () => {
     let { w, item } = stocked(); let bill: string;
     const s = run(w, 'save_party', supplier());
     [w, bill] = withDocument(s.workspace, 'supplier_invoice', s.recordId, [{ itemId: item, quantity: '10', price: '100' }]);

@@ -201,6 +201,7 @@ describe('D-10 cancel_payroll releases a stale draft so the month can be created
     for (const reviewed of [false, true]) {
       let { w, emp, commission } = payrollReady();
       const first = run(w, 'create_payroll', { month, date: '2026-10-28' }); w = first.workspace;
+      expect(first.message).toBe('Payroll calculated.'); // D-57
       if (reviewed) w = run(w, 'update_payroll', { id: first.recordId, status: 'reviewed' }).workspace;
       expect(() => run(w, 'create_payroll', { month })).toThrow('A payroll run already exists for this month.');
       const cancel = run(w, 'cancel_payroll', { id: first.recordId }); w = cancel.workspace;

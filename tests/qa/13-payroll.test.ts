@@ -77,11 +77,11 @@ describe('13 Payroll (PAY)', () => {
     refused(w, 'create_payroll', { month: MONTH }, 'Add active employees before creating payroll.');
   });
 
-  it('PAY-004 create payroll: draft run with one line per active employee', () => {
+  it('PAY-004 create payroll: draft run with one line per active employee [case-corrected: the message is "Payroll calculated." (D-57)]', () => {
     let { w, emp } = setup(); let e2: string;
     [w, e2] = addEmployee(w, 'Bilal', { salary: '50000', allowance: '0' });
     const r = run(w, 'create_payroll', { month: MONTH });
-    expect(r.message).toBe('Payroll calculated using prototype rules.');
+    expect(r.message).toBe('Payroll calculated.');
     const pr = r.workspace.payrolls[0];
     expect(pr).toMatchObject({ month: MONTH, status: 'draft', date: `${MONTH}-28` });
     expect(lineOf(r.workspace, pr.id, emp)).toEqual({ employeeId: emp, basic: '100000.0000', allowance: '10000', commission: '0.0000', deduction: '0', employeeEobi: '320.0000', employerEobi: '1600.0000', incomeTax: '5500.0000', net: '104180.0000', commissionIds: [], commissionAmounts: {}, recovery: '0.0000', recoveryAmounts: {} });
@@ -546,11 +546,11 @@ describe('13 Payroll (PAY)', () => {
   it.todo('PAY-063 [browser] payroll lines table scrolls horizontally and stays readable on a phone');
   it.todo('PAY-064 [browser] payroll status badges use distinct colours');
 
-  it('PAY-065 each transition writes an audit entry', () => {
+  it('PAY-065 each transition writes an audit entry [case-corrected: the create message is "Payroll calculated." (D-57)]', () => {
     let [w, id] = create(setup().w);
     w = advance(w, id, FULL);
     expect(w.audit.slice(-4).map(a => [a.action, a.sourceId, a.detail])).toEqual([
-      ['create_payroll', id, 'Payroll calculated using prototype rules.'],
+      ['create_payroll', id, 'Payroll calculated.'],
       ['update_payroll', id, 'Payroll reviewed. Bank transmission is simulated.'],
       ['update_payroll', id, 'Payroll approved. Bank transmission is simulated.'],
       ['update_payroll', id, 'Payroll paid. Bank transmission is simulated.'],
@@ -775,7 +775,7 @@ describe('13 Payroll (PAY)', () => {
     expect(w.journals.filter(j => j.sourceId.startsWith(id))).toEqual([]);
   });
 
-  it('PAY-094 create_payroll success message has no "prototype" wording [defect]', () => {
+  it('PAY-094 create_payroll success message has no "prototype" wording', () => {
     const r = run(setup().w, 'create_payroll', { month: MONTH });
     expect(r.message).not.toMatch(/prototype/i);
   });

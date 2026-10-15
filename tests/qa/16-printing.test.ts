@@ -267,7 +267,7 @@ describe('16 printing', () => {
     expect(html).toContain('<h1>Delivery note</h1>');
     expect(html).toContain('<td class="num">5 pcs</td><td class="num">Rs 100</td>');
   });
-  it('PRN-026 USD purchase order shows currency, rate and totals in both currencies [defect: amounts carry "Rs" and no PKR equivalent]', async () => {
+  it('PRN-026 USD purchase order shows currency, rate and totals in both currencies', async () => {
     const html = await print('purchase_order', F.po);
     expect(html).toContain('<dt>Exchange rate</dt><dd>1 USD = 280.5 PKR</dd>');
     expect(text(html)).toContain('amounts in USD');
@@ -410,11 +410,11 @@ describe('16 printing', () => {
     expect(text(await print('sales_invoice', F.inv))).toContain('Computer-generated document · Print Test Traders · amounts in PKR');
     expect(text(await print('purchase_order', F.po))).toContain('amounts in USD');
   });
-  it('PRN-072 rate formatting "Rs 2,400" for PKR and "$10.00" for USD [defect: USD rates print as "Rs 10"]', async () => {
+  it('PRN-072 rate formatting "Rs 2,400" for PKR and "$10.00" for USD', async () => {
     expect(await print('sales_invoice', F.inv)).toContain('<td class="num">Rs 100</td>');
     const po = await print('purchase_order', F.po);
-    expect(po).toContain('<td class="num">Rs 10</td>');
-    expect(po).toContain('$10.00');
+    expect(po).not.toContain('<td class="num">Rs 10</td>');
+    expect(po).toContain('<td class="num">$10.00</td>');
   });
   it('PRN-073 discount column [case-corrected: "0%" is printed for zero discounts as well, not only when non-zero]', async () => {
     const html = await print('sales_invoice', F.inv);

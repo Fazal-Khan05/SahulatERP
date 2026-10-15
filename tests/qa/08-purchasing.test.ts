@@ -429,13 +429,13 @@ describe('08 Purchasing, foreign currency, supplier payments (PUR)', () => {
     expectInvariants(w);
   });
 
-  it('PUR-051 PO print model shows currency and rate [case-corrected: totals are in the document currency only; PKR equivalent appears only via the exchange-rate line]', () => {
+  it('PUR-051 PO print model shows currency and rate; totals in USD and PKR', () => {
     const { w: w0, item, sup } = base();
     const r = create(w0, 'purchase_order', sup, [L(item, '100', '10')], USD);
     const view = documentView(r.workspace, docOf(r.workspace, r.recordId));
     expect(view.currency).toBe('USD');
     expect(view.meta).toContainEqual({ label: 'Exchange rate', value: '1 USD = 280 PKR' });
-    expect(view.totals).toEqual([{ label: 'Subtotal', value: '1000.0000' }, { label: 'Total', value: '1000.0000', emphasis: true }]);
+    expect(view.totals).toEqual([{ label: 'Subtotal', value: '1000.0000' }, { label: 'Total', value: '1000.0000', emphasis: true }, { label: 'Total in PKR', value: '280000.0000', currency: 'PKR' }]);
   });
 
   it('PUR-052 bill print model: supplier and due date', () => {

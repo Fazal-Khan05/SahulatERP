@@ -1,5 +1,5 @@
 import { outstanding } from "./engine";
-import { D, money, sum } from "./money";
+import { D, money } from "./money";
 import type { Document, Receipt, Workspace } from "./types";
 
 /** Everything the standard template needs, resolved from the workspace. Pure data so it renders on the server and in the browser. */
@@ -13,8 +13,9 @@ export type DocumentView = {
   partyLabel: string;
   party: { name: string; address: string; taxId: string; email: string };
   meta: { label: string; value: string }[];
-  lines: { description: string; detail: string; quantity: string; unit: string; rate: string; discount: string; taxRate: string; amount: string }[];
-  totals: { label: string; value: string; emphasis?: boolean; credit?: boolean }[];
+  /** `currency` is set only where a line or total is not in the document currency (a USD bill on a PKR payment, the PKR equivalent). */
+  lines: { description: string; detail: string; quantity: string; unit: string; rate: string; discount: string; taxRate: string; amount: string; currency?: string }[];
+  totals: { label: string; value: string; emphasis?: boolean; credit?: boolean; currency?: string }[];
   notes: string;
   currency: string;
 };
@@ -52,6 +53,8 @@ export function documentView(w: Workspace, doc: Document): DocumentView {
   const totals: DocumentView["totals"] = [{ label: "Subtotal", value: money(doc.net) }];
   for (const [rate, amount] of taxByRate) if (!amount.isZero()) totals.push({ label: `Sales tax ${D(rate).toString()}%`, value: money(amount) });
   totals.push({ label: "Total", value: money(doc.total), emphasis: true });
+  // Foreign-currency documents also state the PKR value at the document's own rate, the amount the ledger posts.
+  if (doc.currency !== "PKR") totals.push({ label: "Total in PKR", value: money(D(doc.total).mul(doc.fxRate)), currency: "PKR" });
   if (doc.kind === "sales_invoice" || doc.kind === "supplier_invoice") {
     if (!D(doc.paid).isZero()) totals.push({ label: "Paid", value: `− ${money(doc.paid)}` });
     if (!D(doc.returned).isZero()) totals.push({ label: "Returns / credits", value: `− ${money(doc.returned)}` });
@@ -76,7 +79,7 @@ export function receiptView(w: Workspace, receipt: Receipt): DocumentView {
   const party = w.parties.find(p => p.id === receipt.partyId);
   const lines = receipt.allocations.map(a => {
     const invoice = w.documents.find(d => d.id === a.invoiceId);
-    return { description: invoice ? `${documentTitle(invoice.kind)} ${invoice.number}` : "Invoice", detail: invoice ? `Dated ${invoice.date}` : "", quantity: "", unit: "", rate: "", discount: "", taxRate: "", amount: money(a.amount) };
+    return { description: invoice ? `${documentTitle(invoice.kind)} ${invoice.number}` : "Invoice", detail: invoice ? `Dated ${invoice.date}` : "", quantity: "", unit: "", rate: "", discount: "", taxRate: "", amount: money(a.amount), ...(invoice && invoice.currency !== "PKR" ? { currency: invoice.currency } : {}) };
   });
   const meta: DocumentView["meta"] = [{ label: "Method", value: receipt.method === "cheque" ? `Cheque ${receipt.chequeNo}` : receipt.method === "bank" ? "Bank transfer" : "Cash" }, { label: "Status", value: receipt.status }];
   if (receipt.method === "cheque") meta.push({ label: "Cheque date", value: receipt.dueDate });
@@ -84,7 +87,8 @@ export function receiptView(w: Workspace, receipt: Receipt): DocumentView {
     kind: "receipt", title: party?.type === "supplier" ? "Payment voucher" : "Receipt", number: receipt.number, date: receipt.date, status: receipt.status,
     partyLabel: party?.type === "supplier" ? "Paid to" : "Received from",
     party: { name: party?.name ?? "—", address: party?.city ?? "", taxId: party?.taxId ?? "", email: party?.email ?? "" },
-    meta, lines, totals: [{ label: "Amount", value: money(sum(receipt.allocations.map(a => a.amount))), emphasis: true }], notes: receipt.note, currency: "PKR",
+    // The amount paid is PKR; each allocation is in its invoice's currency (they add up to the amount for PKR invoices).
+    meta, lines, totals: [{ label: "Amount", value: money(receipt.amount), emphasis: true }], notes: receipt.note, currency: "PKR",
   };
 }
 

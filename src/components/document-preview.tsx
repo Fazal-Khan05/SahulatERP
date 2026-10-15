@@ -18,10 +18,12 @@ export function DocumentPreview({ view, company, branding, assets, compact = fal
   const hasLines = view.lines.some(l => l.quantity);
   const body = view.lines.slice(0, -1);
   const last = view.lines.at(-1);
+  // Amounts print in the document's currency unless a line or total names its own (e.g. the PKR equivalent).
+  const amount = (value: string, currency = view.currency) => value.startsWith('−') ? `− ${formatMoney(value.slice(1).trim(), currency)}` : formatMoney(value, currency);
   const row = (line: DocumentView['lines'][number], index: number) => <tr key={index}>
     <td><strong>{line.description}</strong>{line.detail && <small>{line.detail}</small>}</td>
-    {hasLines && <><td className="num">{line.quantity} {line.unit}</td><td className="num">{line.rate && formatMoney(line.rate)}</td><td className="num">{line.discount && `${line.discount}%`}</td><td className="num">{line.taxRate && `${line.taxRate}%`}</td></>}
-    <td className="num">{formatMoney(line.amount)}</td>
+    {hasLines && <><td className="num">{line.quantity} {line.unit}</td><td className="num">{line.rate && amount(line.rate, line.currency)}</td><td className="num">{line.discount && `${line.discount}%`}</td><td className="num">{line.taxRate && `${line.taxRate}%`}</td></>}
+    <td className="num">{amount(line.amount, line.currency)}</td>
   </tr>;
   return <article className={`doc ${compact ? 'doc-compact' : ''}`} style={{ ['--doc-accent' as string]: branding.accent }}>
     <header className="doc-header">
@@ -70,7 +72,7 @@ export function DocumentPreview({ view, company, branding, assets, compact = fal
         <tr><td className="doc-tail-cell" colSpan={hasLines ? 6 : 2}>
           <section className="doc-bottom">
             <div className="doc-notes">{view.notes && <><span className="doc-label">Notes</span><p>{view.notes}</p></>}</div>
-            <table className="doc-totals"><tbody>{view.totals.map(total => <tr key={total.label} className={`${total.emphasis ? 'emphasis' : ''} ${total.credit ? 'credit' : ''}`}><th>{total.label}</th><td>{total.value.startsWith('−') ? `− ${formatMoney(total.value.slice(1).trim())}` : formatMoney(total.value)}</td></tr>)}</tbody></table>
+            <table className="doc-totals"><tbody>{view.totals.map(total => <tr key={total.label} className={`${total.emphasis ? 'emphasis' : ''} ${total.credit ? 'credit' : ''}`}><th>{total.label}</th><td>{amount(total.value, total.currency)}</td></tr>)}</tbody></table>
           </section>
           <footer className="doc-footer">
             {branding.footer && <p>{branding.footer}</p>}

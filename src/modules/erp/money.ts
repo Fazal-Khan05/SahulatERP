@@ -11,8 +11,17 @@ export function allocate(total: string, weights: string[]) {
   const denominator=sum(weights); let remaining=D(total);
   return weights.map((w,i)=>{const amount=i===weights.length-1?remaining:D(total).mul(w).div(denominator).toDecimalPlaces(4); remaining=remaining.minus(amount);return money(amount);});
 }
-export function formatMoney(value: string | number, compact=false) {
+/**
+ * Display money. PKR, or no currency, keeps the app's "Rs 1,234.5" style (and `formatMoney(value, true)` its compact chart
+ * form); any other currency prints its own symbol with two decimals: "$10.00", "¥10.00".
+ */
+export function formatMoney(value: string | number, compact?: boolean): string;
+export function formatMoney(value: string | number, currency?: string, compact?: boolean): string;
+export function formatMoney(value: string | number, currencyOrCompact?: string | boolean, compactFlag=false) {
+  const currency=typeof currencyOrCompact==="string"&&currencyOrCompact?currencyOrCompact:"PKR";
+  const compact=typeof currencyOrCompact==="boolean"?currencyOrCompact:compactFlag;
   const n=Number(value);
+  if(currency!=="PKR")return new Intl.NumberFormat("en-US",{style:"currency",currency,currencyDisplay:"narrowSymbol",notation:compact?"compact":"standard"}).format(n);
   if(compact && Math.abs(n)>=1e6)return `Rs ${(n/1e6).toFixed(2)}m`;
   if(compact && Math.abs(n)>=1e3)return `Rs ${(n/1e3).toFixed(1)}k`;
   return `Rs ${new Intl.NumberFormat("en-PK",{maximumFractionDigits:2}).format(n)}`;

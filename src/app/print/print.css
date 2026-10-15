@@ -40,7 +40,7 @@
 .doc-parties > div:first-child { display: flex; flex-direction: column; gap: .6mm; min-width: 0; color: #4a5b6d; }
 .doc-parties strong { color: #152234; font-size: 1.05em; }
 .doc-label { display: block; font-size: .72em; letter-spacing: .1em; text-transform: uppercase; color: #8290a0; margin-bottom: 1mm; }
-.doc-meta { display: grid; grid-template-columns: auto auto; gap: 1mm 6mm; margin: 0; font-size: .92em; }
+.doc-meta { display: grid; grid-template-columns: auto auto; align-content: start; gap: 1mm 6mm; margin: 0; font-size: .92em; }
 .doc-meta div { display: contents; }
 .doc-meta dt { color: #6a7889; }
 .doc-meta dd { margin: 0; font-weight: 600; text-align: right; }

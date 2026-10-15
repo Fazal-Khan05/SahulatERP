@@ -5,7 +5,11 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { blankWorkspace } from '../../src/modules/erp/seed';
-import { sampleInvoiceView, type DocumentView } from '../../src/modules/erp/documents';
+import { buildDemoWorkspace } from '../../src/modules/erp/demo';
+import { execute } from '../../src/modules/erp/engine';
+import { formatMoney } from '../../src/modules/erp/money';
+import { documentView, receiptView, sampleInvoiceView, type DocumentView } from '../../src/modules/erp/documents';
+import type { Actor, Workspace } from '../../src/modules/erp/types';
 
 vi.mock('@/modules/erp/money', () => import('../../src/modules/erp/money'));
 vi.mock('@/modules/erp/documents', () => import('../../src/modules/erp/documents'));
@@ -14,6 +18,14 @@ import { DocumentPreview } from '../../src/components/document-preview';
 const printCss = readFileSync(resolve(__dirname, '../../src/app/print/print.css'), 'utf8');
 const company = { ...blankWorkspace(false).company, name: 'Fix Traders', address: '12 Jodia Bazar, Karachi', logo: 'F' };
 const render = (view: DocumentView) => renderToStaticMarkup(createElement(DocumentPreview, { view, company, branding: { template: 'standard', accent: '#087f69', footer: 'Bank: QA' }, assets: {} }));
+const owner: Actor = { id: 'o', name: 'Owner', role: 'Owner', branchIds: [] };
+let n = 0;
+const run = (w: Workspace, type: string, payload: Record<string, unknown>) => execute(w, { type, payload, idempotencyKey: `fixes-e-${++n}` }, owner);
+const purchase = (w: Workspace, kind: string, currency: string, fxRate: string, submit = true) => {
+  const created = run(w, 'create_document', { kind, partyId: 's-1', warehouseId: 'khi-main', date: '2026-10-15', dueDate: '2026-11-14', currency, fxRate, lines: [{ itemId: 'i-1', quantity: '1500', price: '10', taxRate: '0' }] });
+  const next = submit ? run(created.workspace, 'submit_document', { id: created.recordId }).workspace : created.workspace;
+  return { w: next, id: created.recordId };
+};
 
 describe('D-16 the print template is isolated from the app table styles', () => {
   it('resets globals.css table, cell, paragraph and small rules inside .doc', () => {
@@ -44,5 +56,43 @@ describe('D-16 the print template is isolated from the app table styles', () => 
     expect(one).toContain('</tr></thead><tbody class="doc-tail">');
     const receipt = render({ ...sampleInvoiceView(), lines: [{ description: 'Sales invoice INV-1', detail: '', quantity: '', unit: '', rate: '', discount: '', taxRate: '', amount: '10.0000' }] });
     expect(receipt).toContain('colSpan="2"');
+  });
+});
+
+describe('D-14 foreign-currency documents print their own currency', () => {
+  it('formatMoney keeps the PKR output and prints $ / ¥ for USD / CNY', () => {
+    for (const v of ['1234.5', '-50', '0', '2400.0000']) expect(formatMoney(v, 'PKR')).toBe(formatMoney(v));
+    expect(formatMoney('1234.5')).toBe('Rs 1,234.5');
+    expect(formatMoney('2500000', true)).toBe('Rs 2.50m');
+    expect(formatMoney('10', 'USD')).toBe('$10.00');
+    expect(formatMoney('1234567.125', 'CNY')).toBe('¥1,234,567.13');
+    expect(formatMoney('-1234.5', 'USD')).toBe('-$1,234.50');
+  });
+
+  it('a CNY purchase order prints yuan amounts plus a PKR total at the document rate', () => {
+    const { w, id } = purchase(buildDemoWorkspace(), 'purchase_order', 'CNY', '39.5');
+    const view = documentView(w, w.documents.find(d => d.id === id)!);
+    expect(view.totals).toEqual([{ label: 'Subtotal', value: '15000.0000' }, { label: 'Total', value: '15000.0000', emphasis: true }, { label: 'Total in PKR', value: '592500.0000', currency: 'PKR' }]);
+    const html = render(view);
+    expect(html).toContain('<td class="num">¥10.00</td>');
+    expect(html).toContain('<th>Total</th><td>¥15,000.00</td>');
+    expect(html).toContain('<th>Total in PKR</th><td>Rs 592,500</td>');
+    expect(html).not.toMatch(/<td class="num">Rs /);
+  });
+
+  it('PKR documents are unchanged: no PKR-equivalent line', () => {
+    const { w, id } = purchase(buildDemoWorkspace(), 'purchase_order', 'PKR', '1');
+    expect(documentView(w, w.documents.find(d => d.id === id)!).totals.map(t => t.label)).toEqual(['Subtotal', 'Total']);
+  });
+
+  it('a supplier payment against a USD bill prints the allocation in USD and the PKR amount paid', () => {
+    const bill = purchase(buildDemoWorkspace(), 'supplier_invoice', 'USD', '280');
+    const paid = run(bill.w, 'create_receipt', { partyId: 's-1', date: '2026-10-16', amount: '840000', method: 'bank', dueDate: '2026-10-16', allocations: [{ invoiceId: bill.id, amount: '3000' }] });
+    const view = receiptView(paid.workspace, paid.workspace.receipts.find(r => r.id === paid.recordId)!);
+    expect(view.lines[0]).toMatchObject({ amount: '3000.0000', currency: 'USD' });
+    expect(view.totals).toEqual([{ label: 'Amount', value: '840000.0000', emphasis: true }]);
+    const html = render(view);
+    expect(html).toContain('<td class="num">$3,000.00</td>');
+    expect(html).toContain('<th>Amount</th><td>Rs 840,000</td>');
   });
 });

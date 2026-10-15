@@ -1,4 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it, vi } from 'vitest';
+import { ReportsView } from '../../src/components/reports-view';
 import { buildDemoWorkspace } from '../../src/modules/erp/demo';
 import { businessToday } from '../../src/modules/erp/dates';
 import { accountBalance, execute, outstanding } from '../../src/modules/erp/engine';
@@ -8,7 +13,15 @@ import { toggleModules } from '../../src/modules/erp/modules';
 import { blankWorkspace } from '../../src/modules/erp/seed';
 import type { Actor, Workspace } from '../../src/modules/erp/types';
 
-// Regression tests for the report defects fixed by agent C (D-01, D-12, D-25, D-26).
+// Regression tests for the report defects fixed by agent C (D-01, D-12, D-25, D-26, D-43).
+// Vitest does not resolve the "@/" alias, so the component's imports are mapped to the real modules.
+vi.mock('@/lib/utils', () => import('../../src/lib/utils'));
+vi.mock('@/modules/erp/dates', () => import('../../src/modules/erp/dates'));
+vi.mock('@/modules/erp/engine', () => import('../../src/modules/erp/engine'));
+vi.mock('@/modules/erp/master-data', () => import('../../src/modules/erp/master-data'));
+vi.mock('@/modules/erp/money', () => import('../../src/modules/erp/money'));
+vi.mock('@/modules/erp/reports', () => import('../../src/modules/erp/reports'));
+vi.mock('@/modules/erp/types', () => import('../../src/modules/erp/types'));
 const owner: Actor = { id: 'fix-c-owner', name: 'Owner', role: 'Owner', branchIds: [] };
 let n = 0;
 const run = (w: Workspace, type: string, payload: Record<string, unknown>) => execute(w, { type, payload, idempotencyKey: `fixes-c-${++n}` }, owner);
@@ -265,5 +278,35 @@ describe('D-26 sales analysis by salesperson apportions split lines by share', (
     [w] = sale(w, cust, item, '2', '100', { employeeId: a });
     [w] = sale(w, cust, item, '1', '100', {});
     expect(rowsOf(w)).toEqual([['Hamza Khan', 1, '2.0000', '200.0000', '0.0000', '200.0000'], ['Unassigned', 1, '1.0000', '100.0000', '0.0000', '100.0000']]);
+  });
+});
+
+describe('D-43 reports print cleanly with a company header', () => {
+  const css = readFileSync(resolve(__dirname, '../../src/app/reports-print.css'), 'utf8');
+  const html = (w: Workspace) => renderToStaticMarkup(createElement(ReportsView, { workspace: w, ledgerView: true, stockVisible: true }));
+
+  it('renders a print header with the company name, address, contact and logo mark, hidden on screen', () => {
+    const w = buildDemoWorkspace();
+    const header = html(w).split('<div class="report-print-header">')[1].split('<div class="card-heading print-heading">')[0];
+    for (const text of [w.company.name, w.company.address, w.company.phone, `NTN / STRN: ${w.company.taxId}`, 'Printed ']) expect(header).toContain(text);
+    expect(header).toContain(`<span class="brand-mark" aria-hidden="true">${w.company.logo}</span>`);
+    expect(css).toMatch(/^\.report-print-header,\.report-print-params\{display:none\}/m);
+  });
+
+  it('uses the uploaded logo when there is one', () => {
+    const w = { ...buildDemoWorkspace(), branding: { ...buildDemoWorkspace().branding, logoPath: 'tenant/logo.png' } };
+    expect(html(w)).toContain(`<img src="/api/branding/logo?tenant=${w.tenantId}&amp;v=${w.revision}" alt="${w.company.name} logo"/>`);
+  });
+
+  it('the report table is a named, keyboard-focusable scroll region (axe scrollable-region-focusable)', () => {
+    expect(html(buildDemoWorkspace())).toContain('<div class="table-scroll" tabindex="0" role="region" aria-label="Aged receivables table">');
+  });
+
+  it('print rules are scoped to the Reports page and hide the app chrome, gutter and grey page', () => {
+    const print = css.slice(css.indexOf('@media print{'));
+    for (const rule of ['body:has(.reports-layout) .sidebar', 'body:has(.reports-layout) .topbar', 'body:has(.reports-layout) .page-heading', 'body:has(.reports-layout) .main-shell{margin:0', 'body:has(.reports-layout) .main-content{padding:0', 'html:has(.reports-layout),body:has(.reports-layout){background:#fff}', 'body:has(.reports-layout) .report-card{border:0']) expect(print, rule).toContain(rule);
+    // Every print selector is scoped, so printing elsewhere in the app is unaffected.
+    const selectors = print.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('/*') && !l.startsWith('@media') && l !== '}').flatMap(l => l.split('{')[0].split(','));
+    for (const sel of selectors) expect(sel, sel).toMatch(/^(html|body):has\(\.reports-layout\)/);
   });
 });

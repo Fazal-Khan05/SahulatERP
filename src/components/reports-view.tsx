@@ -8,6 +8,7 @@ import { toCsv } from '@/modules/erp/master-data';
 import { D, formatMoney, money, sum } from '@/modules/erp/money';
 import { agedBalances, balanceSheet, chartOf, generalLedger, landedCostPayable, partyStatement, profitAndLoss, salesAnalysis, stockMovements, stockValuation, trialBalance } from '@/modules/erp/reports';
 import type { Workspace } from '@/modules/erp/types';
+import '../app/reports-print.css';
 
 type ReportKey = 'aged_receivables' | 'aged_payables' | 'statement' | 'stock_valuation' | 'stock_movements' | 'sales_analysis' | 'profit_loss' | 'balance_sheet' | 'trial_balance' | 'general_ledger' | 'reconciliation';
 type Table = { heads: string[]; rows: (string | number)[][]; footer?: (string | number)[]; moneyColumns: number[] };
@@ -66,6 +67,18 @@ export function ReportsView({ workspace, ledgerView, stockVisible }: { workspace
   }, [key, workspace, asOf, from, to, partyId, itemId, warehouseId, account, groupBy]);
 
   const subtitle = report.params.includes('range') ? `${from} to ${to}` : report.params.includes('asOf') ? `as at ${asOf}` : '';
+  // The parameter row does not print, so the printed page states the choices that shape the report (whose statement, which account…).
+  const party = workspace.parties.find(p => p.id === partyId);
+  const item = workspace.items.find(i => i.id === itemId);
+  const printedParams = [
+    report.params.includes('party') && party ? `${party.type === 'supplier' ? 'Supplier' : 'Customer'}: ${party.name}${party.city ? `, ${party.city}` : ''}` : '',
+    report.params.includes('account') ? `Account: ${account} · ${chart[account] ?? account}` : '',
+    report.params.includes('item') ? `Product: ${item ? `${item.sku} · ${item.name}` : 'All products'}` : '',
+    report.params.includes('warehouse') && workspace.warehouses.length > 1 ? `Warehouse: ${workspace.warehouses.find(x => x.id === warehouseId)?.name ?? 'All warehouses'}` : '',
+    report.params.includes('groupBy') ? `Grouped by ${groupBy === 'item' ? 'product' : groupBy}` : '',
+  ].filter(Boolean);
+  const company = workspace.company;
+  const logoUrl = workspace.branding?.logoPath ? `/api/branding/logo?tenant=${workspace.tenantId}&v=${workspace.revision}` : undefined;
   function exportCsv() {
     const rows = [...table.rows, ...(table.footer ? [table.footer] : [])].map(r => Object.fromEntries(table.heads.map((h, i) => [h, r[i] ?? ''])));
     const blob = new Blob([toCsv(rows, table.heads)], { type: 'text/csv;charset=utf-8' });
@@ -77,6 +90,13 @@ export function ReportsView({ workspace, ledgerView, stockVisible }: { workspace
   return <div className="reports-layout">
     <aside className="card reports-menu" aria-label="Reports">{groups.map(g => <div key={g}><div className="nav-label">{g.toUpperCase()}</div>{available.filter(r => r.group === g).map(r => <button key={r.key} className={`report-link ${key === r.key ? 'active' : ''}`} onClick={() => setKey(r.key)}>{r.label}</button>)}</div>)}</aside>
     <section className="card report-card">
+      <div className="report-print-header">
+        <div className="report-print-identity">
+          {logoUrl ? <img src={logoUrl} alt={`${company.name} logo`}/> : <span className="brand-mark" aria-hidden="true">{company.logo}</span>}
+          <div className="report-print-company"><strong>{company.name}</strong>{company.address && <span>{company.address}</span>}{(company.phone || company.email) && <span>{[company.phone, company.email].filter(Boolean).join(' · ')}</span>}{company.taxId && <span>NTN / STRN: {company.taxId}</span>}</div>
+        </div>
+        <span className="report-print-date">Printed {today}</span>
+      </div>
       <div className="card-heading print-heading"><div><h2>{report.label}</h2><p>{workspace.company.name}{subtitle ? ` · ${subtitle}` : ''}</p></div><div className="inventory-actions no-print"><Button variant="outline" onClick={exportCsv} disabled={!table.rows.length}><Download size={16}/>Export CSV</Button><Button variant="outline" onClick={() => window.print()}><Printer size={16}/>Print</Button></div></div>
       <div className="list-filters no-print" aria-label="Report parameters">
         {report.params.includes('asOf') && <label>As at<input aria-label="As at date" type="date" value={asOf} onChange={e => setAsOf(e.target.value)}/></label>}
@@ -87,7 +107,8 @@ export function ReportsView({ workspace, ledgerView, stockVisible }: { workspace
         {report.params.includes('account') && <label className="list-filter-search">Account<select aria-label="Ledger account" value={account} onChange={e => setAccount(e.target.value)}>{Object.entries(chart).map(([code, name]) => <option key={code} value={code}>{code} · {name}</option>)}</select></label>}
         {report.params.includes('groupBy') && <label>Group by<select aria-label="Group by" value={groupBy} onChange={e => setGroupBy(e.target.value as typeof groupBy)}><option value="customer">Customer</option><option value="item">Product</option><option value="salesperson">Salesperson</option></select></label>}
       </div>
-      <div className="table-scroll"><table className="report-table"><thead><tr>{table.heads.map((h, i) => <th key={h} className={table.moneyColumns.includes(i) ? 'num' : undefined}>{h}</th>)}</tr></thead><tbody>
+      {printedParams.length > 0 && <p className="report-print-params">{printedParams.join(' · ')}</p>}
+      <div className="table-scroll" tabIndex={0} role="region" aria-label={`${report.label} table`}><table className="report-table"><thead><tr>{table.heads.map((h, i) => <th key={h} className={table.moneyColumns.includes(i) ? 'num' : undefined}>{h}</th>)}</tr></thead><tbody>
         {table.rows.length ? table.rows.map((r, i) => <tr key={i} className={r[0] === '' && typeof r[1] === 'string' && r[1] === r[1].toUpperCase() && r[2] === '' ? 'report-section' : undefined}>{r.map((v, c) => <td key={c} className={table.moneyColumns.includes(c) ? 'num' : undefined}>{cell(v, c)}</td>)}</tr>) : <tr><td colSpan={table.heads.length}><div className="empty-state">Nothing to report for these parameters.</div></td></tr>}
       </tbody>{table.footer && <tfoot><tr>{table.footer.map((v, c) => <td key={c} className={table.moneyColumns.includes(c) ? 'num' : undefined}>{cell(v, c)}</td>)}</tr></tfoot>}</table></div>
     </section>

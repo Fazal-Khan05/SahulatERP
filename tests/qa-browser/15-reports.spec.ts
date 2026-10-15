@@ -30,7 +30,7 @@ async function chooseReport(page: Page, label: string) {
 }
 const shown = (page: Page, selector: string) => page.locator(selector).evaluateAll(els => els.filter(el => getComputedStyle(el).display !== 'none' && (el as HTMLElement).offsetParent !== null).length);
 
-test('RPT-011 Statement print is branded with company header and period [defect]', async () => {
+test('RPT-011 Statement print is branded with company header and period', async () => {
   const { page, context } = s;
   const w = await readWorkspaceApi(context.request);
   await reports(page, 'Customer / supplier statement');
@@ -105,7 +105,7 @@ test('RPT-047 Report tables scroll horizontally on a phone with totals visible',
   } finally { await phone.context.close(); }
 });
 
-test('RPT-048 Printing a report uses clean print CSS [defect]', async ({ browser }) => {
+test('RPT-048 Printing a report uses clean print CSS', async ({ browser }) => {
   const a4 = await signedInPage(browser, { viewport: { width: 794, height: 1123 } });
   const { page, errors } = a4;
   try {

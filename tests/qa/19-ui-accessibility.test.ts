@@ -168,7 +168,7 @@ describe('19 ui accessibility', () => {
     expect(src('src/components/workbench.tsx')).toContain("role={noticeError?'alert':'status'}");
   });
   it('UIX-040 tables have th headers', () => {
-    expect(demoHtml).toContain('<thead><tr><th>Invoice</th><th>Customer</th><th>Date</th><th>Collection</th><th>Amount</th><th>Action</th></tr></thead>');
+    expect(demoHtml).toContain('<thead><tr><th>Invoice</th><th>Customer</th><th>Date</th><th>Collection</th><th class="num align-right">Amount</th><th>Action</th></tr></thead>');
     expect(demoHtml).toContain('role="region" aria-label="Recent sales table"');
   });
   it('UIX-041 images carry alt text ("{company} logo")', () => {

@@ -14,6 +14,7 @@ import { CustomerReceipts } from '../../src/components/receipts-list';
 import { execute } from '../../src/modules/erp/engine';
 import { TableCard, statusTone } from '../../src/components/table-card';
 import { buildDemoWorkspace } from '../../src/modules/erp/demo';
+import { blankWorkspace } from '../../src/modules/erp/seed';
 import type { Actor, Role, Workspace } from '../../src/modules/erp/types';
 
 const actor = (role: Role): Actor => ({ id: `h-${role}`, name: `H ${role}`, role, branchIds: [] });
@@ -106,5 +107,18 @@ describe('H workspace view fixes', () => {
     expect(shown[0]).toBe('REC-H-1299');
     expect(html).toContain('Show 100 more</button>');
     expect(html).toContain(`Showing 100 of ${total.toLocaleString('en-PK')} receipts`);
+  });
+
+  it('D-73 empty Imports, Payroll and receipts tables name the next step for those who can take it', () => {
+    const w: Workspace = { ...blankWorkspace(false), tenantId: 'h-tenant' };
+    const imports = (role: Role) => renderToStaticMarkup(createElement(ImportsView, { workspace: w, actor: actor(role), editable: role !== 'Auditor', busy: '', command }));
+    expect(imports('Owner')).toContain('No shipments yet. Create one with New shipment from a submitted goods receipt or supplier bill.');
+    expect(imports('Auditor')).toContain('<div class="empty-state">No shipments yet.</div>');
+    const payroll = (role: Role) => renderToStaticMarkup(createElement(PayrollRuns, { workspace: w, actor: actor(role), editable: role !== 'Auditor', busy: '', command }));
+    expect(payroll('Payroll Administrator')).toContain('No payroll runs yet. Choose a month and Create payroll above.');
+    expect(payroll('Auditor')).toContain('<div class="empty-state">No payroll runs yet.</div>');
+    const receipts = (editable: boolean) => renderToStaticMarkup(createElement(CustomerReceipts, { workspace: w, editable, onRecord: () => {} }));
+    expect(receipts(true)).toContain('No receipts yet. Record one with Record receipt above.');
+    expect(receipts(false)).toContain('<div class="empty-state">No receipts yet.</div>');
   });
 });

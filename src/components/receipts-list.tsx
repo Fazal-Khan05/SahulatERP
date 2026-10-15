@@ -29,7 +29,7 @@ export function CustomerReceipts({ workspace, editable, onRecord }: { workspace:
     <label>Status<select aria-label="Receipt status" value={status} onChange={e => refilter(setStatus)(e.target.value)}><option value="">All statuses</option>{statuses.map(value => <option key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</option>)}</select></label>
     {filtered && <button className="list-filter-clear" type="button" onClick={clear}>Clear filters</button>}
   </div>;
-  const empty = all.length ? <>No receipts match these filters. <button className="text-button" type="button" onClick={clear}>Reset filters</button></> : 'No records yet.';
+  const empty = all.length ? <>No receipts match these filters. <button className="text-button" type="button" onClick={clear}>Reset filters</button></> : editable ? 'No receipts yet. Record one with Record receipt above.' : 'No receipts yet.';
   return <TableCard title="Customer receipts" action={editable ? <Button onClick={onRecord}><Plus size={16}/>Record receipt</Button> : undefined} toolbar={toolbar}
     subtitle={filtered ? `${visible.length} of ${all.length} receipts` : `${all.length} records`} empty={empty}
     heads={['Receipt', 'Customer', 'Date', 'Method / cheque', 'Account', 'Status', 'Amount', 'Action']} numeric={[6]} rows={rows}>

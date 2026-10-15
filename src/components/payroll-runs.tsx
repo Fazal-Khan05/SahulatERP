@@ -46,7 +46,7 @@ export function PayrollRuns({ workspace, actor, editable, busy, command }: { wor
     ];
   });
   return <div className="stack">
-    <TableCard title="Payroll runs" action={action} heads={['Run', 'Month', 'Employees', 'Commission recovered', 'Status', 'Net payroll', 'Next action']} numeric={[2, 3, 5]} rows={rows}/>
+    <TableCard title="Payroll runs" action={action} empty={can('create_payroll') ? 'No payroll runs yet. Choose a month and Create payroll above.' : 'No payroll runs yet.'} heads={['Run', 'Month', 'Employees', 'Commission recovered', 'Status', 'Net payroll', 'Next action']} numeric={[2, 3, 5]} rows={rows}/>
     {selected && <PayrollLines workspace={workspace} run={selected} onClose={() => setSelectedId(null)}/>}
     <Dialog open={!!cancelling} onOpenChange={open => { if (!open) setCancelling(null); }}><DialogContent className="confirm-dialog">
       <DialogTitle>Cancel {cancelling?.number}?</DialogTitle>

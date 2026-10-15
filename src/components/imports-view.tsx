@@ -50,7 +50,8 @@ export function ImportsView({ workspace, actor, editable, busy, command }: { wor
     <label>Status<select aria-label="Shipment status" value={status} onChange={e => setStatus(e.target.value)}><option value="">All statuses</option>{shipmentStatuses.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
     {status && <button className="list-filter-clear" type="button" onClick={() => setStatus('')}>Clear filters</button>}
   </div>;
-  const empty = shipments.length ? <>No shipments match this status. <button className="text-button" type="button" onClick={() => setStatus('')}>Reset filters</button></> : 'No records yet.';
+  const empty = shipments.length ? <>No shipments match this status. <button className="text-button" type="button" onClick={() => setStatus('')}>Reset filters</button></>
+    : can('create_shipment') ? 'No shipments yet. Create one with New shipment from a submitted goods receipt or supplier bill.' : 'No shipments yet.';
   const rows = visible.map(sh => {
     const pending = sh.costs.filter(cost => !cost.allocated);
     return [sh.number, party(sh.supplierId), `${sh.container} · ${sh.gdNumber}`, sh.eta, <Status key="s" value={sh.status}/>, formatMoney(money(sum(pending.map(c => c.amount)))),

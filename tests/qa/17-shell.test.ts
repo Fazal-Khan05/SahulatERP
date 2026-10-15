@@ -174,7 +174,7 @@ describe('17 shell', () => {
     expect(text(owner)).toContain('A clear view of your day. Every figure comes from your posted records.');
     expect(text(shell(demo, 'Sales Manager'))).toContain('A clear view of your day. Figures cover the records your role and branch can see.');
   });
-  it('NAV-043 no "Design partner", "Revision" or "prototype" copy anywhere in the UI [defect: Settings → Company and access shows a "Revision" label]', () => {
+  it('NAV-043 no "Design partner", "Revision" or "prototype" copy anywhere in the UI', () => {
     const files = ['workbench', 'settings-view', 'setup-wizard', 'login-screen', 'reset-password', 'document-details', 'documents-list', 'reports-view', 'branding-form', 'company-form', 'module-picker'];
     for (const f of files) {
       const s = src(`src/components/${f}.tsx`);

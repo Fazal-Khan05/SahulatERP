@@ -37,7 +37,7 @@ test('DAT-051 page load with 10,000 documents is under 4 s [documented: 9,9xx ex
   await s.context.close();
 });
 
-test('DAT-058 browser closed mid-command: the server completes and a reload shows the result [defect]', async ({ browser }) => {
+test('DAT-058 browser closed mid-command: the server completes and a reload shows the result', async ({ browser }) => {
   const { w, ids } = richWorkspace();
   await writeQaWorkspace(w);
   const number = w.documents.find(d => d.id === ids.draftInv)!.number;
@@ -55,9 +55,8 @@ test('DAT-058 browser closed mid-command: the server completes and a reload show
   await s.page.waitForTimeout(150); // the request is on the wire; the server has not answered yet
   expect(answered, 'closed before the server answered').toBe(false);
   await s.context.close();
-  // A fresh browser: the server should have finished the command on its own.
-  // Actual: the handler reads the session and workspace before it reads the request body, so a browser that goes away in
-  // that window aborts the body and the command is dropped; the invoice stays a draft.
+  // A fresh browser: the server has finished the command on its own. The handler reads the request body before the
+  // session and workspace lookups (D-33), so a browser that goes away during them no longer drops the command.
   const again = await signedInPage(browser, { viewport: DESKTOP });
   await expect.poll(async () => (await readWorkspaceApi(again.context.request)).documents.find(d => d.id === ids.draftInv)?.status, { timeout: 30_000 }).toBe('submitted');
   await gotoApp(again.page);

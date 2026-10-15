@@ -345,6 +345,33 @@ describe('D-32 workspace POST requires application/json', () => {
     }
   });
 
+  it('D-33 reads the whole command before the session and snapshot lookups, so a browser closing mid-request does not drop it', async () => {
+    resetStore();
+    let gone = false;
+    const bytes = new TextEncoder().encode(body());
+    // Pulled only when the handler reads it; after the browser has gone the stream fails, as an aborted upload does.
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) { if (gone) { controller.error(new TypeError('terminated')); return; } S.events.push('body'); controller.enqueue(bytes); controller.close(); },
+    }, { highWaterMark: 0 });
+    const member = S.member;
+    S.member = async tenant => { gone = true; return member(tenant); };
+    const request = new Request('http://localhost/api/workspace', { method: 'POST', headers: { 'x-tenant-id': TENANT, 'content-type': 'application/json' }, body: stream, duplex: 'half' } as RequestInit);
+    const r = await send(request);
+    expect(S.events).toEqual(['body', 'member', 'read']);
+    expect([r.status, r.json.success, S.commits]).toEqual([200, true, 1]);
+  });
+
+  it('D-33 a body that cannot be read is a logged 400 and the snapshot is never loaded', async () => {
+    resetStore();
+    const stream = new ReadableStream<Uint8Array>({ pull(controller) { controller.error(new TypeError('terminated')); } }, { highWaterMark: 0 });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const r = await send(new Request('http://localhost/api/workspace', { method: 'POST', headers: { 'x-tenant-id': TENANT, 'content-type': 'application/json' }, body: stream, duplex: 'half' } as RequestInit));
+    expect(r).toEqual({ status: 400, json: { success: false, message: 'The request reached the server without its data. Please try again.' } });
+    expect(log).toHaveBeenCalledWith('Empty workspace command body', expect.objectContaining({ method: 'POST' }));
+    expect([S.events, S.commits]).toEqual([['member'], 0]);
+    log.mockRestore();
+  });
+
   it("the app's own clients send JSON", () => {
     const workbench = readFileSync(resolve(root, 'src/components/workbench.tsx'), 'utf8');
     const branding = readFileSync(resolve(root, 'src/components/branding-form.tsx'), 'utf8');

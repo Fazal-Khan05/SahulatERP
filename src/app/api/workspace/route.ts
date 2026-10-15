@@ -27,10 +27,11 @@ export async function POST(request: Request) {
     // Commands are JSON only, so a plain form or text post from another site is never parsed as one.
     const mediaType = (request.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
     if (mediaType !== 'application/json') return badRequest('Send the command as JSON (Content-Type: application/json).', 415);
+    // Read the whole command before the session and workspace lookups: once it is in hand, a browser that
+    // closes mid-request no longer drops it, and the server completes the change on its own.
+    const text = await request.text().catch(() => '');
     const tenantId = tenantOf(request);
     const { actor, user } = await requireMember(tenantId);
-    const { workspace, revision } = await readWorkspace(tenantId!);
-    const text = await request.text();
     if (!text) {
       console.error('Empty workspace command body', { method: request.method, length: request.headers.get('content-length'), type: request.headers.get('content-type') });
       return badRequest('The request reached the server without its data. Please try again.');
@@ -39,6 +40,7 @@ export async function POST(request: Request) {
     try { body = JSON.parse(text); } catch { return badRequest('The request is not valid JSON.'); }
     if (!body || typeof body !== 'object' || Array.isArray(body)) return badRequest('The request must be a JSON object.');
     const { confirmPassword, ...command } = body as { type?: string; payload?: Record<string, unknown>; confirmPassword?: string };
+    const { workspace, revision } = await readWorkspace(tenantId!);
 
     // Hiding a module needs the member's own password; turning one on does not.
     if (command.type === 'set_modules') {

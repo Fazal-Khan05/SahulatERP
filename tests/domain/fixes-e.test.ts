@@ -59,6 +59,41 @@ describe('D-16 the print template is isolated from the app table styles', () => 
   });
 });
 
+describe('D-15 reprints use the invoice-time tax snapshot', () => {
+  const sell = (w: Workspace, partyId: string) => {
+    const created = run(w, 'create_document', { kind: 'sales_invoice', partyId, warehouseId: 'khi-main', date: '2026-10-15', dueDate: '2026-11-14', lines: [{ itemId: 'i-1', quantity: '1', price: '2400', taxRate: '18' }] });
+    return { w: run(created.workspace, 'submit_document', { id: created.recordId }).workspace, id: created.recordId };
+  };
+  const withParty = (w: Workspace, partyId: string, changes: Record<string, unknown>) => run(w, 'save_party', { ...w.parties.find(p => p.id === partyId)!, ...changes }).workspace;
+
+  it('an invoice to a registered buyer keeps its tax id after the buyer changes it or de-registers', () => {
+    const start = withParty(buildDemoWorkspace(), 'c-1', { registered: true, taxId: '1111111-1' });
+    const { w, id } = sell(start, 'c-1');
+    const later = withParty(w, 'c-1', { registered: false, taxId: '2222222-2' });
+    const party = documentView(later, later.documents.find(d => d.id === id)!).party;
+    expect(party).toMatchObject({ taxId: '1111111-1' });
+    expect(party.taxStatus).toBeUndefined();
+    const html = render(documentView(later, later.documents.find(d => d.id === id)!));
+    expect(html).toContain('<span>NTN / STRN: 1111111-1</span>');
+    expect(html).not.toContain('2222222-2');
+  });
+
+  it('an invoice to an unregistered buyer says so, even after the buyer registers', () => {
+    const start = withParty(buildDemoWorkspace(), 'c-1', { registered: false, taxId: '' });
+    const { w, id } = sell(start, 'c-1');
+    const later = withParty(w, 'c-1', { registered: true, taxId: '3333333-3' });
+    const view = documentView(later, later.documents.find(d => d.id === id)!);
+    expect(view.party).toMatchObject({ taxId: '', taxStatus: 'Unregistered for sales tax' });
+    expect(render(view)).toContain('<span>Unregistered for sales tax</span>');
+  });
+
+  it('documents without a snapshot (drafts, purchases) show the party as it is now', () => {
+    const w = withParty(buildDemoWorkspace(), 's-1', { taxId: '4444444-4' });
+    const { w: next, id } = purchase(w, 'purchase_order', 'PKR', '1');
+    expect(documentView(next, next.documents.find(d => d.id === id)!).party).toMatchObject({ taxId: '4444444-4' });
+  });
+});
+
 describe('D-14 foreign-currency documents print their own currency', () => {
   it('formatMoney keeps the PKR output and prints $ / ¥ for USD / CNY', () => {
     for (const v of ['1234.5', '-50', '0', '2400.0000']) expect(formatMoney(v, 'PKR')).toBe(formatMoney(v));

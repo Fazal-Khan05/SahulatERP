@@ -55,6 +55,7 @@ export function DocumentPreview({ view, company, branding, assets, compact = fal
         {view.party.address && <span>{view.party.address}</span>}
         {view.party.email && <span>{view.party.email}</span>}
         {view.party.taxId && <span>NTN / STRN: {view.party.taxId}</span>}
+        {view.party.taxStatus && <span>{view.party.taxStatus}</span>}
       </div>
       {view.meta.length > 0 && <dl className="doc-meta">{view.meta.map(item => <div key={item.label}><dt>{item.label}</dt><dd>{item.value}</dd></div>)}</dl>}
     </section>

@@ -62,7 +62,7 @@ export function DocumentDetails({ workspace, actor, documentId, editable, busy, 
         </div>}
         <div className="invoice-parties">
           <section><span className="invoice-section-label">FROM</span><strong>{workspace.company.name}</strong><span>{workspace.company.address}</span>{workspace.company.taxId && <span>Tax ID: {workspace.company.taxId}</span>}</section>
-          <section><span className="invoice-section-label">{view.partyLabel.toUpperCase()}</span><strong>{view.party.name}</strong>{view.party.address && <span>{view.party.address}</span>}{view.party.email && <span>{view.party.email}</span>}{view.party.taxId && <span>Tax ID: {view.party.taxId}</span>}</section>
+          <section><span className="invoice-section-label">{view.partyLabel.toUpperCase()}</span><strong>{view.party.name}</strong>{view.party.address && <span>{view.party.address}</span>}{view.party.email && <span>{view.party.email}</span>}{view.party.taxId && <span>Tax ID: {view.party.taxId}</span>}{view.party.taxStatus && <span>{view.party.taxStatus}</span>}</section>
         </div>
         <div className="invoice-meta">{view.meta.map(m => <span key={m.label}><strong>{m.label}</strong>{m.value}</span>)}{source && <span><strong>Source</strong>{source.number}</span>}</div>
         <section className="invoice-section"><h3>Items</h3><div className="table-scroll"><table className="invoice-lines">

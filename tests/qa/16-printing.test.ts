@@ -394,7 +394,7 @@ describe('16 printing', () => {
     expect(html).toContain('--doc-accent:#123456');
     expect(html).toContain('<p>New footer</p>');
   });
-  it('PRN-069 printed tax details come from the invoice-time tax snapshot [defect: print uses the current party tax id]', async () => {
+  it('PRN-069 printed tax details come from the invoice-time tax snapshot', async () => {
     const doc = docOf(F.inv);
     expect(doc.taxSnapshot).toMatchObject({ registered: true, taxId: '1234567-8' });
     const party = F.w.parties.find(p => p.id === F.cust)!;
@@ -402,6 +402,9 @@ describe('16 printing', () => {
     seed([changed], [[T, 'Owner']]);
     const t = text(await print('sales_invoice', F.inv));
     expect(t).toContain('NTN / STRN: 1234567-8');
+    // Registered at invoice time, so the later de-registration and new tax id do not reach the reprint.
+    expect(t).not.toContain('9999999-9');
+    expect(t).not.toContain('Unregistered for sales tax');
   });
   it('PRN-070 amount in words [documented: not present on the template]', async () => {
     expect(text(await print('sales_invoice', F.inv))).not.toMatch(/\bonly\b|rupees/i);

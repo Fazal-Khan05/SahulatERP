@@ -11,7 +11,8 @@ export type DocumentView = {
   dueDate?: string;
   status: string;
   partyLabel: string;
-  party: { name: string; address: string; taxId: string; email: string };
+  /** `taxStatus` is printed when the invoice-time tax snapshot says the buyer was not registered for sales tax. */
+  party: { name: string; address: string; taxId: string; email: string; taxStatus?: string };
   meta: { label: string; value: string }[];
   /** `currency` is set only where a line or total is not in the document currency (a USD bill on a PKR payment, the PKR equivalent). */
   lines: { description: string; detail: string; quantity: string; unit: string; rate: string; discount: string; taxRate: string; amount: string; currency?: string }[];
@@ -70,7 +71,13 @@ export function documentView(w: Workspace, doc: Document): DocumentView {
   return {
     kind: doc.kind, title: documentTitle(doc.kind), number: doc.number, date: doc.date, dueDate: doc.dueDate, status: doc.status,
     partyLabel: isSales(doc.kind) ? "Bill to" : "Supplier",
-    party: doc.partyName ? { name: doc.partyName, address: "", taxId: "", email: "" } : { name: party?.name ?? "—", address: party?.city ?? "", taxId: party?.taxId ?? "", email: party?.email ?? "" },
+    // Tax details come from the snapshot taken when the invoice was submitted (credit notes inherit it), so a reprint
+    // shows the buyer's registration as it was then; documents without a snapshot show the party's current details.
+    party: doc.partyName ? { name: doc.partyName, address: "", taxId: "", email: "" } : {
+      name: party?.name ?? "—", address: party?.city ?? "", email: party?.email ?? "",
+      taxId: doc.taxSnapshot ? doc.taxSnapshot.taxId : party?.taxId ?? "",
+      ...(doc.taxSnapshot && !doc.taxSnapshot.registered ? { taxStatus: "Unregistered for sales tax" } : {}),
+    },
     meta, lines, totals, notes: doc.notes, currency: doc.currency,
   };
 }

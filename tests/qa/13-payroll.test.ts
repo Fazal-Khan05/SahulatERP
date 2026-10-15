@@ -77,11 +77,11 @@ describe('13 Payroll (PAY)', () => {
     refused(w, 'create_payroll', { month: MONTH }, 'Add active employees before creating payroll.');
   });
 
-  it('PAY-004 create payroll: draft run with one line per active employee', () => {
+  it('PAY-004 create payroll: draft run with one line per active employee [case-corrected: the message is "Payroll calculated." (D-57)]', () => {
     let { w, emp } = setup(); let e2: string;
     [w, e2] = addEmployee(w, 'Bilal', { salary: '50000', allowance: '0' });
     const r = run(w, 'create_payroll', { month: MONTH });
-    expect(r.message).toBe('Payroll calculated using prototype rules.');
+    expect(r.message).toBe('Payroll calculated.');
     const pr = r.workspace.payrolls[0];
     expect(pr).toMatchObject({ month: MONTH, status: 'draft', date: `${MONTH}-28` });
     expect(lineOf(r.workspace, pr.id, emp)).toEqual({ employeeId: emp, basic: '100000.0000', allowance: '10000', commission: '0.0000', deduction: '0', employeeEobi: '320.0000', employerEobi: '1600.0000', incomeTax: '5500.0000', net: '104180.0000', commissionIds: [], commissionAmounts: {}, recovery: '0.0000', recoveryAmounts: {} });
@@ -241,17 +241,24 @@ describe('13 Payroll (PAY)', () => {
     refused(w, 'update_payroll', { id: id2, status: 'reviewed' }, 'Commission recovery changed since this payroll was calculated. Reconcile the run before approval.');
   });
 
-  it('PAY-025 reconcile by recreating the run (cancel draft and create again) works [defect]', () => {
+  it('PAY-025 reconcile by recreating the run (cancel draft and create again) works', () => {
     let { w, emp } = setup(); let commission: string, receiptId: string, id: string;
     ({ w, commission, receiptId } = commissionFor(w, emp));
     w = approveIds(w, [commission]);
     [w, id] = create(w);
     w = bounce(w, receiptId);
     refused(w, 'update_payroll', { id, status: 'reviewed' }, 'Commission changed since this payroll was calculated.');
-    // Expected: a documented path (cancel/delete the draft, then create again) — there is no cancel command and re-creation is refused.
+    // The documented path: cancel the stale draft, then create the month again.
     const types = commandSchema.shape.type.options as readonly string[];
     expect(types.some(t => /payroll/.test(t) && /cancel|delete|recalc/.test(t))).toBe(true);
-    expect(() => run(w, 'create_payroll', { month: MONTH })).not.toThrow();
+    w = run(w, 'cancel_payroll', { id }).workspace;
+    let again: string; [w, again] = create(w);
+    expect(again).toBe(id);
+    expect(w.payrolls.filter(p => p.month === MONTH)).toHaveLength(1);
+    expect(lineOf(w, again, emp).commissionIds).toEqual([]);
+    w = advance(w, again, FULL);
+    expect(w.payrolls[0].status).toBe('paid');
+    expectInvariants(w);
   });
 
   it('PAY-026 postings: approval Dr salary (incl. employer EOBI) / Dr commission payable / Cr payroll payable / Cr statutory; pay settles payroll payable — commission not expensed twice [documented: expense posts at approval, payment credits legacy 1000]', () => {
@@ -475,10 +482,14 @@ describe('13 Payroll (PAY)', () => {
     expect(readFileSync(resolve(__dirname, '../../src/components/reports-view.tsx'), 'utf8')).not.toContain("'Payroll payable'");
   });
 
-  it('PAY-054 cancel / delete a draft run [documented: not offered — no command exists]', () => {
+  it('PAY-054 cancel / delete a draft run [case-corrected: cancel_payroll cancels a draft or reviewed run; approved and paid runs are refused (D-10)]', () => {
     const [w, id] = create(setup().w);
-    expect((commandSchema.shape.type.options as readonly string[]).filter(t => t.includes('payroll'))).toEqual(['create_payroll', 'update_payroll']);
-    expect(() => execute(w, { type: 'cancel_payroll', payload: { id }, idempotencyKey: 'qa-cancel-payroll' }, owner)).toThrow(/invalid_value/);
+    expect((commandSchema.shape.type.options as readonly string[]).filter(t => t.includes('payroll'))).toEqual(['create_payroll', 'update_payroll', 'cancel_payroll']);
+    const cancelled = execute(w, { type: 'cancel_payroll', payload: { id }, idempotencyKey: 'qa-cancel-payroll' }, owner).workspace;
+    expect(cancelled.payrolls.find(p => p.id === id)!.status).toBe('cancelled');
+    expect(cancelled.journals.filter(j => j.sourceId.startsWith(id))).toEqual([]);
+    const approved = advance(w, id, ['reviewed', 'approved']);
+    refused(approved, 'cancel_payroll', { id }, 'Only draft or reviewed payroll runs can be cancelled.');
   });
 
   it('PAY-055 employee deactivated after the run was created: the line stays and is paid', () => {
@@ -535,23 +546,23 @@ describe('13 Payroll (PAY)', () => {
   it.todo('PAY-063 [browser] payroll lines table scrolls horizontally and stays readable on a phone');
   it.todo('PAY-064 [browser] payroll status badges use distinct colours');
 
-  it('PAY-065 each transition writes an audit entry', () => {
+  it('PAY-065 each transition writes an audit entry [case-corrected: the create message is "Payroll calculated." (D-57)]', () => {
     let [w, id] = create(setup().w);
     w = advance(w, id, FULL);
     expect(w.audit.slice(-4).map(a => [a.action, a.sourceId, a.detail])).toEqual([
-      ['create_payroll', id, 'Payroll calculated using prototype rules.'],
+      ['create_payroll', id, 'Payroll calculated.'],
       ['update_payroll', id, 'Payroll reviewed. Bank transmission is simulated.'],
       ['update_payroll', id, 'Payroll approved. Bank transmission is simulated.'],
       ['update_payroll', id, 'Payroll paid. Bank transmission is simulated.'],
     ]);
   });
 
-  it('PAY-066 pay retried with the same idempotency key posts one payment journal', () => {
+  it('PAY-066 pay retried with the same idempotency key posts one payment journal [case-corrected: a replay returns the original recordId and message (D-17)]', () => {
     let [w, id] = create(setup().w);
     w = advance(w, id, ['reviewed', 'approved']);
     const first = run(w, 'update_payroll', { id, status: 'paid' }, owner, 'qa-pay-retry-1');
     const second = run(first.workspace, 'update_payroll', { id, status: 'paid' }, owner, 'qa-pay-retry-1');
-    expect(second.message).toBe('This operation was already completed.');
+    expect([second.recordId, second.message]).toEqual([first.recordId, first.message]);
     expect(second.workspace.journals.filter(j => j.sourceId === `${id}:paid`)).toHaveLength(1);
   });
 
@@ -764,7 +775,7 @@ describe('13 Payroll (PAY)', () => {
     expect(w.journals.filter(j => j.sourceId.startsWith(id))).toEqual([]);
   });
 
-  it('PAY-094 create_payroll success message has no "prototype" wording [defect]', () => {
+  it('PAY-094 create_payroll success message has no "prototype" wording', () => {
     const r = run(setup().w, 'create_payroll', { month: MONTH });
     expect(r.message).not.toMatch(/prototype/i);
   });

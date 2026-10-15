@@ -623,24 +623,24 @@ describe('08 Purchasing, foreign currency, supplier payments (PUR)', () => {
     refused(w, 'convert_document', { id: po, date: today() }, 'Desk Fan is archived. Restore it first.');
   });
 
-  it('PUR-080 idempotent retry of GRN submit gives one stock move', () => {
+  it('PUR-080 idempotent retry of GRN submit gives one stock move [case-corrected: a replay returns the original recordId and message (D-17)]', () => {
     let { w, item, sup } = base();
     let po: string; [w, po] = createSubmit(w, 'purchase_order', sup, [L(item, '5')]);
     const g = convert(w, po);
     const k = 'qa-pur-080-submit-grn';
     const first = run(g.workspace, 'submit_document', { id: g.recordId }, owner, k);
     const retry = run(first.workspace, 'submit_document', { id: g.recordId }, owner, k);
-    expect(retry.message).toBe('This operation was already completed.');
+    expect([retry.recordId, retry.message]).toEqual([first.recordId, first.message]);
     expect(retry.workspace.stockMoves.filter(m => m.sourceId === g.recordId)).toHaveLength(1);
     expect(qty(retry.workspace, item)).toBe('5.0000');
   });
 
-  it('PUR-081 idempotent retry of a payment gives one receipt and one journal', () => {
+  it('PUR-081 idempotent retry of a payment gives one receipt and one journal [case-corrected: a replay returns the original recordId and message (D-17)]', () => {
     const { w: w0, sup, bill } = usdBill();
     const k = 'qa-pur-081-payment';
     const first = pay(w0, sup, [{ invoiceId: bill, amount: '1000' }], '280000', {}, owner, k);
     const retry = pay(first.workspace, sup, [{ invoiceId: bill, amount: '1000' }], '280000', {}, owner, k);
-    expect(retry.message).toBe('This operation was already completed.');
+    expect([retry.recordId, retry.message]).toEqual([first.recordId, first.message]);
     expect(retry.workspace.receipts).toHaveLength(1);
     expect(retry.workspace.journals.filter(j => j.sourceId.endsWith(':cleared'))).toHaveLength(1);
   });

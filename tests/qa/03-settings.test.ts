@@ -153,9 +153,11 @@ describe('03 settings (SET)', () => {
     expect(html).toMatch(/<input required="" minLength="2" maxLength="120" disabled=""/);
   });
 
-  it('SET-014 Salesperson may save the company name via the API (access list) [browser part: Settings is not in the Salesperson sidebar, see SET-058]', () => {
+  it('SET-014 Salesperson may save the company name via the API only while setup is open [case-corrected: after setup company details are Owner/Accountant only (D-08)] [browser part: Settings is not in the Salesperson sidebar, see SET-058]', () => {
     const w = freshCompany();
-    expect(run(w, 'save_company', companyPayload(w, { name: 'Sales Renamed' }), actor('Salesperson')).workspace.company.name).toBe('Sales Renamed');
+    refused(w, 'save_company', companyPayload(w, { name: 'Sales Renamed' }), 'Your role does not permit this action.', actor('Salesperson'));
+    const wizard = { ...w, setup: { complete: false, step: 1 as const } };
+    expect(run(wizard, 'save_company', companyPayload(w, { name: 'Sales Renamed' }), actor('Salesperson')).workspace.company.name).toBe('Sales Renamed');
   });
 
   it('SET-015 Features lists all nine modules with switches and record counts [browser part: Features tab layout]', () => {
@@ -370,11 +372,11 @@ describe('03 settings (SET)', () => {
     expect(store.commits).toBe(0);
   });
 
-  it('SET-050 audit history records each command with actor, role, action and time in order', () => {
+  it('SET-050 audit history records each command with actor, role, action and time in order [case-corrected: actor is the user id, actorName the display name (D-21)]', () => {
     let w = freshCompany();
     w = run(w, 'save_branding', { accent: '#1f5fa8', footer: '' }, actor('Accountant')).workspace;
     const last = w.audit.at(-1)!;
-    expect(last).toMatchObject({ actor: 'QA Accountant', role: 'Accountant', action: 'save_branding', detail: 'Document branding saved.' });
+    expect(last).toMatchObject({ actor: actor('Accountant').id, actorName: 'QA Accountant', role: 'Accountant', action: 'save_branding', detail: 'Document branding saved.' });
     expect(Number.isNaN(Date.parse(last.date))).toBe(false);
     const dates = w.audit.map(a => a.date);
     expect([...dates].sort()).toEqual(dates);
@@ -561,10 +563,12 @@ describe('03 settings (SET)', () => {
   it.todo('SET-079 [browser] hiding the module whose view is open returns to Overview, no blank page');
   it.todo('SET-080 [browser] Settings is not reachable while the company is still in setup (setup card)');
 
-  it('SET-081 Recovery Officer may save Company & documents', () => {
+  it('SET-081 Recovery Officer may not save Company & documents after setup [case-corrected: refused once setup is complete; Owner/Accountant only (D-08)]', () => {
     const w = freshCompany();
-    expect(run(w, 'save_company', companyPayload(w, { phone: '+92 21 111 222' }), actor('Recovery Officer')).workspace.company.phone).toBe('+92 21 111 222');
-    expect(run(w, 'save_branding', { accent: '#087f69', footer: 'RO' }, actor('Recovery Officer')).workspace.branding.footer).toBe('RO');
+    refused(w, 'save_company', companyPayload(w, { phone: '+92 21 111 222' }), 'Your role does not permit this action.', actor('Recovery Officer'));
+    refused(w, 'save_branding', { accent: '#087f69', footer: 'RO' }, 'Your role does not permit this action.', actor('Recovery Officer'));
+    expect(run(w, 'save_company', companyPayload(w, { phone: '+92 21 111 222' }), actor('Accountant')).workspace.company.phone).toBe('+92 21 111 222');
+    expect(run(w, 'save_branding', { accent: '#087f69', footer: 'RO' }, actor('Accountant')).workspace.branding.footer).toBe('RO');
   });
 
   it('SET-082 50-character NTN accepted and printed', () => {

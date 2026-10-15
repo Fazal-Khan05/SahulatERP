@@ -397,12 +397,12 @@ describe('02 onboarding (ONB)', () => {
     expect(w.plans).toEqual([]);
   });
 
-  it('ONB-059 double "Create my workspace": a retried key is a no-op and a second call is refused [browser part: button disabled while busy]', () => {
+  it('ONB-059 double "Create my workspace": a retried key is a no-op and a second call is refused [case-corrected: a replay returns the original recordId and message (D-17)] [browser part: button disabled while busy]', () => {
     let w = run(wizardStart(), 'save_company', company()).workspace;
     w = run(w, 'set_modules', { enabled: ['inventory'] }).workspace;
     const first = run(w, 'complete_setup', {}, owner, 'qa-onb-059-key');
     const retry = run(first.workspace, 'complete_setup', {}, owner, 'qa-onb-059-key');
-    expect(retry.message).toBe('This operation was already completed.');
+    expect([retry.recordId, retry.message]).toEqual([first.recordId, first.message]);
     expect(retry.workspace).toBe(first.workspace);
     expect(first.workspace.warehouses).toHaveLength(1);
     refused(first.workspace, 'complete_setup', {}, 'Setup is already complete.');
@@ -461,7 +461,7 @@ describe('02 onboarding (ONB)', () => {
     refused(wizardStart(), 'save_setup_step', { step: 9 }, /invalid_union|Invalid input/);
   });
 
-  it('ONB-077 set_modules with unknown key "crypto" is a validation error [defect]', () => {
+  it('ONB-077 set_modules with unknown key "crypto" is a validation error', () => {
     let error: unknown;
     try { run(freshCompany(), 'set_modules', { enabled: ['sales', 'crypto'] }); } catch (e) { error = e; }
     expect(error, 'unknown module key should be refused, not silently dropped').toBeInstanceOf(Error);
@@ -506,7 +506,7 @@ describe('02 onboarding (ONB)', () => {
 
   it.todo('ONB-085 [browser] step transition forward slides from right, back from left');
 
-  it('ONB-086 audit after the wizard has save_company, save_setup_step, save_branding, set_modules, complete_setup', () => {
+  it('ONB-086 audit after the wizard has save_company, save_setup_step, save_branding, set_modules, complete_setup [case-corrected: actor is the user id, actorName the display name (D-21)]', () => {
     let w = wizardStart();
     w = run(w, 'save_company', company()).workspace;
     w = run(w, 'save_setup_step', { step: 2 }).workspace;
@@ -516,7 +516,7 @@ describe('02 onboarding (ONB)', () => {
     w = run(w, 'save_setup_step', { step: 4 }).workspace;
     w = run(w, 'complete_setup', {}).workspace;
     expect(w.audit.map(a => a.action)).toEqual(['save_company', 'save_setup_step', 'save_branding', 'save_setup_step', 'set_modules', 'save_setup_step', 'complete_setup']);
-    expect(w.audit.every(a => a.actor === 'QA Owner' && a.role === 'Owner')).toBe(true);
+    expect(w.audit.every(a => a.actor === owner.id && a.actorName === 'QA Owner' && a.role === 'Owner')).toBe(true);
   });
 
   it('ONB-087 revision increments by exactly one per saved command', () => {

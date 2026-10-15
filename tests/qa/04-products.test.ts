@@ -528,10 +528,10 @@ describe('04 products (PRD)', () => {
     expect(w.items).toHaveLength(0);
   });
 
-  it('PRD-084 retrying an import with the same idempotency key creates no duplicates', () => {
+  it('PRD-084 retrying an import with the same idempotency key creates no duplicates [case-corrected: a replay returns the original recordId and message (D-17)]', () => {
     const first = run(freshCompany(), 'import_records', { kind: 'items', rows: importRows(4) }, owner, 'qa-prd-084-import');
     const retry = run(first.workspace, 'import_records', { kind: 'items', rows: importRows(4) }, owner, 'qa-prd-084-import');
-    expect(retry.message).toBe('This operation was already completed.');
+    expect([retry.recordId, retry.message]).toEqual([first.recordId, first.message]);
     expect(retry.workspace.items).toHaveLength(4);
   });
 
@@ -571,7 +571,7 @@ describe('04 products (PRD)', () => {
     refused(freshCompany(), 'save_item', product({ name: 'P'.repeat(121) }), /<=120 characters/);
   });
 
-  it('PRD-095 a name of only spaces is refused (trim → <2) [defect]', () => {
+  it('PRD-095 a name of only spaces is refused (trim → <2)', () => {
     let error: unknown;
     try { run(freshCompany(), 'save_item', product({ name: '     ' })); } catch (e) { error = e; }
     expect(error, 'whitespace-only product name should be refused').toBeInstanceOf(Error);

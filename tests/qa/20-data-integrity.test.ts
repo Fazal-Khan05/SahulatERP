@@ -189,15 +189,16 @@ describe('20 data integrity', () => {
     expect(twice.journals.filter(j => j.sourceId === doc)).toHaveLength(1);
     expect(twice.stockMoves.filter(m => m.sourceId === doc)).toHaveLength(1);
   });
-  it('DAT-011 a client retry after the server committed returns the original result [defect: replay returns recordId "" and "This operation was already completed."]', async () => {
+  it('DAT-011 a client retry after the server committed returns the original result', async () => {
     const t = trading(); let current = t.w; let rev = current.revision;
     S.read = async () => ({ workspace: current, revision: rev });
     const body = JSON.stringify({ type: 'create_document', payload: { kind: 'sales_invoice', partyId: t.cust, warehouseId: t.w.warehouses[0].id, date: today(), dueDate: today(), lines: [line(t.item, '1', '1')] }, idempotencyKey: 'dat-011-retry-key' });
-    const first = await (await workspaceRoute.POST(new Request('http://localhost/api/workspace', { method: 'POST', headers: { 'x-tenant-id': 't' }, body }))).json() as { recordId: string };
+    const first = await (await workspaceRoute.POST(new Request('http://localhost/api/workspace', { method: 'POST', headers: { 'x-tenant-id': 't' }, body }))).json() as { recordId: string; message: string };
     current = S.commits.at(-1)!.workspace; rev++;
     const retry = await (await workspaceRoute.POST(new Request('http://localhost/api/workspace', { method: 'POST', headers: { 'x-tenant-id': 't' }, body }))).json() as { recordId: string; message: string };
     expect(current.documents).toHaveLength(1);
     expect(retry.recordId).toBe(first.recordId);
+    expect(retry.message).toBe(first.message);
   });
   it('DAT-012 two writers commit from the same revision: one wins, the other is refused, retry on fresh state applies both', async () => {
     const { workspace, revision } = await snapshot(QA);
@@ -470,11 +471,13 @@ describe('20 data integrity', () => {
     expect(norm(a)).toBe(norm(b));
     void ids;
   });
-  it('DAT-049 snapshot size for 10k documents stays under 20 MB [documented: extrapolated from 200 invoices]', () => {
-    const t = trading('100000'); let w = t.w; const base = JSON.stringify(w).length;
+  it('DAT-049 snapshot size for 10k documents stays under 20 MB [documented: extrapolated from 200 invoices] [case-corrected: the replay history is capped (D-17), so it is added once at its full size rather than extrapolated per invoice]', () => {
+    const size = (x: Workspace) => JSON.stringify({ ...x, operations: [] }).length;
+    const t = trading('100000'); let w = t.w; const base = size(w);
     for (let i = 0; i < 200; i++) [w] = withDocument(w, 'sales_invoice', t.cust, [line(t.item, '1', '10', { taxRate: '18' })]);
-    const perInvoice = (JSON.stringify(w).length - base) / 200;
-    expect(perInvoice * 10_000 / 1024 / 1024).toBeLessThan(20);
+    const perInvoice = (size(w) - base) / 200;
+    const history = JSON.stringify(w.operations).length / w.operations.length * 500; // the engine keeps at most 500 entries
+    expect((perInvoice * 10_000 + history) / 1024 / 1024).toBeLessThan(20);
   }, 60_000);
   it('DAT-050 command latency with 10k documents < 1 s [documented: engine only, excluding network/DB]', () => {
     const t = trading(); const [w0] = withDocument(t.w, 'sales_invoice', t.cust, [line(t.item, '1', '10')]);
@@ -612,7 +615,7 @@ describe('20 data integrity', () => {
     const [after] = withParty(w, 'customer', { name: 'Café' });
     expect(after.parties.map(p => p.name.normalize('NFC')).filter(n => n === 'Café')).toHaveLength(2);
   });
-  it('DAT-075 whitespace-only inputs are rejected where required [defect: save_party accepts "   " and stores an empty name]', () => {
+  it('DAT-075 whitespace-only inputs are rejected where required', () => {
     refused(freshCompany(), 'save_company', { name: '   ', address: 'x' }, /too_small/);
     refused(freshCompany(), 'save_party', { name: '   ', type: 'customer', city: '', email: '', taxId: '', registered: false, creditLimit: '0', terms: 0, customerClass: '' }, /.+/);
   });

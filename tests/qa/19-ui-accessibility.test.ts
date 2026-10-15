@@ -281,8 +281,8 @@ describe('19 ui accessibility', () => {
   it('UIX-069 cards have hairline borders', () => {
     expect(css).toMatch(/\.card\{[^}]*border:1px solid var\(--(card-)?border\)/);
   });
-  it('UIX-070 top bar blur', () => {
-    expect(css).toContain('.topbar{height:var(--topbar-height);background:color-mix(in srgb,var(--background) 86%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)');
+  it('UIX-070 top bar blur (prefixed first so production minification keeps the standard property, D-78)', () => {
+    expect(css).toContain('.topbar{height:var(--topbar-height);background:color-mix(in srgb,var(--background) 86%,transparent);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)');
   });
   it('UIX-079 numeric fields use type=number for the numeric keyboard [documented: document editor and record forms checked in source only]', () => {
     expect((src('src/components/document-dialogs.tsx').match(/type="number"/g) ?? []).length).toBeGreaterThanOrEqual(4);

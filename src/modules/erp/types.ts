@@ -19,7 +19,8 @@ export type CommissionMovement = { id: string; commissionId: string; sourceId: s
 export type ShipmentCost = { id: string; label: string; amount: string; classification: "inventory" | "recoverable_tax" | "deposit" | "expense"; basis: "value" | "quantity" | "weight" | "volume"; allocated: boolean };
 export type Shipment = { id: string; number: string; supplierId: string; documentId: string; origin: string; port: string; container: string; gdNumber: string; eta: string; status: "in_transit" | "customs" | "received" | "costed"; costs: ShipmentCost[]; allocations: { costId: string; itemId: string; amount: string }[] };
 export type PayrollLine = { employeeId: string; basic: string; allowance: string; commission: string; deduction: string; employeeEobi: string; employerEobi: string; incomeTax: string; net: string; commissionIds: string[]; commissionAmounts: Record<string,string>; recovery?: string; recoveryAmounts?: Record<string,string> };
-export type Payroll = { id: string; number: string; month: string; date: string; status: "draft" | "reviewed" | "approved" | "paid"; lines: PayrollLine[]; total: string };
+/** A cancelled run (only from draft or reviewed) holds nothing; creating its month again recalculates it in place. */
+export type Payroll = { id: string; number: string; month: string; date: string; status: "draft" | "reviewed" | "approved" | "paid" | "cancelled"; lines: PayrollLine[]; total: string };
 /** `actor` is the member's stable user id (entries written before Oct 2026 hold the display name); `actorName` is the display name at the time, for showing only. */
 export type Audit = { id: string; date: string; actor: string; actorName: string; role: string; action: string; sourceId: string; detail: string };
 export type FollowUp = { id: string; partyId: string; date: string; note: string; nextDate: string; actor: string };

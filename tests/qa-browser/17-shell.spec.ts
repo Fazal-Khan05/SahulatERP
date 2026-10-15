@@ -509,9 +509,16 @@ test('NAV-048 Branch picker filters the views to the chosen branch', async () =>
   await openModule(page, 'Inventory');
   const ledRow = page.locator('tbody tr').filter({ hasText: 'QA-LED' }).first();
   await expect(ledRow).toContainText('18 pcs');
+  // The ledger is company-wide: with a branch picked, Accounting explains instead of showing balances (like Reports).
+  await openModule(page, 'Accounting');
+  await expect(page.getByRole('heading', { name: 'The general ledger is company-wide' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Trial balance' })).toHaveCount(0);
+  await openModule(page, 'Inventory');
   await picker.click();
   await page.getByRole('menuitem', { name: 'All branches' }).click();
   await expect(ledRow).not.toContainText('18 pcs');
+  await openModule(page, 'Accounting');
+  await expect(page.getByRole('heading', { name: 'Trial balance' })).toBeVisible();
   await openModule(page, 'Sales');
   await expect(salesRows(page)).toHaveCount(all);
   await reseed(page);

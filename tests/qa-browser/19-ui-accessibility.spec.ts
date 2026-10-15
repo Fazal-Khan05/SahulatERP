@@ -445,7 +445,7 @@ test.describe('layout, keyboard and accessibility on the busy company', () => {
     await s.context.close();
   });
 
-  test('UIX-092 axe-core: no serious or critical violations on any module (desktop and phone) [defect]', async ({ browser }) => {
+  test('UIX-092 axe-core: no serious or critical violations on any module (desktop and phone)', async ({ browser }) => {
     const found: string[] = [];
     for (const [name, options] of [['desktop', { viewport: DESKTOP }], ['phone', { viewport: PHONE, isMobile: true, hasTouch: true }]] as const) {
       const s = await open(browser, options);

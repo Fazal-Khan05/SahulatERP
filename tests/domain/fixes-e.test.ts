@@ -59,6 +59,24 @@ describe('D-16 the print template is isolated from the app table styles', () => 
   });
 });
 
+describe('D-24 drafts and cancelled documents are marked', () => {
+  it('prints a banner and a watermark for draft and cancelled documents only', () => {
+    const draft = render({ ...sampleInvoiceView(), status: 'draft' });
+    expect(draft).toMatch(/^<article class="doc "[^>]*><p class="doc-status-banner doc-status-draft">Draft — not final until it is submitted<\/p><header/);
+    expect(draft).toContain('<div class="doc-watermark doc-status-draft" data-mark="Draft" aria-hidden="true"></div></article>');
+    const cancelled = render({ ...sampleInvoiceView(), status: 'cancelled' });
+    expect(cancelled).toContain('<p class="doc-status-banner doc-status-cancelled">Cancelled — this document is void</p>');
+    expect(cancelled).toContain('data-mark="Cancelled"');
+    for (const status of ['submitted', 'cleared', 'bounced']) expect(render({ ...sampleInvoiceView(), status })).not.toMatch(/doc-status|doc-watermark/);
+  });
+
+  it('the watermark repeats on every printed page and never blocks the page', () => {
+    expect(printCss).toMatch(/\.doc-watermark::after \{ content: attr\(data-mark\);/);
+    expect(printCss).toMatch(/\.doc-watermark \{[^}]*pointer-events: none;/);
+    expect(printCss).toMatch(/@media print \{[\s\S]*\.doc-watermark \{ position: fixed; \}/);
+  });
+});
+
 describe('D-15 reprints use the invoice-time tax snapshot', () => {
   const sell = (w: Workspace, partyId: string) => {
     const created = run(w, 'create_document', { kind: 'sales_invoice', partyId, warehouseId: 'khi-main', date: '2026-10-15', dueDate: '2026-11-14', lines: [{ itemId: 'i-1', quantity: '1', price: '2400', taxRate: '18' }] });

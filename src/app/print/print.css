@@ -7,7 +7,7 @@
 .print-message { min-height: 100vh; display: grid; place-content: center; gap: 10px; text-align: center; font-family: Arial, sans-serif; }
 
 /* Block flow with sibling margins; the totals and footer live in the lines table's last row group (see .doc-tail). */
-.doc { --doc-accent: #087f69; display: block; padding: 14mm; font-size: 10.5pt; line-height: 1.4; letter-spacing: normal; font-feature-settings: normal; text-align: left; color: #152234; }
+.doc { --doc-accent: #087f69; position: relative; display: block; padding: 14mm; font-size: 10.5pt; line-height: 1.4; letter-spacing: normal; font-feature-settings: normal; text-align: left; color: #152234; }
 .doc > * + * { margin-top: 6mm; }
 .doc-compact { padding: 8mm; font-size: 8.5pt; }
 .doc-compact > * + * { margin-top: 5mm; }
@@ -63,6 +63,12 @@
 .doc-footer { margin-top: 6mm; border-top: 1px solid #cfd7e0; padding-top: 3mm; color: #4a5b6d; font-size: .9em; text-align: left; }
 .doc-footer p { margin: 0 0 2mm; white-space: pre-wrap; }
 .doc-footer small { color: #8290a0; }
+/* Drafts and cancelled documents: a banner above the header and a watermark, which Chromium repeats on every printed page. */
+.doc-status-banner { padding: 2mm 3mm; border: 1.5px solid currentColor; border-radius: 1.5mm; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; text-align: center; }
+.doc-status-draft { color: #8a4b00; }
+.doc-status-cancelled { color: #b42318; }
+.doc-watermark { position: absolute; inset: 0; margin: 0; display: grid; place-items: center; overflow: hidden; pointer-events: none; }
+.doc-watermark::after { content: attr(data-mark); transform: rotate(-30deg); font-size: 5em; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; opacity: .1; }
 
 @media (max-width: 640px) {
   .print-page { padding: 10px; }
@@ -80,6 +86,7 @@
   .print-actions { display: none; }
   /* Rows never split, and the last line, totals and footer move to a new page together. */
   .doc-lines tr, .doc-tail { break-inside: avoid; }
+  .doc-watermark { position: fixed; }
   .doc-lines th { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .doc-logo-fallback { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 }

@@ -25,7 +25,10 @@ export function DocumentPreview({ view, company, branding, assets, compact = fal
     {hasLines && <><td className="num">{line.quantity} {line.unit}</td><td className="num">{line.rate && amount(line.rate, line.currency)}</td><td className="num">{line.discount && `${line.discount}%`}</td><td className="num">{line.taxRate && `${line.taxRate}%`}</td></>}
     <td className="num">{amount(line.amount, line.currency)}</td>
   </tr>;
+  // Drafts and cancelled documents must never pass for real ones: a banner on top and a watermark on every printed page.
+  const unofficial = view.status === 'draft' ? { word: 'Draft', note: 'Draft — not final until it is submitted' } : view.status === 'cancelled' ? { word: 'Cancelled', note: 'Cancelled — this document is void' } : null;
   return <article className={`doc ${compact ? 'doc-compact' : ''}`} style={{ ['--doc-accent' as string]: branding.accent }}>
+    {unofficial && <p className={`doc-status-banner doc-status-${view.status}`}>{unofficial.note}</p>}
     <header className="doc-header">
       {assets.letterheadUrl
         ? <img className="doc-letterhead" src={assets.letterheadUrl} alt={`${company.name} letterhead`}/>
@@ -82,5 +85,6 @@ export function DocumentPreview({ view, company, branding, assets, compact = fal
         </td></tr>
       </tbody>
     </table>
+    {unofficial && <div className={`doc-watermark doc-status-${view.status}`} data-mark={unofficial.word} aria-hidden="true"/>}
   </article>;
 }

@@ -238,12 +238,12 @@ describe('16 printing', () => {
     expect(totals(html)['Customer credit']).toBe('Rs 200');
     expect(html).toContain('class="emphasis credit"');
   });
-  it('PRN-020 draft invoice print shows a visible DRAFT status [defect]', async () => {
+  it('PRN-020 draft invoice print shows a visible DRAFT status', async () => {
     const html = await print('sales_invoice', F.draftInv);
     expect(docOf(F.draftInv).status).toBe('draft');
     expect(text(html).toUpperCase()).toContain('DRAFT');
   });
-  it('PRN-021 cancelled invoice print shows CANCELLED [defect]', async () => {
+  it('PRN-021 cancelled invoice print shows CANCELLED', async () => {
     const html = await print('sales_invoice', F.cancelledInv);
     expect(text(html)).toContain('Cancelled: Customer changed order');
     expect(text(html).replace('Cancelled: Customer changed order', '').toUpperCase()).toContain('CANCELLED');

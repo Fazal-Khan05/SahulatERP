@@ -149,7 +149,7 @@ function FeaturesSettings({ workspace, readOnly, command }: { workspace: Workspa
   }
   const removing = pending ? workspace.modules.filter(key => !pending.includes(key)) : [];
   return <section className="card">
-    <div className="card-heading"><div><h2>Features</h2><p>Turn modules on or off. Turning one off hides it and keeps every record; your password confirms it.</p></div></div>
+    <div className="card-heading"><div><h2>Features</h2><p>Turn modules on or off. Turning one off hides it and keeps every record; your password confirms it.</p></div><span className="count-pill" aria-live="polite">{workspace.modules.length} of {moduleCatalogue.length} turned on</span></div>
     <div className="card-body">
       {readOnly && companyEditorsNote}
       <ModulePicker selected={workspace.modules} onChange={change} workspace={workspace} disabled={readOnly || busy} showPresets={false}/>

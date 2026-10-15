@@ -153,7 +153,7 @@ test('SET-069 Branding preview typography and colours match the print page [defe
   expect(preview).toEqual(printed);
 });
 
-test('SET-075 Settings → Features shows an "N turned on" count matching the switches [defect]', async () => {
+test('SET-075 Settings → Features shows an "N turned on" count matching the switches', async () => {
   const { page } = s;
   await settings(page, 'Features');
   const on = await page.locator('.module-card input[role=switch]:checked').count();

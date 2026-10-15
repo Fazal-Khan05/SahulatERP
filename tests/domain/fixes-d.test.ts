@@ -6,7 +6,9 @@ import { resolve } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
 import Papa from 'papaparse';
+import { getPathMatch } from 'next/dist/shared/lib/router/utils/path-match';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
+import nextConfig from '../../next.config';
 import { scopeWorkspace } from '../../src/modules/erp/access';
 import { buildDemoWorkspace } from '../../src/modules/erp/demo';
 import { execute } from '../../src/modules/erp/engine';
@@ -377,5 +379,33 @@ describe('D-32 workspace POST requires application/json', () => {
     const branding = readFileSync(resolve(root, 'src/components/branding-form.tsx'), 'utf8');
     expect(workbench).toContain("fetch('/api/workspace',{method:'POST',headers:{'content-type':'application/json'");
     expect(branding).toContain("fetch('/api/workspace', { method: 'POST', headers: { 'content-type': 'application/json'");
+  });
+});
+
+// ---------- D-22: Back after sign-out must not show the workspace from the browser cache ----------
+describe('D-22 signed-in responses are never stored; signing out empties the cache', () => {
+  // Headers in next.config, resolved with Next's own matcher (strict, as for custom headers).
+  async function headersFor(path: string) {
+    const rules = await nextConfig.headers!();
+    const out: Record<string, string> = {};
+    for (const rule of rules) if (getPathMatch(rule.source, { strict: true, removeUnnamedParams: true })(path)) for (const h of rule.headers) out[h.key] = h.value;
+    return out;
+  }
+
+  it('pages, print views, account pages, auth and API routes are sent with no-store', async () => {
+    for (const path of ['/', '/sales', '/print/sales_invoice/abc', '/account/reset', '/auth/callback', '/api/workspace', '/api/branding/logo', '/api/demo-reset']) {
+      const h = await headersFor(path);
+      expect(h['Cache-Control'], path).toBe('private, no-cache, no-store, max-age=0, must-revalidate');
+      expect(h['X-Frame-Options'], path).toBe('DENY');
+    }
+  });
+
+  it('hashed build assets and the favicon stay cacheable', async () => {
+    for (const path of ['/_next/static/chunks/app.js', '/_next/static/css/app/layout.css', '/_next/image', '/favicon.svg']) expect((await headersFor(path))['Cache-Control'], path).toBeUndefined();
+  });
+
+  it('the sign-out response clears the browser cache, and only that response', async () => {
+    expect((await headersFor('/auth/signout'))['Clear-Site-Data']).toBe('"cache"');
+    for (const path of ['/', '/auth/callback', '/api/workspace', '/auth/signout/x']) expect((await headersFor(path))['Clear-Site-Data'], path).toBeUndefined();
   });
 });

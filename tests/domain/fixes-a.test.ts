@@ -170,3 +170,23 @@ describe('D-03 a bill from a GRN clears GRNI (2010) at the GRN value', () => {
     expectInvariants(w);
   });
 });
+
+describe('D-04 journals backed by stock movements cannot be reversed', () => {
+  const message = "Use the source document's correction workflow for operational journals.";
+  it('D-04 opening stock, count corrections, adjustments and stock increases are refused; a manual journal still reverses', () => {
+    const t = trading();
+    let w = t.w;
+    const opening = w.journals.find(j => j.lines.some(l => l.account === '3000'))!;
+    w = run(w, 'set_stock_quantity', { itemId: t.item, warehouseId: t.wh, expectedQuantity: '100', targetQuantity: '90', date: today(), reason: 'Count' }).workspace;
+    const count = w.journals.at(-1)!;
+    w = run(w, 'stock_adjust', { itemId: t.item, warehouseId: t.wh, quantity: '5', reason: 'Found in yard', date: today() }).workspace;
+    const adjust = w.journals.at(-1)!;
+    w = run(w, 'bulk_stock_increase', { warehouseId: t.wh, date: today(), purpose: 'count_correction', reason: 'Recount', lines: [{ itemId: t.item, quantity: '2', cost: '50' }] }).workspace;
+    const increase = w.journals.at(-1)!;
+    for (const j of [opening, count, adjust, increase]) refused(w, 'reverse_journal', { id: j.id }, message);
+    w = run(w, 'create_journal', { memo: 'Owner top-up', date: today(), lines: [{ account: '1002', debit: '500', credit: '0' }, { account: '3000', debit: '0', credit: '500' }] }).workspace;
+    const reversed = run(w, 'reverse_journal', { id: w.journals.at(-1)!.id }).workspace;
+    expect(reversed.journals.at(-1)!.reversalOf).toBe(w.journals.at(-1)!.id);
+    expectInvariants(reversed);
+  });
+});

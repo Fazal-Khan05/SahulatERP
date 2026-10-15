@@ -94,4 +94,17 @@ describe('H workspace view fixes', () => {
     expect(imports).toContain('aria-label="Shipment status"');
     expect([...imports.matchAll(/<tr><td>(SHP-[^<]+)<\/td>/g)].map(m => m[1])).toEqual(w.shipments.map(sh => sh.number).reverse());
   });
+
+  it('D-36 the customer receipts table draws the newest 100 receipts with "Show 100 more"', () => {
+    const w = buildDemoWorkspace();
+    const template = w.receipts.find(r => w.parties.find(p => p.id === r.partyId)?.type === 'customer')!;
+    const bulk = { ...w, receipts: [...w.receipts, ...Array.from({ length: 300 }, (_, i) => ({ ...template, id: `h-bulk-${i}`, number: `REC-H-${1000 + i}` }))] };
+    const total = bulk.receipts.filter(r => bulk.parties.find(p => p.id === r.partyId)?.type !== 'supplier').length;
+    const html = renderToStaticMarkup(createElement(CustomerReceipts, { workspace: bulk, editable: false, onRecord: () => {} }));
+    const shown = [...html.matchAll(/<tr><td>([^<]+)<\/td>/g)].map(m => m[1]);
+    expect(shown).toHaveLength(100);
+    expect(shown[0]).toBe('REC-H-1299');
+    expect(html).toContain('Show 100 more</button>');
+    expect(html).toContain(`Showing 100 of ${total.toLocaleString('en-PK')} receipts`);
+  });
 });

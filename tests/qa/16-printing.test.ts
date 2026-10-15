@@ -465,7 +465,7 @@ describe('16 printing', () => {
   it('PRN-090 invoice number barcode/QR [documented: not present]', async () => {
     expect(await print('sales_invoice', F.inv)).not.toMatch(/<canvas|qr|barcode/i);
   });
-  it('PRN-091 company address with newlines prints line breaks in the header [defect: address span has no pre-line/pre-wrap]', async () => {
+  it('PRN-091 company address with newlines prints line breaks in the header', async () => {
     const multi = run(F.w, 'save_company', { name: 'Print Test Traders', address: 'Plot 12\nJodia Bazar\nKarachi', phone: '', email: '', taxId: '' }).workspace;
     seed([multi], [[T, 'Owner']]);
     expect(await print('sales_invoice', F.inv)).toContain('<span>Plot 12\nJodia Bazar\nKarachi</span>');

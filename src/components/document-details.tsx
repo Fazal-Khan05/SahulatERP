@@ -61,7 +61,7 @@ export function DocumentDetails({ workspace, actor, documentId, editable, busy, 
           {canCancel && <Button size="sm" variant="ghost" disabled={!!busy} onClick={() => { if (window.confirm(`Cancel draft ${doc.number}? It stays in the list as cancelled.`)) command('cancel_document', { id: doc.id, reason: '' }); }}><XCircle size={14}/>Cancel draft</Button>}
         </div>}
         <div className="invoice-parties">
-          <section><span className="invoice-section-label">FROM</span><strong>{workspace.company.name}</strong><span>{workspace.company.address}</span>{workspace.company.taxId && <span>Tax ID: {workspace.company.taxId}</span>}</section>
+          <section><span className="invoice-section-label">FROM</span><strong>{workspace.company.name}</strong><span style={{ whiteSpace: 'pre-line' }}>{workspace.company.address}</span>{workspace.company.taxId && <span>Tax ID: {workspace.company.taxId}</span>}</section>
           <section><span className="invoice-section-label">{view.partyLabel.toUpperCase()}</span><strong>{view.party.name}</strong>{view.party.address && <span>{view.party.address}</span>}{view.party.email && <span>{view.party.email}</span>}{view.party.taxId && <span>Tax ID: {view.party.taxId}</span>}{view.party.taxStatus && <span>{view.party.taxStatus}</span>}</section>
         </div>
         <div className="invoice-meta">{view.meta.map(m => <span key={m.label}><strong>{m.label}</strong>{m.value}</span>)}{source && <span><strong>Source</strong>{source.number}</span>}</div>

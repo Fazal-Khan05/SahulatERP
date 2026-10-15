@@ -28,6 +28,7 @@
 .doc-letterhead { max-width: 115mm; max-height: 32mm; object-fit: contain; }
 .doc-identity { display: flex; gap: 5mm; align-items: flex-start; min-width: 0; }
 .doc-identity > div { display: flex; flex-direction: column; gap: .6mm; min-width: 0; font-size: .92em; color: #4a5b6d; }
+.doc-identity > div > span { white-space: pre-line; }
 .doc-company { font-size: 1.35em; line-height: 1.25; color: #152234; }
 .doc-logo { width: 22mm; height: 22mm; object-fit: contain; }
 .doc-logo-fallback { display: grid; place-items: center; width: 18mm; height: 18mm; border-radius: 4mm; background: var(--doc-accent); color: white; font-weight: 700; font-size: 1.5em; }

@@ -144,6 +144,14 @@ describe('D-74 printed quantities carry thousands separators', () => {
   });
 });
 
+describe('D-75 company address line breaks print', () => {
+  it('keeps the newlines in the header markup and renders them with pre-line', () => {
+    const html = renderToStaticMarkup(createElement(DocumentPreview, { view: sampleInvoiceView(), company: { ...company, address: 'Plot 12\nJodia Bazar\nKarachi' }, branding: { template: 'standard', accent: '#087f69', footer: '' }, assets: {} }));
+    expect(html).toContain('<span>Plot 12\nJodia Bazar\nKarachi</span>');
+    expect(printCss).toContain('.doc-identity > div > span { white-space: pre-line; }');
+  });
+});
+
 describe('D-14 foreign-currency documents print their own currency', () => {
   it('formatMoney keeps the PKR output and prints $ / ¥ for USD / CNY', () => {
     for (const v of ['1234.5', '-50', '0', '2400.0000']) expect(formatMoney(v, 'PKR')).toBe(formatMoney(v));

@@ -59,7 +59,8 @@ describe('agent F shell fixes', () => {
     expect(ratio('#ffffff', token('danger'))).toBeGreaterThanOrEqual(4.5);
     expect(ratio('#ffffff', token('danger-hover'))).toBeGreaterThanOrEqual(4.5);
     expect(css).toMatch(/\.setup-foot\{[^}]*background:rgba\(16,31,82,\.7\)/);
-    expect(css).toContain('.table-scroll:focus-visible,.branding-preview-frame:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}');
+    // Owners mark scroll wrappers tabIndex={0} role="region" aria-label=…; any such region gets the ring too.
+    expect(css).toContain('.table-scroll:focus-visible,.branding-preview-frame:focus-visible,[role=region][tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}');
   });
   it('D-61 the search input is 16px on touch and phone so iOS does not zoom', () => {
     expect(css).toContain('@media(pointer:coarse),(max-width:760px){.search-dialog .search-input{font-size:16px}}');

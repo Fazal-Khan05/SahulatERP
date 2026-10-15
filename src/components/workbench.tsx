@@ -16,6 +16,11 @@ import { DocumentsList } from './documents-list';
 import { PaymentDialog } from './document-dialogs';
 import { CashBankView, ChequeRow } from './cash-bank-view';
 import { ReportsView } from './reports-view';
+import { Status, TableCard } from './table-card';
+import { ImportsView } from './imports-view';
+import { PayrollRuns } from './payroll-runs';
+import { CustomerReceipts } from './receipts-list';
+import { AuditHistory } from './audit-history';
 import { InventoryView } from './inventory-view';
 import { StockTransferDialog } from './stock-transfer-dialog';
 import { canReadLedger, filterBranch, scopeWorkspace } from '@/modules/erp/access';
@@ -256,11 +261,6 @@ export function Workbench({initialWorkspace,actor,memberships}:Props){
 
 type CommandFn=(type:string,payload:Record<string,unknown>,options?:{confirmPassword?:string})=>Promise<{ok:boolean;message:string;passwordRequired?:boolean}>;
 type ViewProps={active:Module;workspace:Workspace;fullWorkspace:Workspace;ledgerView:boolean;actor:Actor;busy:string;notice:string;command:CommandFn;open:(modal:Modal)=>void;openStockTransfer:()=>void;go:(module:Module,preset?:ViewPreset)=>void;preset?:ViewPreset;reset:()=>void;role:Role;realRole:Role;setRole:(role:Role)=>void;onWorkspace:(next:Workspace)=>void};
-import { Status, TableCard } from './table-card';
-import { ImportsView } from './imports-view';
-import { PayrollRuns } from './payroll-runs';
-import { CustomerReceipts } from './receipts-list';
-import { AuditHistory } from './audit-history';
 function Tabbed({tabs,initial}:{tabs:{key:string;label:string;content:ReactNode}[];initial?:string}){const [tab,setTab]=useState(tabs.some(t=>t.key===initial)?initial!:tabs[0].key);const current=tabs.find(t=>t.key===tab)??tabs[0];return <div className="stack"><div className="tabs" role="tablist">{tabs.map(t=><button key={t.key} role="tab" aria-selected={current.key===t.key} className={`tab ${current.key===t.key?'active':''}`} onClick={()=>setTab(t.key)}>{t.label}</button>)}</div>{current.content}</div>}
 function View(props:ViewProps){const {active,workspace,busy,command,open,ledgerView}=props;const editable=canEdit(props.actor.role,active);const data=(key:keyof typeof entitySpecs)=><MasterDataView spec={entitySpecs[key] as never} workspace={workspace} editable={editable} busy={busy} command={command}/>;if(active==='dashboard')return <Dashboard {...props}/>;
   if(active==='sales')return <Tabbed key="sales" initial={props.preset?.tab} tabs={[{key:'documents',label:'Documents',content:<DocumentsList side="sales" workspace={workspace} actor={props.actor} editable={editable} busy={busy} command={command} initialStatus={props.preset?.status}/>},{key:'customers',label:'Customers',content:data('customers')}]}/>;

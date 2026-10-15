@@ -373,13 +373,13 @@ describe('08 Purchasing, foreign currency, supplier payments (PUR)', () => {
     expect(outstanding(docOf(w, bill))).toBe('0.0000');
   });
 
-  it('PUR-044 supplier statement: bill, return and payment with a correct running balance; PO not shown [case-corrected: GRNs are not listed either] [defect]', () => {
+  it('PUR-044 supplier statement: bill, return and payment with a correct running balance; PO not shown [case-corrected: GRNs are not listed either]', () => {
     const { w: w0, sup, bill } = usdBill();
     let w = run(w0, 'return_document', { id: bill, lines: [{ lineId: docOf(w0, bill).lines[0].id, quantity: '1' }] }).workspace;
     w = pay(w, sup, [{ invoiceId: bill, amount: '500' }], '140000').workspace;
     const st = partyStatement(w, sup, '2000-01-01', '2999-12-31');
     expect(st.lines.map(l => l.description)).toEqual(['Supplier bill', 'Return to supplier', 'Payment · bank']);
-    // Owed: 280,000 - 2,800 - 140,000 = 137,200 (= outstanding 490 x 280). Actual 417,200: reports.ts partyStatement negates receipts for suppliers too, so payments add to the balance.
+    // Owed: 280,000 - 2,800 - 140,000 = 137,200 (= outstanding 490 x 280). Before D-01 the payment was added instead (417,200).
     expect(st.closing).toBe('137200.0000');
   });
 

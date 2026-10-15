@@ -61,7 +61,7 @@ describe('15 Reports (RPT)', () => {
     expect(agedBalances(w, 'customer', '2099-12-31').totals.total).toBe(bal(w, '1100'));
   });
 
-  it('RPT-004 aged receivables as of a past date excludes receipts made after that date [defect]', () => {
+  it('RPT-004 aged receivables as of a past date excludes receipts made after that date', () => {
     let { w, item, cust } = base(); let inv: string;
     [w, inv] = sell(w, cust, [line(item, '1', '1000')], '2026-09-01', '2026-09-01');
     w = receive(w, cust, inv, '1000', '2026-10-10').workspace;
@@ -123,7 +123,7 @@ describe('15 Reports (RPT)', () => {
 
   it.todo('RPT-011 [browser] statement print is branded with company header and period');
 
-  it('RPT-012 supplier statement: bills, returns and payments move the balance in the right direction [defect]', () => {
+  it('RPT-012 supplier statement: bills, returns and payments move the balance in the right direction', () => {
     let { w, item, sup } = base(); let bill: string;
     [w, bill] = withDocument(w, 'supplier_invoice', sup, [line(item, '10', '100')]);
     w = run(w, 'return_document', { id: bill, date: T, lines: [{ lineId: w.documents.find(d => d.id === bill)!.lines[0].id, quantity: '1' }] }).workspace;
@@ -418,7 +418,7 @@ describe('15 Reports (RPT)', () => {
     expect(bal(w, '1100')).toBe('-200.0000');
   });
 
-  it('RPT-053 statement with a bounced cheque shows the receipt and its reversal [defect]', () => {
+  it('RPT-053 statement with a bounced cheque shows the receipt and its reversal', () => {
     const w = buildDemoWorkspace();
     const s = partyStatement(w, 'c-4', '2026-09-01', '2026-10-31');
     expect(s.closing).toBe('65490.0000');
@@ -553,7 +553,7 @@ describe('15 Reports (RPT)', () => {
     expect(agedBalances(w, 'supplier', T).rows.map(r => [r.name, r.total])).toEqual([['Walk-in supplier', '150.0000']]);
   });
 
-  it('RPT-072 sales analysis by salesperson with splits gives each person their share [defect]', () => {
+  it('RPT-072 sales analysis by salesperson with splits gives each person their share', () => {
     let { w, item, cust } = base();
     const a = run(w, 'save_employee', { name: 'Hamza Khan', role: 'OB', territory: '', salary: '1', allowance: '0', deduction: '0', attendance: 30, active: true }); w = a.workspace;
     const b = run(w, 'save_employee', { name: 'Sara Malik', role: 'ASM', territory: '', salary: '1', allowance: '0', deduction: '0', attendance: 30, active: true }); w = b.workspace;

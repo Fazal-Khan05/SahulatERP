@@ -432,7 +432,8 @@ describe('10 Collections: receipts, cheques (PDC), follow-ups (COL)', () => {
     let { w, item, cust } = base();
     let old: string;
     [w, old] = invoice(w, cust, item, '50', { date: '2026-09-01', dueDate: '2026-09-01' });
-    w = receipt(w, cust, [{ invoiceId: old, amount: '1500' }]).workspace;
+    // Dated before the as-at date: since D-12 a receipt counts only once it has cleared, so a receipt dated today() would not net on 14 Oct.
+    w = receipt(w, cust, [{ invoiceId: old, amount: '1500' }], { date: '2026-10-01', dueDate: '2026-10-01' }).workspace;
     const row = agedBalances(w, 'customer', '2026-10-14').rows.find(r => r.partyId === cust)!;
     // The base 10,000 invoice is dated today(): it counts as current while today <= asOf, and is excluded after.
     expect(row.d60).toBe('3500.0000');
@@ -730,7 +731,7 @@ describe('10 Collections: receipts, cheques (PDC), follow-ups (COL)', () => {
     expectInvariants(w);
   });
 
-  it('COL-100 end to end: 10,000 invoice → cash 4,000 → cheque 6,000 deposit/clear/bounce → cash 6,000; statement and commission correct', () => {
+  it('COL-100 end to end: 10,000 invoice → cash 4,000 → cheque 6,000 deposit/clear/bounce → cash 6,000; statement and commission correct [case-corrected: the statement also lists the bounced cheque and its reversal (D-25)]', () => {
     let { w, cust, inv, emp } = base();
     w = receipt(w, cust, [{ invoiceId: inv, amount: '4000' }]).workspace;
     expect(released(w, inv)).toBe('200.0000');
@@ -744,7 +745,8 @@ describe('10 Collections: receipts, cheques (PDC), follow-ups (COL)', () => {
     expect(outstanding(docOf(w, inv))).toBe('0.0000');
     expect(commissionTotals(w, emp)).toMatchObject({ earned: '500.0000', released: '500.0000', paid: '0.0000' });
     const st = partyStatement(w, cust, '2000-01-01', '2999-12-31');
-    expect(st.lines.map(l => [l.description, l.debit, l.credit])).toEqual([['Sales invoice', '10000.0000', ''], ['Receipt · cash', '', '4000.0000'], ['Receipt · cash', '', '6000.0000']]);
+    // Since D-25 the bounced cheque keeps its receipt line and is followed by its reversal, so the history is visible.
+    expect(st.lines.map(l => [l.description, l.debit, l.credit, l.balance])).toEqual([['Sales invoice', '10000.0000', '', '10000.0000'], ['Receipt · cash', '', '4000.0000', '6000.0000'], ['Receipt · cheque BAH-600', '', '6000.0000', '0.0000'], ['Cheque bounced · BAH-600', '6000.0000', '', '6000.0000'], ['Receipt · cash', '', '6000.0000', '0.0000']]);
     expect(st.closing).toBe('0.0000');
     expect(summary(w).collections).toBe('10000.0000');
     expectInvariants(w);

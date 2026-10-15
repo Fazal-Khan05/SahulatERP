@@ -352,6 +352,10 @@ button:focus-visible,a:focus-visible,[role=switch]:focus-visible{outline:2px sol
 .workspace-picker:hover,.workspace-picker[data-state="open"]{background:var(--surface-sunken);border-color:var(--border-strong)}
 .workspace-picker strong{color:var(--text);font-weight:600}
 .workspace-picker small{color:var(--text-muted)}
+/* A long company name stays on one line in the switcher and ends in an ellipsis (the full name is in its aria-label). */
+.workspace-picker>.company-icon,.workspace-picker>svg{flex-shrink:0}
+.workspace-picker>span:not(.company-icon){min-width:0;flex:1}
+.workspace-picker strong,.workspace-picker small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .company-icon{background:var(--accent-soft);color:var(--accent-text);border-radius:var(--radius-sm);width:28px;height:28px}
 .nav-label{color:var(--text-subtle);letter-spacing:var(--tracking-wide);font-size:0.62rem;padding:0 10px;margin-bottom:8px}
 .nav-item{color:var(--text-muted);border-radius:var(--radius-sm);padding:9px 10px;min-height:40px;font-size:var(--text-sm);font-weight:500;transition:background var(--duration-base) var(--ease-out),color var(--duration-base) var(--ease-out),transform var(--duration-fast) var(--ease-out)}

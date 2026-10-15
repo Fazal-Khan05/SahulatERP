@@ -871,7 +871,7 @@ test('NAV-081 Bell menu fits on a phone', async ({ browser }) => {
   await context.close();
 });
 
-test('NAV-082 A long company name is truncated with an ellipsis in the switcher [defect]', async () => {
+test('NAV-082 A long company name is truncated with an ellipsis in the switcher', async () => {
   const { page } = s;
   const longName = 'Haji Abdul Rehman Muhammad Siddique International Importers and Distributors (Private) Limited';
   const r = richWorkspace();

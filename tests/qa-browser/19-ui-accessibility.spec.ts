@@ -499,7 +499,7 @@ test.describe('long and Urdu names', () => {
   test.afterAll(async () => { await s?.context.close(); });
   const customerRow = (page: Page, name: string) => page.locator('section.card').filter({ has: page.getByRole('heading', { name: 'Customers', level: 2 }) }).locator('tbody tr').filter({ hasText: name });
 
-  test('UIX-083 long names truncate with an ellipsis in fixed-width spots (workspace switcher) [defect]', async () => {
+  test('UIX-083 long names truncate with an ellipsis in fixed-width spots (workspace switcher)', async () => {
     const { page } = s;
     await home(page);
     const spots = await page.evaluate(() => [...document.querySelectorAll('.sidebar *')].filter(e => e.children.length === 0 && (e.textContent ?? '').includes('Al-Noor')).map(e => {
@@ -515,7 +515,7 @@ test.describe('long and Urdu names', () => {
     const menu = await menuName.evaluate(el => ({ ellipsis: getComputedStyle(el).textOverflow, clipped: el.scrollWidth > el.clientWidth }));
     await page.keyboard.press('Escape');
     expect(menu).toEqual({ ellipsis: 'ellipsis', clipped: true });
-    // Actual: the sidebar workspace switcher wraps the 115-character name over several lines instead of truncating it.
+    // D-58: the sidebar switcher keeps the name on one line with an ellipsis.
     for (const spot of spots) expect({ cls: spot.cls, ellipsis: spot.ellipsis, nowrap: spot.nowrap }).toEqual({ cls: spot.cls, ellipsis: 'ellipsis', nowrap: 'nowrap' });
   });
 

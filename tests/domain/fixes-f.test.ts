@@ -63,4 +63,8 @@ describe('agent F shell fixes', () => {
       .filter(([, v]) => !v.split(/\s+/).every(ok));
     expect(stray).toEqual([]);
   });
+  it('D-58 the sidebar switcher truncates a long company name with an ellipsis', () => {
+    expect(css).toContain('.workspace-picker>span:not(.company-icon){min-width:0;flex:1}');
+    expect(css).toContain('.workspace-picker strong,.workspace-picker small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}');
+  });
 });

@@ -8,7 +8,9 @@ vi.mock('@/modules/erp/money', () => import('../../src/modules/erp/money'));
 vi.mock('@/modules/erp/types', () => import('../../src/modules/erp/types'));
 vi.mock('@/modules/erp/engine', () => import('../../src/modules/erp/engine'));
 vi.mock('@/modules/erp/dates', () => import('../../src/modules/erp/dates'));
+vi.mock('@/modules/erp/master-data', () => import('../../src/modules/erp/master-data'));
 import { SettingsView, TaxSettings, settingsPayload } from '../../src/components/settings-view';
+import { readCsvRows } from '../../src/components/csv-import-dialog';
 import { execute } from '../../src/modules/erp/engine';
 import { blankWorkspace } from '../../src/modules/erp/seed';
 import { toggleModules } from '../../src/modules/erp/modules';
@@ -28,6 +30,8 @@ function freshCompany(modules: ToggleModule[] = [...toggleModules]) {
 const command = async () => ({ ok: true, message: '' });
 const settingsHtml = (w: Workspace, role: Role = 'Owner') => renderToStaticMarkup(createElement(SettingsView, { workspace: w, realRole: role, role, setRole: () => {}, busy: '', command, onWorkspace: () => {}, onReset: () => {}, audit: null }));
 const taxHtml = (w: Workspace, readOnly = false, ownerOnly = false) => renderToStaticMarkup(createElement(TaxSettings, { workspace: w, busy: '', readOnly, ownerOnly, command }));
+const csvRows = (text: string) => new Promise<{ headers: string[]; rows: Record<string, string>[]; tooMany: boolean }>(resolve => readCsvRows(text, resolve));
+const productCsv = (count: number, blankEvery = 0) => 'sku,name,price\n' + Array.from({ length: count }, (_, i) => `SKU-${i},Product ${i},100\n${blankEvery && i % blankEvery === 0 ? '\n' : ''}`).join('');
 const tabs = (html: string) => [...html.matchAll(/role="tab" aria-selected="(?:true|false)" class="tab[^"]*">([^<]+)</g)].map(m => m[1]);
 
 describe('G2 form fixes', () => {
@@ -69,6 +73,31 @@ describe('G2 form fixes', () => {
     const runRecord = created.workspace.payrolls.find(p => p.id === created.recordId)!;
     expect(runRecord.lines).toHaveLength(1);
     expect(runRecord.status).toBe('draft');
+  });
+
+  it('D-37 CSV import reads 2,000 rows and stops at the first row over the limit', async () => {
+    const full = await csvRows(productCsv(2000));
+    expect(full).toMatchObject({ headers: ['sku', 'name', 'price'], tooMany: false });
+    expect(full.rows).toHaveLength(2000);
+    expect(full.rows[1999]).toEqual({ sku: 'SKU-1999', name: 'Product 1999', price: '100' });
+    const over = await csvRows(productCsv(2001));
+    expect(over.tooMany).toBe(true);
+    expect(over.rows).toHaveLength(2000);
+    // Blank lines are not rows, so they never push a file over the limit.
+    const spaced = await csvRows(productCsv(2000, 3));
+    expect(spaced.tooMany).toBe(false);
+    expect(spaced.rows).toHaveLength(2000);
+    expect(await csvRows('sku,name,price\n')).toEqual({ headers: [], rows: [], tooMany: false });
+  });
+
+  it('D-37 a 20 MB file is refused without parsing it whole', async () => {
+    const row = 'QA-BULK-000000,Bulk imported product with a fairly long descriptive name for size,General,pcs,1000,800\n';
+    const csv = 'sku,name,category,unit,price,cost\n' + row.repeat(Math.ceil(20 * 1024 * 1024 / row.length));
+    const started = performance.now();
+    const result = await csvRows(csv);
+    expect(result.tooMany).toBe(true);
+    expect(result.rows).toHaveLength(2000);
+    expect(performance.now() - started).toBeLessThan(2000);
   });
 
   it('D-09 with Payroll off the form keeps the saved payroll rates (save_settings replaces every setting)', () => {

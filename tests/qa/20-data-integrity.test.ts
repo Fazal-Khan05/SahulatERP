@@ -615,7 +615,7 @@ describe('20 data integrity', () => {
     const [after] = withParty(w, 'customer', { name: 'Café' });
     expect(after.parties.map(p => p.name.normalize('NFC')).filter(n => n === 'Café')).toHaveLength(2);
   });
-  it('DAT-075 whitespace-only inputs are rejected where required [defect: save_party accepts "   " and stores an empty name]', () => {
+  it('DAT-075 whitespace-only inputs are rejected where required', () => {
     refused(freshCompany(), 'save_company', { name: '   ', address: 'x' }, /too_small/);
     refused(freshCompany(), 'save_party', { name: '   ', type: 'customer', city: '', email: '', taxId: '', registered: false, creditLimit: '0', terms: 0, customerClass: '' }, /.+/);
   });

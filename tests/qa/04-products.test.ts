@@ -571,7 +571,7 @@ describe('04 products (PRD)', () => {
     refused(freshCompany(), 'save_item', product({ name: 'P'.repeat(121) }), /<=120 characters/);
   });
 
-  it('PRD-095 a name of only spaces is refused (trim → <2) [defect]', () => {
+  it('PRD-095 a name of only spaces is refused (trim → <2)', () => {
     let error: unknown;
     try { run(freshCompany(), 'save_item', product({ name: '     ' })); } catch (e) { error = e; }
     expect(error, 'whitespace-only product name should be refused').toBeInstanceOf(Error);

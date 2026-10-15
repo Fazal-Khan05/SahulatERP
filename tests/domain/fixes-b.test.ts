@@ -126,6 +126,29 @@ describe('D-21 audit stores the stable user id, with the display name for showin
   });
 });
 
+describe('D-29 names and SKUs are trimmed before their length checks', () => {
+  const party = (extra: Record<string, unknown>) => ({ name: 'Valid Name', type: 'customer', city: '', email: '', taxId: '', registered: false, creditLimit: '0', terms: 0, customerClass: '', ...extra });
+  const item = (extra: Record<string, unknown>) => ({ sku: 'SKU-1', name: 'Valid item', category: '', hsCode: '', unit: 'pcs', price: '1', cost: '1', weight: '0', volume: '0', reorderLevel: 0, ...extra });
+  it('refuses whitespace-only or one-character-after-trim party names, product names and SKUs', () => {
+    const w = completed();
+    for (const name of ['   ', ' \t\n ', ' a ']) {
+      expect(() => run(w, 'save_party', party({ name })), JSON.stringify(name)).toThrow(/too_small/);
+      expect(() => run(w, 'save_party', party({ name, type: 'supplier' })), JSON.stringify(name)).toThrow(/too_small/);
+      expect(() => run(w, 'save_item', item({ name })), JSON.stringify(name)).toThrow(/too_small/);
+    }
+    expect(() => run(w, 'save_item', item({ sku: '    ' }))).toThrow(/too_small/);
+    expect(w.parties).toEqual([]);
+    expect(w.items).toEqual([]);
+  });
+  it('stores trimmed values and still accepts two characters', () => {
+    let w = completed();
+    w = run(w, 'save_party', party({ name: '  Al  ' })).workspace;
+    w = run(w, 'save_item', item({ sku: '  X  ', name: '  Ok  ' })).workspace;
+    expect(w.parties.map(p => p.name)).toEqual(['Al']);
+    expect(w.items.map(i => [i.sku, i.name])).toEqual([['X', 'Ok']]);
+  });
+});
+
 describe('D-10 cancel_payroll releases a stale draft so the month can be created again', () => {
   const settings = { taxRate: '', employerEobi: '5', employeeEobi: '1', eobiBase: '32000', incomeTaxRate: '5', numbering: 'FB', approvalLimit: '0' };
   const month = '2026-10';

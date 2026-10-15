@@ -1,5 +1,5 @@
 import { outstanding } from "./engine";
-import { D, money } from "./money";
+import { D, formatQuantity, money } from "./money";
 import type { Document, Receipt, Workspace } from "./types";
 
 /** Everything the standard template needs, resolved from the workspace. Pure data so it renders on the server and in the browser. */
@@ -44,7 +44,7 @@ export function documentView(w: Workspace, doc: Document): DocumentView {
   const lines = doc.lines.map(l => {
     const item = w.items.find(i => i.id === l.itemId);
     const net = D(l.quantity).mul(l.price).mul(D(100).minus(l.discount)).div(100);
-    return { description: item?.name ?? "Product", detail: item?.sku ?? "", quantity: D(l.quantity).toString(), unit: item?.unit ?? "", rate: money(l.price), discount: l.discount, taxRate: l.taxRate, amount: money(net) };
+    return { description: item?.name ?? "Product", detail: item?.sku ?? "", quantity: formatQuantity(l.quantity), unit: item?.unit ?? "", rate: money(l.price), discount: l.discount, taxRate: l.taxRate, amount: money(net) };
   });
   const taxByRate = new Map<string, ReturnType<typeof D>>();
   for (const l of doc.lines) {

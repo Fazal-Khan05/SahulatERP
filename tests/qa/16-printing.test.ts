@@ -219,10 +219,10 @@ describe('16 printing', () => {
   it('PRN-015 quantity 0.5 prints "0.5 kg"', async () => {
     expect(await print('sales_invoice', F.inv)).toContain('<td class="num">0.5 kg</td>');
   });
-  it('PRN-016 quantity 1,234,567 printed with thousands separators [defect]', async () => {
+  it('PRN-016 quantity 1,234,567 printed with thousands separators', async () => {
     const html = await print('sales_invoice', F.bigInv);
-    expect(html).toContain('<td class="num">1234567 pcs</td>');
-    expect(html).toContain('1,234,567 pcs');
+    expect(html).not.toContain('1234567 pcs');
+    expect(html).toContain('<td class="num">1,234,567 pcs</td>');
   });
   it('PRN-017 totals: subtotal, tax, total, paid, returns, balance due with correct arithmetic', async () => {
     const doc = docOf(F.inv);

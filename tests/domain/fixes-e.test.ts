@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { blankWorkspace } from '../../src/modules/erp/seed';
 import { buildDemoWorkspace } from '../../src/modules/erp/demo';
 import { execute } from '../../src/modules/erp/engine';
-import { formatMoney } from '../../src/modules/erp/money';
+import { formatMoney, formatQuantity } from '../../src/modules/erp/money';
 import { documentView, receiptView, sampleInvoiceView, type DocumentView } from '../../src/modules/erp/documents';
 import type { Actor, Workspace } from '../../src/modules/erp/types';
 
@@ -130,6 +130,17 @@ describe('D-15 reprints use the invoice-time tax snapshot', () => {
     const w = withParty(buildDemoWorkspace(), 's-1', { taxId: '4444444-4' });
     const { w: next, id } = purchase(w, 'purchase_order', 'PKR', '1');
     expect(documentView(next, next.documents.find(d => d.id === id)!).party).toMatchObject({ taxId: '4444444-4' });
+  });
+});
+
+describe('D-74 printed quantities carry thousands separators', () => {
+  it('formatQuantity groups the whole part and keeps every stored decimal', () => {
+    expect(['1234567', '1234567.0000', '0.5', '1500.125', '999', '1000', '-12345.5', '0.0001'].map(formatQuantity)).toEqual(['1,234,567', '1,234,567', '0.5', '1,500.125', '999', '1,000', '-12,345.5', '0.0001']);
+  });
+
+  it('document lines print the grouped quantity', () => {
+    const { w, id } = purchase(buildDemoWorkspace(), 'purchase_order', 'PKR', '1');
+    expect(documentView(w, w.documents.find(d => d.id === id)!).lines[0].quantity).toBe('1,500');
   });
 });
 

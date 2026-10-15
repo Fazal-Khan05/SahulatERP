@@ -5,7 +5,12 @@ export const D = Object.assign((value: Decimal.Value = 0) => new Decimal(value),
   max: Decimal.max.bind(Decimal) as typeof Decimal.max,
 });
 export const money = (value: Decimal.Value) => D(value).toFixed(4);
-export const sum = (values: Decimal.Value[]) => values.reduce<Decimal>((a,b)=>a.plus(b),D(0));
+/** A quantity for display: thousands separators, every stored decimal kept ("1,234,567", "0.5", "1,500.125"). */
+export function formatQuantity(value: Decimal.Value) {
+  const [whole, fraction]=D(value).toFixed().split(".");
+  return `${whole.replace(/\B(?=(\d{3})+(?!\d))/g,",")}${fraction?`.${fraction}`:""}`;
+}
+export const sum =(values: Decimal.Value[]) => values.reduce<Decimal>((a,b)=>a.plus(b),D(0));
 export function allocate(total: string, weights: string[]) {
   if (!weights.length || weights.some(w=>D(w).lt(0)) || sum(weights).lte(0)) throw new Error("Allocation needs positive weights.");
   const denominator=sum(weights); let remaining=D(total);

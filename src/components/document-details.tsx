@@ -7,7 +7,7 @@ import { DocumentEditor } from './document-editor';
 import { ConvertDialog, ReturnDialog, nextKind, remainingLines } from './document-dialogs';
 import { documentTitle, documentView } from '@/modules/erp/documents';
 import { canRun } from '@/modules/erp/engine';
-import { D, formatMoney } from '@/modules/erp/money';
+import { D, formatMoney, formatQuantity } from '@/modules/erp/money';
 import type { Actor, Document, Workspace } from '@/modules/erp/types';
 
 type CommandResult = { ok: boolean; message: string; recordId?: string };
@@ -68,8 +68,8 @@ export function DocumentDetails({ workspace, actor, documentId, editable, busy, 
         <section className="invoice-section"><h3>Items</h3><div className="table-scroll"><table className="invoice-lines">
           <thead><tr><th>Product</th><th>Quantity</th><th>Unit price</th><th>Discount</th><th>Tax</th><th className="align-right">Line total</th></tr></thead>
           <tbody>{doc.lines.map(l => { const item = workspace.items.find(i => i.id === l.itemId); const net = D(l.quantity).mul(l.price).mul(D(100).minus(l.discount)).div(100); const tax = net.mul(l.taxRate).div(100); const sp = workspace.employees.find(e => e.id === l.employeeId)?.name; return <tr key={l.id}>
-            <td><strong>{item?.name ?? 'Unknown product'}</strong><small>{item?.sku ?? l.itemId}{sp ? ` · ${sp}` : ''}{D(l.returned).gt(0) ? ` · ${D(l.returned).toString()} returned` : ''}</small></td>
-            <td>{D(l.quantity).toString()} {item?.unit ?? ''}</td><td>{amount(l.price)}</td><td>{D(l.discount).toString()}%</td><td>{D(l.taxRate).toString()}% · {amount(tax.toString())}</td><td className="align-right amount">{amount(net.plus(tax).toString())}</td>
+            <td><strong>{item?.name ?? 'Unknown product'}</strong><small>{item?.sku ?? l.itemId}{sp ? ` · ${sp}` : ''}{D(l.returned).gt(0) ? ` · ${formatQuantity(l.returned)} returned` : ''}</small></td>
+            <td>{formatQuantity(l.quantity)} {item?.unit ?? ''}</td><td>{amount(l.price)}</td><td>{D(l.discount).toString()}%</td><td>{D(l.taxRate).toString()}% · {amount(tax.toString())}</td><td className="align-right amount">{amount(net.plus(tax).toString())}</td>
           </tr>; })}</tbody>
         </table></div></section>
         <div className="invoice-bottom">

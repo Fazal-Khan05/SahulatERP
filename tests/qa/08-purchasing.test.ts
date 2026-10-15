@@ -282,13 +282,13 @@ describe('08 Purchasing, foreign currency, supplier payments (PUR)', () => {
     refused(w, 'create_receipt', { partyId: sup, date: today(), amount: '282800', method: 'bank', chequeNo: '', dueDate: today(), allocations: [{ invoiceId: bill, amount: '1010' }], employeeId: '', note: '', accountId: 'main-bank' }, 'Invalid invoice allocation.');
   });
 
-  it('PUR-032 supplier payment whose amount differs from its allocations is refused [defect]', () => {
+  it('PUR-032 supplier payment whose amount differs from its allocations is refused', () => {
     let { w, item, sup } = base();
     let po: string, grn: string, bill: string;
     [w, po] = createSubmit(w, 'purchase_order', sup, [L(item, '10', '400')]);
     [w, grn] = convertSubmit(w, po);
     [w, bill] = convertSubmit(w, grn);
-    // PKR bill of 4,000; paying 5,000 while allocating 4,000. Actual: accepted and 1,000 booked as an "exchange loss" on a PKR bill.
+    // PKR bill of 4,000; paying 5,000 while allocating 4,000 is refused (only a foreign-currency bill can carry an exchange difference).
     refused(w, 'create_receipt', { partyId: sup, date: today(), amount: '5000', method: 'bank', chequeNo: '', dueDate: today(), allocations: [{ invoiceId: bill, amount: '4000' }], employeeId: '', note: '', accountId: 'main-bank' }, 'Allocations must equal the receipt amount.');
   });
 
@@ -658,7 +658,7 @@ describe('08 Purchasing, foreign currency, supplier payments (PUR)', () => {
   });
 
   it.todo('PUR-084 [browser] payment dialog lists open bills oldest first; typed total spreads oldest first');
-  it.todo('PUR-085 [browser] "PKR actually paid" only for non-PKR bills (code review: document-dialogs.tsx shows it for every supplier payment — likely fails; see PUR-032)');
+  it.todo('PUR-085 [browser] "PKR actually paid" only for non-PKR bills (document-dialogs.tsx shows it only when the supplier has an open foreign-currency bill; engine side: PUR-032)');
   it.todo('PUR-086 [browser] purchase editor usable on phone');
 
   it('PUR-087 branch-limited Accountant submitting a GRN in another branch refused', () => {

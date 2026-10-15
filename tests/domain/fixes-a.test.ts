@@ -103,3 +103,33 @@ describe('D-23 invalid or empty numbers give a clean validation message', () => 
     expect(JSON.parse(text)).toHaveLength(1);
   });
 });
+
+describe('D-02 a supplier payment equals its allocations unless a bill is in foreign currency', () => {
+  const pay = (w: Workspace, partyId: string, amount: string, allocations: { invoiceId: string; amount: string }[], method = 'bank') =>
+    run(w, 'create_receipt', { partyId, date: today(), amount, method, chequeNo: method === 'cheque' ? 'CHQ-1' : '', dueDate: today(), allocations, employeeId: '', note: '', ...(method === 'cheque' ? {} : { accountId: 'main-bank' }) });
+  function bills() {
+    const t = trading();
+    let w = t.w; let pkr: string, usd: string;
+    [w, pkr] = withDocument(w, 'supplier_invoice', t.supp, [line(t.item, '10', '400')]);
+    [w, usd] = withDocument(w, 'supplier_invoice', t.supp, [line(t.item, '10', '10')], { currency: 'USD', fxRate: '280' });
+    return { ...t, w, pkr, usd };
+  }
+  it('D-02 PKR-only allocations must equal the amount, for bank and cheque payments alike', () => {
+    const b = bills();
+    refused(b.w, 'create_receipt', { partyId: b.supp, date: today(), amount: '5000', method: 'bank', chequeNo: '', dueDate: today(), allocations: [{ invoiceId: b.pkr, amount: '4000' }], employeeId: '', note: '', accountId: 'main-bank' }, 'Allocations must equal the receipt amount.');
+    refused(b.w, 'create_receipt', { partyId: b.supp, date: today(), amount: '3000', method: 'cheque', chequeNo: 'C-1', dueDate: today(), allocations: [{ invoiceId: b.pkr, amount: '4000' }], employeeId: '', note: '' }, 'Allocations must equal the receipt amount.');
+    const ok = pay(b.w, b.supp, '4000', [{ invoiceId: b.pkr, amount: '4000' }]).workspace;
+    expect(ok.journals.at(-1)!.lines.some(l => l.account === '5400')).toBe(false);
+    expectInvariants(ok);
+  });
+  it('D-02 a foreign-currency bill keeps the exchange difference, also when paid together with a PKR bill', () => {
+    const b = bills();
+    const usdOnly = pay(b.w, b.supp, '29000', [{ invoiceId: b.usd, amount: '100' }]).workspace;
+    expect(usdOnly.journals.at(-1)!.lines.find(l => l.account === '5400')!.debit).toBe('1000.0000');
+    expectInvariants(usdOnly);
+    const mixed = pay(b.w, b.supp, '31500', [{ invoiceId: b.pkr, amount: '4000' }, { invoiceId: b.usd, amount: '100' }]).workspace;
+    expect(mixed.journals.at(-1)!.lines.find(l => l.account === '5400')!.credit).toBe('500.0000');
+    expect(accountBalance(mixed, '2000')).toBe('0.0000');
+    expectInvariants(mixed);
+  });
+});

@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { accountBalance, expectInvariants, firstWarehouse, freshCompany, refused, run, today, withDocument, withItem, withParty } from '../qa/helpers';
 import { stock } from '../../src/modules/erp/engine';
+import { D } from '../../src/modules/erp/money';
 import type { Workspace } from '../../src/modules/erp/types';
 
 const line = (itemId: string, quantity = '1', price = '100', extra: Record<string, unknown> = {}) => ({ itemId, quantity, price, discount: '0', taxRate: '0', employeeId: '', splits: [], ...extra });
@@ -131,5 +132,41 @@ describe('D-02 a supplier payment equals its allocations unless a bill is in for
     expect(mixed.journals.at(-1)!.lines.find(l => l.account === '5400')!.credit).toBe('500.0000');
     expect(accountBalance(mixed, '2000')).toBe('0.0000');
     expectInvariants(mixed);
+  });
+});
+
+describe('D-03 a bill from a GRN clears GRNI (2010) at the GRN value', () => {
+  const byAccount = (w: Workspace, sourceId: string) => Object.fromEntries(w.journals.find(j => j.sourceId === sourceId)!.lines.map(l => [l.account, D(l.debit).minus(l.credit).toFixed(4)]));
+  const bill = (w: Workspace, grn: string, supp: string, wh: string, lines: Record<string, unknown>[], fxRate: string) => {
+    const c = run(w, 'create_document', { kind: 'supplier_invoice', parentId: grn, partyId: supp, warehouseId: wh, date: today(), dueDate: today(), currency: 'USD', fxRate, lines });
+    return [run(c.workspace, 'submit_document', { id: c.recordId }).workspace, c.recordId] as const;
+  };
+  function received(quantity = '100', price = '10', extra: Record<string, unknown> = {}) {
+    const t = trading();
+    const [w, grn] = withDocument(t.w, 'goods_receipt', t.supp, [line(t.item, quantity, price, extra)], { currency: 'USD', fxRate: '280' });
+    return { ...t, w, grn };
+  }
+  it('D-03 a lower bill rate posts an exchange gain and clears 2010; tax is booked at the bill rate', () => {
+    const r = received('100', '10');
+    const [w, id] = bill(r.w, r.grn, r.supp, r.wh, [line(r.item, '100', '10', { taxRate: '10' })], '276');
+    expect(byAccount(w, id)).toEqual({ '2010': '280000.0000', '1300': '27600.0000', '5400': '-4000.0000', '2000': '-303600.0000' });
+    expect(accountBalance(w, '2010')).toBe('0.0000');
+    expectInvariants(w);
+  });
+  it('D-03 partial bills at different rates leave no 2010 residue', () => {
+    const r = received('3', '0.3333');
+    let w = r.w; let b1: string, b2: string;
+    [w, b1] = bill(w, r.grn, r.supp, r.wh, [line(r.item, '1', '0.3333')], '281');
+    [w, b2] = bill(w, r.grn, r.supp, r.wh, [line(r.item, '2', '0.3333')], '279.5');
+    expect(byAccount(w, b1)['2010']).toBe('93.3240');
+    expect(byAccount(w, b2)['2010']).toBe('186.6480');
+    expect(accountBalance(w, '2010')).toBe('0.0000');
+    expectInvariants(w);
+  });
+  it('D-03 a bill priced differently from the GRN posts the price difference to 5300, not to FX', () => {
+    const r = received('10', '10');
+    const [w, id] = bill(r.w, r.grn, r.supp, r.wh, [line(r.item, '10', '11')], '280');
+    expect(byAccount(w, id)).toEqual({ '2010': '28000.0000', '5300': '2800.0000', '2000': '-30800.0000' });
+    expectInvariants(w);
   });
 });

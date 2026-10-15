@@ -112,9 +112,9 @@ describe('17 shell', () => {
     expect(owner).toContain(`aria-label="Notifications, ${total} items need attention"`);
     expect(owner).toContain(`<span class="bell-count">${total}</span>`);
   });
-  it('NAV-031 attention queues appear when relevant [case-corrected: queues are commission awaiting approval, unallocated shipment costs, open customer invoices, cheques due, follow-ups due and draft sales; there is no low-stock or overdue supplier-bill queue]', () => {
+  it('NAV-031 attention queues appear when relevant [case-corrected: queues are commission awaiting approval, unallocated shipment costs, overdue supplier bills (D-42, for roles that pay suppliers), open customer invoices, cheques due, follow-ups due and draft sales; there is no low-stock queue]', () => {
     const queues = [...wbSource.slice(wbSource.indexOf('function attentionItems'), wbSource.indexOf('function WorkspaceSwitcher')).matchAll(/\['(\w+)','([A-Z][^']+)'/g)].map(m => m[2]);
-    expect(queues).toEqual(['Commission awaiting approval', 'Shipment costs unallocated', 'Open customer invoices', 'Cheques due for deposit or clearing', 'Recovery follow-ups due', 'Draft sales documents to submit']);
+    expect(queues).toEqual(['Commission awaiting approval', 'Shipment costs unallocated', 'Overdue supplier bills', 'Open customer invoices', 'Cheques due for deposit or clearing', 'Recovery follow-ups due', 'Draft sales documents to submit']);
     let w = freshCompany(); let item: string, cust: string; [w, item] = withItem(w, {}, { quantity: '5', cost: '1' }); [w, cust] = withParty(w);
     [w] = withDocument(w, 'sales_invoice', cust, [{ itemId: item, quantity: '1', price: '10' }], {}, false);
     expect(attention(shell(w))).toEqual([['Draft sales documents to submit', 1]]);

@@ -60,6 +60,8 @@ const sessionEnded=(status:number,result:{passwordRequired?:boolean;message?:str
 function attentionItems(w:Workspace,role:Role){const now=today();return ([
   ['commissions','Commission awaiting approval',w.commissions.filter(c=>D(c.released).gt(c.paid)&&!c.approved).length],
   ['imports','Shipment costs unallocated',w.shipments.reduce((n,sh)=>n+sh.costs.filter(c=>!c.allocated).length,0)],
+  // Payables past their due date, for the roles that pay suppliers.
+  ['purchasing','Overdue supplier bills',canRun(role,'create_receipt')?w.documents.filter(d=>d.kind==='supplier_invoice'&&d.status==='submitted'&&d.dueDate<now&&D(outstanding(d)).gt(0)).length:0],
   ['collections','Open customer invoices',receivable(w).filter(d=>D(outstanding(d)).gt(0)).length],
   ['collections','Cheques due for deposit or clearing',w.receipts.filter(r=>r.method==='cheque'&&['received','deposited'].includes(r.status)&&r.dueDate<=now).length],
   ['collections','Recovery follow-ups due',w.followUps.filter(f=>f.nextDate<=now).length],

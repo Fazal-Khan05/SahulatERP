@@ -198,4 +198,16 @@ describe('agent F shell fixes', () => {
     expect(titles(searchIndex(noPurchasing, 'Owner'), 'supplier invoice · BILL-2026-0001')).toEqual([]);
     expect(titles(searchIndex(noPurchasing, 'Owner'), 'Opening balances · synthetic')).toEqual(['accounting:JV-00001']);
   });
+  it('D-42 an overdue supplier bill is in "Needs attention" for the roles that pay suppliers', () => {
+    const w = buildDemoWorkspace();
+    const queue = (html: string) => /Overdue supplier bills<\/strong><small>(\d+) records/.exec(html)?.[1];
+    expect(queue(shell(w, member('Owner')))).toBeUndefined(); // the demo bill is not yet due
+    const overdue = { ...w, documents: w.documents.map(d => d.kind === 'supplier_invoice' ? { ...d, dueDate: '2026-01-31' } : d) };
+    expect(queue(shell(overdue, member('Owner')))).toBe('1');
+    expect(queue(shell(overdue, member('Accountant')))).toBe('1');
+    expect(queue(shell(overdue, member('Warehouse Manager')))).toBeUndefined(); // sees Purchasing but does not pay bills
+    // A fully paid bill is no longer in the queue.
+    const paid = { ...overdue, documents: overdue.documents.map(d => d.kind === 'supplier_invoice' ? { ...d, paid: d.total } : d) };
+    expect(queue(shell(paid, member('Owner')))).toBeUndefined();
+  });
 });

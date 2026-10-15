@@ -65,6 +65,7 @@ test('RPT-046 Overview "Needs attention" rows open the right place [case-correct
   const targets: Record<string, string> = {
     'Commission awaiting approval': 'Commissions', 'Shipment costs unallocated': 'Imports & costing', 'Open customer invoices': 'Collections',
     'Cheques due for deposit or clearing': 'Collections', 'Recovery follow-ups due': 'Collections', 'Draft sales documents to submit': 'Sales',
+    'Overdue supplier bills': 'Purchasing', // D-42
   };
   await home(page);
   const card = page.locator('section.card').filter({ has: page.getByRole('heading', { name: 'Needs your attention' }) });

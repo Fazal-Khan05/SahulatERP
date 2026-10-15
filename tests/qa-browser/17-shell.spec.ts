@@ -4,6 +4,8 @@ import {
   seedRich, setupWorkspace, sharedSession, keepSignedIn, signedInPage, writeQaWorkspace,
 } from './helpers';
 import { scopeWorkspace } from '../../src/modules/erp/access';
+import { businessToday } from '../../src/modules/erp/dates';
+import { outstanding } from '../../src/modules/erp/engine';
 import type { Workspace } from '../../src/modules/erp/types';
 
 // Shell: navigation, search, notifications, workspace switcher, Overview (docs/qa/cases/17-shell.md).
@@ -415,15 +417,18 @@ test('NAV-028 Search with 20k records stays under 100 ms per keystroke', async (
 
 // ============================================================ notifications
 
-test('NAV-030 Bell menu lists the attention queues with counts; clicking one opens its module [documented: one row per queue labelled "{count} · {Module}" rather than grouped headings; queues are commission awaiting approval, unallocated shipment costs, open customer invoices, cheques due, follow-ups due, draft sales]', async () => {
-  const { page } = s;
+test('NAV-030 Bell menu lists the attention queues with counts; clicking one opens its module [documented: one row per queue labelled "{count} · {Module}" rather than grouped headings; queues are commission awaiting approval, unallocated shipment costs, overdue supplier bills (D-42), open customer invoices, cheques due, follow-ups due, draft sales]', async () => {
+  const { page, context } = s;
   await home(page);
+  // Bills past due on the business day the test runs (the fixture's later bills fall due in October 2026).
+  const w = await readWorkspaceApi(context.request);
+  const overdueBills = w.documents.filter(d => d.kind === 'supplier_invoice' && d.status === 'submitted' && d.dueDate < businessToday() && Number(outstanding(d)) > 0).length;
   await bell(page).click();
   const menu = page.getByRole('menu');
   await expect(menu.locator('.workspace-menu-label')).toHaveText('NEEDS ATTENTION');
   const rows = menu.getByRole('menuitem');
   const expected: [string, string, number][] = [
-    ['Commission awaiting approval', 'Commissions', 1], ['Shipment costs unallocated', 'Imports & costing', 1],
+    ['Commission awaiting approval', 'Commissions', 1], ['Shipment costs unallocated', 'Imports & costing', 1], ['Overdue supplier bills', 'Purchasing', overdueBills],
     ['Open customer invoices', 'Collections', 5], ['Cheques due for deposit or clearing', 'Collections', 2],
     ['Recovery follow-ups due', 'Collections', 1], ['Draft sales documents to submit', 'Sales', 1],
   ];

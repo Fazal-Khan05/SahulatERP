@@ -20,7 +20,8 @@ export type ShipmentCost = { id: string; label: string; amount: string; classifi
 export type Shipment = { id: string; number: string; supplierId: string; documentId: string; origin: string; port: string; container: string; gdNumber: string; eta: string; status: "in_transit" | "customs" | "received" | "costed"; costs: ShipmentCost[]; allocations: { costId: string; itemId: string; amount: string }[] };
 export type PayrollLine = { employeeId: string; basic: string; allowance: string; commission: string; deduction: string; employeeEobi: string; employerEobi: string; incomeTax: string; net: string; commissionIds: string[]; commissionAmounts: Record<string,string>; recovery?: string; recoveryAmounts?: Record<string,string> };
 export type Payroll = { id: string; number: string; month: string; date: string; status: "draft" | "reviewed" | "approved" | "paid"; lines: PayrollLine[]; total: string };
-export type Audit = { id: string; date: string; actor: string; role: string; action: string; sourceId: string; detail: string };
+/** `actor` is the member's stable user id (entries written before Oct 2026 hold the display name); `actorName` is the display name at the time, for showing only. */
+export type Audit = { id: string; date: string; actor: string; actorName: string; role: string; action: string; sourceId: string; detail: string };
 export type FollowUp = { id: string; partyId: string; date: string; note: string; nextDate: string; actor: string };
 export type ToggleModule = "sales" | "purchasing" | "inventory" | "imports" | "collections" | "cashbank" | "commissions" | "payroll" | "reports";
 /** A completed command and its result, so a retry with the same idempotency key gets the original answer. */

@@ -372,11 +372,11 @@ describe('03 settings (SET)', () => {
     expect(store.commits).toBe(0);
   });
 
-  it('SET-050 audit history records each command with actor, role, action and time in order', () => {
+  it('SET-050 audit history records each command with actor, role, action and time in order [case-corrected: actor is the user id, actorName the display name (D-21)]', () => {
     let w = freshCompany();
     w = run(w, 'save_branding', { accent: '#1f5fa8', footer: '' }, actor('Accountant')).workspace;
     const last = w.audit.at(-1)!;
-    expect(last).toMatchObject({ actor: 'QA Accountant', role: 'Accountant', action: 'save_branding', detail: 'Document branding saved.' });
+    expect(last).toMatchObject({ actor: actor('Accountant').id, actorName: 'QA Accountant', role: 'Accountant', action: 'save_branding', detail: 'Document branding saved.' });
     expect(Number.isNaN(Date.parse(last.date))).toBe(false);
     const dates = w.audit.map(a => a.date);
     expect([...dates].sort()).toEqual(dates);

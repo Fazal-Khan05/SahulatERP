@@ -1,5 +1,5 @@
 import { toggleModules } from './modules';
-import type { Operation, Workspace } from './types';
+import type { Audit, Operation, Workspace } from './types';
 
 /** Before Oct 2026 an operation was only its idempotency key; its result was not kept. */
 const decodeOperation = (op: Operation | string): Operation =>
@@ -13,6 +13,8 @@ const decodeOperation = (op: Operation | string): Operation =>
  *   predates module toggles has every module on and counts as set up when it already has
  *   documents or is the demo; an empty, non-demo one goes through the wizard.
  * - operations as { key, recordId, message } (Oct 2026); older plain-string keys still replay.
+ * - audit actorName (Oct 2026): `actor` became the user id; older entries stored the display
+ *   name in `actor`, which is kept as is and copied to actorName for display.
  */
 export function decodeWorkspace(value: unknown): Workspace {
   const decoded = typeof value === 'string' ? JSON.parse(value) : value;
@@ -32,5 +34,6 @@ export function decodeWorkspace(value: unknown): Workspace {
     followUps: raw.followUps ?? [],
     bankAccounts: raw.bankAccounts ?? [],
     operations: ((raw.operations ?? []) as (Operation | string)[]).map(decodeOperation),
+    audit: ((raw.audit ?? []) as (Omit<Audit, 'actorName'> & { actorName?: string })[]).map(entry => ({ ...entry, actorName: entry.actorName ?? entry.actor })),
   };
 }

@@ -506,7 +506,7 @@ describe('02 onboarding (ONB)', () => {
 
   it.todo('ONB-085 [browser] step transition forward slides from right, back from left');
 
-  it('ONB-086 audit after the wizard has save_company, save_setup_step, save_branding, set_modules, complete_setup', () => {
+  it('ONB-086 audit after the wizard has save_company, save_setup_step, save_branding, set_modules, complete_setup [case-corrected: actor is the user id, actorName the display name (D-21)]', () => {
     let w = wizardStart();
     w = run(w, 'save_company', company()).workspace;
     w = run(w, 'save_setup_step', { step: 2 }).workspace;
@@ -516,7 +516,7 @@ describe('02 onboarding (ONB)', () => {
     w = run(w, 'save_setup_step', { step: 4 }).workspace;
     w = run(w, 'complete_setup', {}).workspace;
     expect(w.audit.map(a => a.action)).toEqual(['save_company', 'save_setup_step', 'save_branding', 'save_setup_step', 'set_modules', 'save_setup_step', 'complete_setup']);
-    expect(w.audit.every(a => a.actor === 'QA Owner' && a.role === 'Owner')).toBe(true);
+    expect(w.audit.every(a => a.actor === owner.id && a.actorName === 'QA Owner' && a.role === 'Owner')).toBe(true);
   });
 
   it('ONB-087 revision increments by exactly one per saved command', () => {

@@ -219,5 +219,5 @@ export function execute(input:Workspace,raw:unknown,actor:Actor):{workspace:Work
   for(const key of ["parties","items","employees"] as const)(w as unknown as Record<string,unknown>)[key]=staged[key];
   result=w.tenantId;message=`Imported ${rows.length} ${kind}: ${created} created, ${updated} updated.`;break;}
  }
- w.operations=[...w.operations,{key:command.idempotencyKey,recordId:result,message}].slice(-operationHistory);w.revision=input.revision+1;w.audit.push({id:id(),date:new Date().toISOString(),actor:actor.name,role:actor.role,action:command.type,sourceId:result,detail:message});return {workspace:w,recordId:result,message};
+ w.operations=[...w.operations,{key:command.idempotencyKey,recordId:result,message}].slice(-operationHistory);w.revision=input.revision+1;w.audit.push({id:id(),date:new Date().toISOString(),actor:actor.id,actorName:actor.name,role:actor.role,action:command.type,sourceId:result,detail:message});return {workspace:w,recordId:result,message};
 }

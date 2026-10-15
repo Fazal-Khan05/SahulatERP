@@ -561,7 +561,7 @@ describe('18 security', () => {
     expect(await asError('authenticated', OWNER, `update public.audit_events set detail = 'x'`)).toMatch(/permission denied/);
     expect(await asError('authenticated', OWNER, `delete from public.audit_events`)).toMatch(/permission denied/);
   });
-  it('SEC-066 audit records actor id, action and time, never payload secrets [defect: audit stores the editable display name, not the user id]', async () => {
+  it('SEC-066 audit records actor id, action and time, never payload secrets', async () => {
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'http://supabase.test'); vi.stubEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'pk');
     const user = { ...ME, id: 'u-sec-066', email: 'sec066@qa.example' }; S.passwords = { [user.email]: [user.id, 'audit-pass-1'] };
     const w = company(T); seed([w], [[T, 'Owner']], user);

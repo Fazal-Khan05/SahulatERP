@@ -89,6 +89,11 @@ describe('D-17 a replayed command returns its original result', () => {
     expect(next.operations.map(o => o.key)).toEqual(['old-key-0001', 'old-key-0002', 'new-key-0001']);
     expect(decodeWorkspace({ ...legacy, operations: undefined }).operations).toEqual([]);
   });
+  it('a replay is not audited again', () => {
+    const w = completed();
+    const first = run(w, 'save_branding', { accent: '#111111', footer: '' }, owner, 'fixes-b-replay-audit');
+    expect(run(first.workspace, 'save_branding', { accent: '#111111', footer: '' }, owner, 'fixes-b-replay-audit').workspace.audit).toHaveLength(first.workspace.audit.length);
+  });
   it('keeps only the most recent 500 operations and never mutates the input history', () => {
     let w = completed();
     for (let i = 0; i < 520; i++) w = run(w, 'save_branding', { accent: '#123456', footer: `f${i}` }, owner, `cap-key-${String(i).padStart(4, '0')}`).workspace;
@@ -98,5 +103,21 @@ describe('D-17 a replayed command returns its original result', () => {
     const before = JSON.stringify(w.operations);
     run(w, 'save_branding', { accent: '#654321', footer: '' }, owner, 'cap-key-next');
     expect(JSON.stringify(w.operations)).toBe(before);
+  });
+});
+
+describe('D-21 audit stores the stable user id, with the display name for showing', () => {
+  it('records actor = user id and actorName = display name; renaming the member does not change the id', () => {
+    let w = completed();
+    w = run(w, 'save_branding', { accent: '#123456', footer: '' }, as('Accountant', { id: 'user-42', name: 'Ayesha' })).workspace;
+    w = run(w, 'save_branding', { accent: '#123457', footer: '' }, as('Accountant', { id: 'user-42', name: 'Ayesha Khan' })).workspace;
+    expect(w.audit.slice(-2).map(a => [a.actor, a.actorName, a.role])).toEqual([['user-42', 'Ayesha', 'Accountant'], ['user-42', 'Ayesha Khan', 'Accountant']]);
+  });
+  it('older entries (display name in actor) decode with actorName filled in', () => {
+    const w = completed();
+    const legacy = { ...w, audit: [{ id: 'a1', date: '2026-10-01T00:00:00.000Z', actor: 'Old Name', role: 'Owner', action: 'save_company', sourceId: w.tenantId, detail: 'Company details saved.' }] };
+    expect(decodeWorkspace(JSON.stringify(legacy)).audit).toEqual([{ ...legacy.audit[0], actorName: 'Old Name' }]);
+    const current = run(w, 'save_branding', { accent: '#123456', footer: '' }).workspace;
+    expect(decodeWorkspace(JSON.stringify(current)).audit).toEqual(current.audit);
   });
 });

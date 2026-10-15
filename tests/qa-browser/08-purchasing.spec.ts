@@ -171,3 +171,31 @@ test('PUR-097 500 POs in the list: filters respond in under 1 s', async () => {
   test.info().annotations.push({ type: 'measured', description: `filter response ${timings.join(' / ')} ms with 500+ POs` });
   expect(Math.max(...timings)).toBeLessThan(1000);
 });
+
+test('PUR-090 Imports on: a shipment can be created from a submitted GRN or bill (Imports & costing → New shipment)', async () => {
+  const { page, context } = s;
+  const r = richWorkspace();
+  await writeQaWorkspace(r.w);
+  await gotoApp(page);
+  await openModule(page, 'Imports & costing');
+  await page.getByRole('button', { name: 'New shipment' }).click();
+  const dialog = page.getByRole('dialog', { name: 'New shipment' });
+  const source = dialog.getByLabel('Goods receipt or bill');
+  const offered = await source.locator('option:not([disabled])').allInnerTexts();
+  const number = (id: string) => r.w.documents.find(d => d.id === id)!.number;
+  // Only submitted goods receipts and supplier bills are offered.
+  const submitted = r.w.documents.filter(d => ['goods_receipt', 'supplier_invoice'].includes(d.kind) && d.status === 'submitted').map(d => d.number).sort();
+  expect(offered.map(o => o.split(' · ')[0]).sort()).toEqual(submitted);
+  expect(offered.find(o => o.startsWith(number(r.ids.grn)))).toContain('Goods receipt note');
+  expect(offered.find(o => o.startsWith(number(r.ids.bill)))).toContain('Supplier bill');
+  await source.selectOption(r.ids.bill);
+  await dialog.getByLabel('Container number').fill('CMAU7654321');
+  await dialog.getByLabel('GD number').fill('KPPI-HC-3003');
+  await dialog.getByLabel('ETA').fill('2026-10-20');
+  await dialog.getByRole('button', { name: 'Create shipment' }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 30_000 });
+  const row = page.locator('section.card').filter({ has: page.getByRole('heading', { name: 'Import shipments' }) }).locator('tbody tr').filter({ hasText: 'CMAU7654321' });
+  await expect(row.locator('td')).toHaveText(['SHP-2026-003', F.supplier, 'CMAU7654321 · KPPI-HC-3003', '2026-10-20', 'received', 'Rs 0', 'Complete']);
+  // Blank origin and port take the defaults.
+  expect((await readWorkspaceApi(context.request)).shipments.find(x => x.container === 'CMAU7654321')).toMatchObject({ documentId: r.ids.bill, origin: 'Shenzhen', port: 'Karachi', status: 'received' });
+});

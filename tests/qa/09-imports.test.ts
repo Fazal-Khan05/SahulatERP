@@ -490,7 +490,7 @@ describe('09 Imports and landed cost (IMP)', () => {
   });
 
   it.todo('IMP-053 [browser] shipment table on phone shows scroll hint');
-  it.todo('IMP-054 [browser] add-cost dialog: amount empty with placeholder (code review: no add-cost dialog found in src/components)');
+  it.todo('IMP-054 [browser] add-cost dialog: amount empty with placeholder');
   it.todo('IMP-055 [browser] classification help text explains each class');
   it.todo('IMP-056 [browser] search finds shipment by number/container');
   it.todo('IMP-057 [browser] attention queue lists shipments with unallocated costs');

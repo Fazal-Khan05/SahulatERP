@@ -4,13 +4,16 @@ import '../app/workspace-views.css';
 
 export type CommandFn = (type: string, payload: Record<string, unknown>, options?: { confirmPassword?: string }) => Promise<{ ok: boolean; message: string; passwordRequired?: boolean; recordId?: string }>;
 
+// Payroll's five statuses each get their own tone: draft violet, reviewed amber, approved info blue, paid green, cancelled grey.
 const tones: [string, string[]][] = [
-  ['success', ['paid', 'cleared', 'accepted', 'approved', 'submitted', 'costed', 'reconciled', 'available']],
+  ['success', ['paid', 'cleared', 'accepted', 'submitted', 'costed', 'reconciled', 'available']],
   ['danger', ['rejected', 'bounced']],
-  ['warning', ['queued', 'received', 'pending', 'outcome_unknown', 'low stock', 'review']],
+  ['warning', ['queued', 'received', 'pending', 'outcome_unknown', 'low stock', 'review', 'reviewed']],
   ['draft', ['draft']],
+  // Neutral grey (the plain .badge): nothing is due yet (unreleased commission) or the record no longer counts (cancelled).
+  ['neutral', ['cancelled', 'unreleased']],
 ];
-/** Badge tone for a status word; anything unlisted is info. */
+/** Badge tone for a status word; anything unlisted (approved, deposited, in transit…) is info. */
 export const statusTone = (value: string) => tones.find(([, values]) => values.includes(value))?.[0] ?? 'info';
 
 export function Status({ value }: { value: string }) { return <span className={`badge ${statusTone(value)}`}>{value.replaceAll('_', ' ')}</span>; }

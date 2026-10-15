@@ -32,7 +32,7 @@ async function payroll(page: Page) { await home(page); await openModule(page, 'P
 const runsCard = (page: Page) => page.locator('section.card').filter({ has: page.getByRole('heading', { name: 'Payroll runs' }) });
 const runRow = (page: Page, number: string) => runsCard(page).locator('tbody tr').filter({ has: page.locator('td:first-child', { hasText: number }) });
 
-test('PAY-064 Payroll status badges use distinct colours [defect]', async () => {
+test('PAY-064 Payroll status badges use distinct colours', async () => {
   const { page } = s;
   await payroll(page);
   const badges = await runsCard(page).locator('tbody tr td:nth-child(5) .badge').evaluateAll(els => els.map(b => ({ text: b.textContent ?? '', colour: `${getComputedStyle(b).backgroundColor} / ${getComputedStyle(b).color}` })));

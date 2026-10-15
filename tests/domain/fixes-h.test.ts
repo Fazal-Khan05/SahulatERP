@@ -11,6 +11,7 @@ vi.mock('@/modules/erp/dates', () => import('../../src/modules/erp/dates'));
 import { ImportsView, costClasses } from '../../src/components/imports-view';
 import { PayrollRuns, payrollDate } from '../../src/components/payroll-runs';
 import { execute } from '../../src/modules/erp/engine';
+import { statusTone } from '../../src/components/table-card';
 import { buildDemoWorkspace } from '../../src/modules/erp/demo';
 import type { Actor, Role, Workspace } from '../../src/modules/erp/types';
 
@@ -64,5 +65,13 @@ describe('H workspace view fixes', () => {
     expect(payrollDate('2026-02', '2026-10-15')).toBe('2026-02-28');
     expect(payrollDate('2024-02', '2026-10-15')).toBe('2024-02-29');
     expect(payrollDate('2026-10', '2026-10-15')).toBe('2026-10-15');
+  });
+
+  it('D-66 payroll statuses each have their own badge tone; commission states stay distinct', () => {
+    const payroll = ['draft', 'reviewed', 'approved', 'paid', 'cancelled'].map(statusTone);
+    expect(payroll).toEqual(['draft', 'warning', 'info', 'success', 'neutral']);
+    expect(new Set(['unreleased', 'pending', 'approved', 'recoverable'].slice(0, 3).map(statusTone)).size).toBe(3);
+    // Unchanged elsewhere: cheques and shipments.
+    expect(['received', 'deposited', 'cleared', 'bounced', 'costed'].map(statusTone)).toEqual(['warning', 'info', 'success', 'danger', 'success']);
   });
 });

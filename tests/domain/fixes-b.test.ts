@@ -43,3 +43,23 @@ describe('D-08 company, branding and modules are Owner/Accountant only after set
     expect(canRun('Accountant', 'set_modules')).toBe(true);
   });
 });
+
+describe('D-19 branding paths are exactly <tenant>/<logo|letterhead>.<png|jpg|jpeg>', () => {
+  const brand = (extra: Record<string, unknown>) => ({ accent: '#123456', footer: '', ...extra });
+  it('accepts the stored names for each kind, and empty paths', () => {
+    const w = completed(); const t = w.tenantId;
+    for (const ext of ['png', 'jpg', 'jpeg']) {
+      const r = run(w, 'save_branding', brand({ logoPath: `${t}/logo.${ext}`, letterheadPath: `${t}/letterhead.${ext}` })).workspace.branding;
+      expect([r.logoPath, r.letterheadPath]).toEqual([`${t}/logo.${ext}`, `${t}/letterhead.${ext}`]);
+    }
+    const cleared = run(w, 'save_branding', brand({ logoPath: '', letterheadPath: '' })).workspace.branding;
+    expect(cleared).toEqual({ template: 'standard', accent: '#123456', footer: '' });
+  });
+  it('refuses traversal, other folders, other names, other extensions and swapped kinds', () => {
+    const w = completed(); const t = w.tenantId;
+    const bad = [`${t}/../other/logo.png`, `${t}/..%2Fother/logo.png`, `other/logo.png`, `${t}/sub/logo.png`, `${t}/logo.svg`, `${t}/logo.png.exe`, `${t}/evil.png`, `${t}/letterhead.png`, `/${t}/logo.png`, `${t}//logo.png`, `${t}/LOGO.PNG`, ` ${t}/logo.png`];
+    for (const logoPath of bad) expect(() => run(w, 'save_branding', brand({ logoPath })), logoPath).toThrow('Branding files must belong to this company.');
+    expect(() => run(w, 'save_branding', brand({ letterheadPath: `${t}/logo.png` }))).toThrow('Branding files must belong to this company.');
+    expect(() => run(w, 'save_branding', brand({ letterheadPath: `${t}/../x/letterhead.jpg` }))).toThrow('Branding files must belong to this company.');
+  });
+});

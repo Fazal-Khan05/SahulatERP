@@ -504,7 +504,7 @@ describe('18 security', () => {
     const cells = csv.split('\n')[1];
     expect(cells).not.toMatch(/(^|,)"?[=+@-]/);
   });
-  it('SEC-054 path traversal in branding: upload filename ignored; saved paths must stay inside the tenant folder [defect: save_branding accepts "<tenant>/../<other>/logo.png"]', async () => {
+  it('SEC-054 path traversal in branding: upload filename ignored; saved paths must stay inside the tenant folder', async () => {
     const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0]);
     const stored1 = await storeBrandingFile(T, 'logo', new File([png], '../../other-tenant/logo.png', { type: 'image/png' }));
     expect(stored1).toEqual({ path: `${T}/logo.png` });

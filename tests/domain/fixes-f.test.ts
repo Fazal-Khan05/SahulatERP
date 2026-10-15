@@ -4,6 +4,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { stripTypeScriptTypes } from 'node:module';
 import { describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -109,5 +110,35 @@ describe('agent F shell fixes', () => {
     const full = text(shell(w, member('Accountant')));
     expect(full).toContain('Every figure comes from your posted records.');
     expect(full).toContain('Total sales');
+  });
+  it('D-34 a 401 from a command (session ended elsewhere) sends the member to sign in instead of showing AUTH_REQUIRED', async () => {
+    const wb = readFileSync(resolve(root, 'src/components/workbench.tsx'), 'utf8');
+    const helperAt = wb.indexOf('const sessionEnded=');
+    const helper = wb.slice(helperAt, wb.indexOf('\n', helperAt));
+    const body = wb.slice(wb.indexOf('  async function command('), wb.indexOf('\n  async function resetDemo('));
+    /** command() and signInAgain() from workbench.tsx, type-stripped, with the component state replaced by recorders. */
+    async function send(status: number, json: Record<string, unknown>) {
+      const seen = { notices: [] as string[], errors: [] as boolean[], assigned: [] as string[] };
+      const response = new Response(JSON.stringify(json), { status, headers: { 'content-type': 'application/json' } });
+      const make = new Function('postCommand', 'setBusy', 'setNotice', 'setNoticeError', 'setWorkspace', 'setModal', 'setStockTransferOpen', 'workspace', 'window', 'crypto',
+        `${stripTypeScriptTypes(helper)}\n${stripTypeScriptTypes(body)}\nreturn command;`);
+      const command = make(async () => ({ response, result: json }), () => undefined, (n: string) => seen.notices.push(n), (e: boolean) => seen.errors.push(e), () => undefined, () => undefined, () => undefined,
+        { tenantId: 'qa tenant/1' }, { location: { assign: (url: string) => seen.assigned.push(url) } }, { randomUUID: () => 'k' }) as (type: string, payload: Record<string, unknown>) => Promise<{ ok: boolean; message: string }>;
+      return { result: await command('save_branch', { name: 'After sign-out' }), ...seen };
+    }
+    const ended = await send(401, { success: false, message: 'AUTH_REQUIRED' });
+    expect(ended.assigned).toEqual(['/?tenant=qa%20tenant%2F1']);
+    expect(ended.notices.filter(Boolean)).toEqual(['Your session has ended. Taking you to sign in…']);
+    expect(ended.errors).not.toContain(true);
+    expect(ended.result.ok).toBe(false);
+    // A wrong confirmation password is also a 401, but the member stays signed in and the dialog shows it.
+    const password = await send(401, { success: false, message: 'Incorrect password.', passwordRequired: true });
+    expect(password.assigned).toEqual([]);
+    expect(password.notices.filter(Boolean)).toEqual([]);
+    // Other refusals still show the red error notice.
+    const denied = await send(403, { success: false, message: 'ACCESS_DENIED' });
+    expect(denied.assigned).toEqual([]);
+    expect(denied.notices.filter(Boolean)).toEqual(['ACCESS_DENIED']);
+    expect(denied.errors).toContain(true);
   });
 });

@@ -27,17 +27,23 @@ export function SettingsView({ workspace, realRole, role, setRole, busy, command
 }) {
   const [tab, setTab] = useState<Tab>('company');
   const readOnly = role === 'Auditor';
+  // Once setup is done only the owner or an accountant may change company details, branding and features (the server
+  // refuses everyone else); a role preview shows what that role would get.
+  const companyLocked = readOnly || !companyEditors.includes(realRole) || !companyEditors.includes(role);
   const payrollOn = workspace.modules.includes('payroll');
   const tabs: { key: Tab; label: string }[] = [{ key: 'company', label: 'Company & documents' }, { key: 'tax', label: payrollOn ? 'Payroll & tax' : 'Tax & numbering' }, { key: 'features', label: 'Features' }, { key: 'access', label: 'Access' }, { key: 'audit', label: 'Audit history' }];
   return <div className="stack">
     <div className="tabs" role="tablist">{tabs.map(item => <button key={item.key} role="tab" aria-selected={tab === item.key} className={`tab ${tab === item.key ? 'active' : ''}`} onClick={() => setTab(item.key)}>{item.label}</button>)}</div>
-    {tab === 'company' && <CompanySettings workspace={workspace} busy={busy} readOnly={readOnly} command={command} onWorkspace={onWorkspace}/>}
-    {tab === 'tax' && <TaxSettings workspace={workspace} busy={busy} readOnly={readOnly || !canRun(role, 'save_settings')} ownerOnly={!readOnly && !canRun(role, 'save_settings')} command={command}/>}
-    {tab === 'features' && <FeaturesSettings workspace={workspace} readOnly={readOnly} command={command}/>}
+    {tab === 'company' && <CompanySettings workspace={workspace} busy={busy} readOnly={companyLocked} command={command} onWorkspace={onWorkspace}/>}
+    {tab === 'tax' && <TaxSettings workspace={workspace} busy={busy} readOnly={readOnly || !canRun(role, 'save_settings')} ownerOnly={!canRun(role, 'save_settings')} command={command}/>}
+    {tab === 'features' && <FeaturesSettings workspace={workspace} readOnly={companyLocked} command={command}/>}
     {tab === 'access' && <section className="card"><div className="card-heading"><div><h2>Company and access</h2><p>Role preview shows the screens and data that role receives. Server permissions still use your real role.</p></div>{workspace.demo && realRole === 'Owner' && <Button variant="destructive" disabled={!!busy} onClick={onReset}>{busy === 'reset' ? <Loader2 className="spin" size={16}/> : <RefreshCw size={16}/>}Reset demo</Button>}</div><div className="settings-grid"><div><span>Company</span><strong>{workspace.company.name}</strong></div><div><span>Tax identity</span><strong>{workspace.company.taxId || 'Not configured'}</strong></div><label>View as role<select value={role} disabled={!(workspace.demo && realRole === 'Owner')} onChange={event => setRole(event.target.value as Role)}>{roles.map(value => <option key={value}>{value}</option>)}</select></label><div><span>Revision</span><strong>{workspace.revision}</strong></div></div></section>}
     {tab === 'audit' && audit}
   </div>;
 }
+
+const companyEditors: Role[] = ['Owner', 'Accountant'];
+const companyEditorsNote = <p className="field-hint">Only the owner or an accountant can change these.</p>;
 
 function CompanySettings({ workspace, busy, readOnly, command, onWorkspace }: { workspace: Workspace; busy: string; readOnly: boolean; command: SettingsViewCommand; onWorkspace: (next: Workspace) => void }) {
   const [company, setCompany] = useState<CompanyDraft>({ name: workspace.company.name, address: workspace.company.address, phone: workspace.company.phone, email: workspace.company.email, taxId: workspace.company.taxId });
@@ -57,6 +63,7 @@ function CompanySettings({ workspace, busy, readOnly, command, onWorkspace }: { 
   return <section className="card">
     <div className="card-heading"><div><h2>Company & documents</h2><p>What customers and suppliers see on every printed document.</p></div>{!readOnly && <Button disabled={!!busy || !dirty} onClick={save}>{busy === 'save_company' || busy === 'save_branding' ? <Loader2 className="spin" size={16}/> : <Save size={16}/>}Save changes</Button>}</div>
     <div className="card-body stack">
+      {readOnly && companyEditorsNote}
       <form ref={form} onSubmit={event => { event.preventDefault(); save(); }}><CompanyForm value={company} onChange={setCompany} disabled={readOnly || !!busy}/></form>
       <BrandingForm workspace={workspace} company={company} value={branding} onChange={setBranding} onWorkspace={onWorkspace} disabled={readOnly || !!busy}/>
       {saved && <p className={saved.includes('saved') ? 'form-note' : 'error-note'} role="status">{saved}</p>}
@@ -67,7 +74,6 @@ function CompanySettings({ workspace, busy, readOnly, command, onWorkspace }: { 
 type SettingsViewCommand = (type: string, payload: Record<string, unknown>, options?: { confirmPassword?: string }) => Promise<CommandResult>;
 
 type SettingsDraft = Workspace['settings'];
-const payrollKeys = ['employerEobi', 'employeeEobi', 'eobiBase', 'incomeTaxRate'] as const;
 
 /**
  * The `save_settings` payload from the Payroll & tax form. The command replaces every setting, so fields that are
@@ -145,6 +151,7 @@ function FeaturesSettings({ workspace, readOnly, command }: { workspace: Workspa
   return <section className="card">
     <div className="card-heading"><div><h2>Features</h2><p>Turn modules on or off. Turning one off hides it and keeps every record; your password confirms it.</p></div></div>
     <div className="card-body">
+      {readOnly && companyEditorsNote}
       <ModulePicker selected={workspace.modules} onChange={change} workspace={workspace} disabled={readOnly || busy} showPresets={false}/>
       {error && !pending && <p className="error-note" role="alert">{error}</p>}
     </div>

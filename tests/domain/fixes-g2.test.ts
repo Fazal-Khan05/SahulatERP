@@ -128,6 +128,26 @@ describe('G2 form fixes', () => {
     expect(renderToStaticMarkup(createElement(InventoryView, { workspace: w, actor: owner, busy: '', notice: '', command: async () => ({}), openStockTransfer: () => {} }))).not.toContain('Show 100 more');
   });
 
+  it('D-08 Company & documents is editable only for an Owner or Accountant', () => {
+    const w = freshCompany();
+    for (const role of ['Owner', 'Accountant'] as Role[]) {
+      const html = settingsHtml(w, role);
+      expect(html, role).toContain('Save changes');
+      expect(html, role).not.toContain('Only the owner or an accountant can change these.');
+      expect(html.match(/<input [^>]*name="name"[^>]*>/)![0], role).not.toContain('disabled');
+    }
+    for (const role of ['Auditor', 'Sales Manager', 'Warehouse Manager', 'Payroll Administrator'] as Role[]) {
+      const html = settingsHtml(w, role);
+      expect(html, role).not.toContain('Save changes');
+      expect(html, role).toContain('Only the owner or an accountant can change these.');
+      expect(html.match(/<input [^>]*name="name"[^>]*>/)![0], role).toContain('disabled=""');
+      expect(html, role).toContain('aria-label="Upload logo" disabled=""');
+    }
+    // An Owner previewing a read-only role sees that role's read-only form.
+    const preview = renderToStaticMarkup(createElement(SettingsView, { workspace: w, realRole: 'Owner', role: 'Auditor', setRole: () => {}, busy: '', command, onWorkspace: () => {}, onReset: () => {}, audit: null }));
+    expect(preview).not.toContain('Save changes');
+  });
+
   it('D-09 with Payroll off the form keeps the saved payroll rates (save_settings replaces every setting)', () => {
     const w = freshCompany(toggleModules.filter(m => m !== 'payroll'));
     const saved = { ...w.settings, employerEobi: '5', employeeEobi: '1', eobiBase: '37000', incomeTaxRate: '5' };

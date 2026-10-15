@@ -11,6 +11,7 @@ vi.mock('@/modules/erp/dates', () => import('../../src/modules/erp/dates'));
 import { ImportsView, costClasses } from '../../src/components/imports-view';
 import { PayrollRuns, payrollDate } from '../../src/components/payroll-runs';
 import { CustomerReceipts } from '../../src/components/receipts-list';
+import { AuditHistory } from '../../src/components/audit-history';
 import { execute } from '../../src/modules/erp/engine';
 import { TableCard, statusTone } from '../../src/components/table-card';
 import { buildDemoWorkspace } from '../../src/modules/erp/demo';
@@ -120,5 +121,17 @@ describe('H workspace view fixes', () => {
     const receipts = (editable: boolean) => renderToStaticMarkup(createElement(CustomerReceipts, { workspace: w, editable, onRecord: () => {} }));
     expect(receipts(true)).toContain('No receipts yet. Record one with Record receipt above.');
     expect(receipts(false)).toContain('<div class="empty-state">No receipts yet.</div>');
+  });
+
+  it('D-21 Audit history shows the display name recorded with the entry, not the user id; old entries keep their name', () => {
+    let w = buildDemoWorkspace();
+    w = execute(w, { type: 'follow_up', payload: { partyId: w.parties.find(p => p.type === 'customer')!.id, note: 'Called', nextDate: '2026-12-01' }, idempotencyKey: 'h-fix-audit-key' }, { id: '0b6f1c2e-user-id', name: 'Ayesha Accounts', role: 'Owner', branchIds: [] }).workspace;
+    const entry = w.audit.at(-1)!;
+    expect([entry.actor, entry.actorName]).toEqual(['0b6f1c2e-user-id', 'Ayesha Accounts']);
+    const legacy = { ...entry, id: 'old', actor: 'Old Name', actorName: undefined as unknown as string };
+    const html = renderToStaticMarkup(createElement(AuditHistory, { workspace: { audit: [legacy, entry] } }));
+    const actors = [...html.matchAll(/<tr><td>[^<]*<\/td><td>([^<]*)<\/td>/g)].map(m => m[1]);
+    expect(actors).toEqual(['Ayesha Accounts', 'Old Name']);
+    expect(html).not.toContain('0b6f1c2e-user-id');
   });
 });

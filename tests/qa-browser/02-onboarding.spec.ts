@@ -211,7 +211,7 @@ test('ONB-085 Step transition: forward slides in from the right, back from the l
   await context.close();
 });
 
-test('ONB-088 Owner finishes setup while a second session is on the card; that session\'s next action shows the workspace [documented: simulated with the same owner in a second browser context; no second member account] [defect]', async ({ browser }) => {
+test('ONB-088 Owner finishes setup while a second session is on the card; that session\'s next action shows the workspace [documented: simulated with the same owner in a second browser context; no second member account]', async ({ browser }) => {
   const first = await openWizard(browser, 4);
   const second = await signedInPage(browser);
   await second.page.goto(APP);

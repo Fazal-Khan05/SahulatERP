@@ -191,14 +191,17 @@ describe('07 Sales documents and the invoice editor (SAL)', () => {
     expect([d.net, d.tax, d.total]).toEqual(['1000.0000', '180.0000', '1180.0000']);
   });
 
-  it('SAL-023 tax 0 and blank both 0 (editor sends blank as "0") [documented: engine defaults taxRate to 18 when the field is omitted entirely]', () => {
+  it('SAL-023 tax 0 and blank both 0 (editor sends blank as "0") [documented: a line sent without taxRate takes the company tax rate in Settings, or 0 when it is blank]', () => {
     const { w: w0, item, cust } = base();
     const zero = create(w0, 'sales_invoice', cust, [L(item, '1', '100', { taxRate: '0' })]);
     expect(docOf(zero.workspace, zero.recordId).tax).toBe('0.0000');
     const blank = create(w0, 'sales_invoice', cust, [L(item, '1', '100', { taxRate: editorValue('') })]);
     expect(docOf(blank.workspace, blank.recordId).tax).toBe('0.0000');
     const omitted = create(w0, 'sales_invoice', cust, [{ itemId: item, quantity: '1', price: '100' }]);
-    expect(docOf(omitted.workspace, omitted.recordId).tax).toBe('18.0000');
+    expect(docOf(omitted.workspace, omitted.recordId).tax).toBe('0.0000');
+    const taxed = run(w0, 'save_settings', { ...w0.settings, taxRate: '17' }).workspace;
+    const fromSettings = create(taxed, 'sales_invoice', cust, [{ itemId: item, quantity: '1', price: '100' }]);
+    expect(docOf(fromSettings.workspace, fromSettings.recordId).tax).toBe('17.0000');
   });
 
   it('SAL-024 tax 150 refused "Percentage cannot exceed 100."', () => {

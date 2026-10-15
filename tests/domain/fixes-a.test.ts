@@ -206,3 +206,19 @@ describe('D-06 attendance import and the employee form share one 0–30 rule', (
     expect(run(w, 'import_records', { kind: 'attendance', rows: [{ employeeId: id, attendance: '0' }] }).workspace.employees[0].attendance).toBe(0);
   });
 });
+
+describe('D-27 an omitted line taxRate comes from Settings', () => {
+  it('D-27 blank settings give 0%, a configured rate is used, and an explicit rate always wins', () => {
+    const t = trading();
+    const bare = (w: Workspace, extra: Record<string, unknown> = {}) => {
+      const r = run(w, 'create_document', { kind: 'sales_invoice', partyId: t.cust, warehouseId: t.wh, date: today(), dueDate: today(), lines: [{ itemId: t.item, quantity: '2', price: '50', ...extra }] });
+      return docOf(r.workspace, r.recordId);
+    };
+    expect(t.w.settings.taxRate).toBe('');
+    expect([bare(t.w).lines[0].taxRate, bare(t.w).tax]).toEqual(['0', '0.0000']);
+    const taxed = run(t.w, 'save_settings', { ...t.w.settings, taxRate: '16' }).workspace;
+    expect([bare(taxed).lines[0].taxRate, bare(taxed).tax]).toEqual(['16', '16.0000']);
+    expect(bare(taxed, { taxRate: '0' }).tax).toBe('0.0000');
+    expect(bare(taxed, { taxRate: '5' }).tax).toBe('5.0000');
+  });
+});

@@ -588,7 +588,7 @@ describe('03 settings (SET)', () => {
     expect(source('src/components/document-editor.tsx')).toContain("const defaultTax = workspace.settings.taxRate || '0';");
   });
 
-  it('SET-085 new company has no default tax rate, so a line sent without a rate carries 0% tax (engine defaults an omitted taxRate to 18%) [browser part: placeholder 0] [defect]', () => {
+  it('SET-085 new company has no default tax rate, so a line sent without a rate carries 0% tax (an omitted taxRate takes settings.taxRate, blank = 0) [browser part: placeholder 0]', () => {
     let w = freshCompany(); let item: string, cust: string;
     expect(w.settings.taxRate).toBe('');
     [w, item] = withItem(w, {}, { quantity: '5', cost: '10' });

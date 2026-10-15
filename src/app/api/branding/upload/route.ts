@@ -1,18 +1,13 @@
 import { brandingKinds, storeBrandingFile, type BrandingKind } from '@/lib/branding-store';
 import { commitWorkspace, readWorkspace, requireMember } from '@/lib/workspace-store';
 import { scopeWorkspace } from '@/modules/erp/access';
-import { execute } from '@/modules/erp/engine';
-import type { Role, Workspace } from '@/modules/erp/types';
+import { canRun, execute } from '@/modules/erp/engine';
 import { failureResponse, isRefusal, refusalResponse } from '../../workspace/errors';
 
 export const dynamic = 'force-dynamic';
 
 const chooseImage = () => Response.json({ success: false, message: 'Choose a logo or letterhead image.' }, { status: 400 });
 
-// Who may run save_branding (the engine's rule since D-08): any member but an Auditor while the company is being
-// set up; afterwards only the Owner or an Accountant. Checked before the file is stored, so a refused member
-// cannot replace the stored logo or letterhead.
-const mayChangeBranding = (role: Role, workspace: Workspace) => role === 'Owner' || role === 'Accountant' || (!workspace.setup.complete && role !== 'Auditor');
 
 /** Multipart upload of a logo or letterhead; stores the file, then saves its path on the workspace branding. */
 export async function POST(request: Request) {
@@ -21,7 +16,8 @@ export async function POST(request: Request) {
     const { actor } = await requireMember(tenantId);
     if (actor.role === 'Auditor') return Response.json({ success: false, message: 'Auditors cannot change branding.' }, { status: 403 });
     const { workspace, revision } = await readWorkspace(tenantId!);
-    if (!mayChangeBranding(actor.role, workspace)) return Response.json({ success: false, message: 'Your role does not permit this action.' }, { status: 403 });
+    // The engine's own save_branding rule (D-08), checked before the file is stored so a refused member cannot replace it.
+    if (!canRun(actor.role, 'save_branding', workspace)) return Response.json({ success: false, message: 'Your role does not permit this action.' }, { status: 403 });
     let form: FormData;
     try { form = await request.formData(); } catch { return chooseImage(); }
     const kind = String(form.get('kind') ?? '');

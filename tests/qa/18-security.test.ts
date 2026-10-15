@@ -685,12 +685,16 @@ describe('18 security', () => {
     expect(writes).toHaveLength(3);
     for (const sql of writes) expect(sql).toContain('${tenantId}');
   });
-  it('SEC-084 qa:tenant only touches the QA tenant id', () => {
+  it('SEC-084 qa:tenant only touches the disposable QA tenants [case-corrected: QA_TENANT_ID may pick one of six allow-listed 3333… tenants for parallel runs; anything else throws]', () => {
     const s = src('scripts/create-qa-tenant.ts');
     const statements = [...s.matchAll(/tx`([^`]*)`/g)].map(m => m[1]).filter(x => !x.startsWith('select set_config'));
     expect(statements).toHaveLength(5);
     for (const sql of statements) expect(sql).toContain('${QA_TENANT}');
-    expect(s).toContain("export const QA_TENANT = '33333333-3333-4333-8333-333333333333';");
+    const allowList = s.match(/const QA_TENANTS = \[([^\]]*)\]/)![1].match(/'([^']+)'/g)!.map(x => x.slice(1, -1));
+    expect(allowList).toHaveLength(6);
+    for (const id of allowList) expect(id).toMatch(/^33333333-3333-4333-8333-33333333333\d$/);
+    expect(s).toContain('if (requested && !QA_TENANTS.includes(requested)) throw');
+    expect(s).toContain('export const QA_TENANT = requested || QA_TENANTS[0];');
   });
   it('SEC-088 clickjacking: framing blocked by X-Frame-Options DENY', () => {
     expect(src('next.config.ts')).toContain('{key:"X-Frame-Options",value:"DENY"}');

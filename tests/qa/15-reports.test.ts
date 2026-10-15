@@ -61,7 +61,7 @@ describe('15 Reports (RPT)', () => {
     expect(agedBalances(w, 'customer', '2099-12-31').totals.total).toBe(bal(w, '1100'));
   });
 
-  it('RPT-004 aged receivables as of a past date excludes receipts made after that date [defect]', () => {
+  it('RPT-004 aged receivables as of a past date excludes receipts made after that date', () => {
     let { w, item, cust } = base(); let inv: string;
     [w, inv] = sell(w, cust, [line(item, '1', '1000')], '2026-09-01', '2026-09-01');
     w = receive(w, cust, inv, '1000', '2026-10-10').workspace;

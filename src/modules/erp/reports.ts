@@ -18,14 +18,49 @@ export function balanceAt(w: Workspace, code: string, to?: string, from?: string
   return sum(posted(w, from, to).flatMap(j => j.lines.filter(l => l.account === code).map(l => D(l.debit).minus(l.credit))));
 }
 
+/**
+ * When each receipt or payment took effect: the date its allocations were posted (a cheque's clearing date, not the date it was
+ * recorded) and, for a cheque that bounced after clearing, the date that posting was reversed. Receipts that never cleared have neither.
+ */
+function receiptPostings(w: Workspace) {
+  const postedOn = new Map(w.journals.filter(j => j.status === "posted").map(j => [j.sourceId, j.date]));
+  return new Map(w.receipts.map(r => {
+    const cleared = postedOn.get(`${r.id}:cleared`) ?? (r.status === "cleared" ? r.date : undefined);
+    const bounced = r.status === "bounced" && cleared ? postedOn.get(`${r.id}:bounce`) ?? cleared : undefined;
+    return [r.id, { cleared, bounced }];
+  }));
+}
+
+/**
+ * Corrections, in each invoice's own currency, that turn today's outstanding into the open amount as at `asOf`: receipts that cleared
+ * after `asOf` and returns dated after it are added back; a cheque that had cleared by `asOf` but bounced later is taken off again.
+ */
+function openAdjustments(w: Workspace, asOf: string) {
+  const adjust = new Map<string, ReturnType<typeof D>>();
+  const add = (invoiceId: string, amount: ReturnType<typeof D>) => adjust.set(invoiceId, (adjust.get(invoiceId) ?? D(0)).plus(amount));
+  const postings = receiptPostings(w);
+  for (const r of w.receipts) {
+    const { cleared, bounced } = postings.get(r.id)!;
+    const paidNow = r.status === "cleared"; // what `paid` holds today
+    const paidThen = !!cleared && cleared <= asOf && !(bounced && bounced <= asOf);
+    if (paidNow !== paidThen) for (const a of r.allocations) add(a.invoiceId, paidNow ? D(a.amount) : D(a.amount).negated());
+  }
+  for (const c of w.documents) if (c.parentId && (c.kind === "credit_note" || c.kind === "supplier_return") && c.status === "submitted" && c.date > asOf) add(c.parentId, D(c.total));
+  return adjust;
+}
+
 export type AgedRow = { partyId: string; name: string; current: string; d30: string; d60: string; d90: string; over90: string; total: string };
-/** Open invoice balances bucketed by days past due as of a date. Unapplied credits (returns after payment) show as negatives in Current so totals tie to the control account. Documents dated after `asOf` are excluded; receipts are not back-dated. */
+/**
+ * Open invoice balances bucketed by days past due as of a date. Unapplied credits (returns after payment) show as negatives in Current so totals tie to the control account.
+ * Each invoice's open amount is rebuilt as at `asOf`: documents dated after it are excluded, and only receipts cleared and returns dated on or before it count.
+ */
 export function agedBalances(w: Workspace, partyType: "customer" | "supplier", asOf: string): { rows: AgedRow[]; totals: AgedRow } {
   const kind = partyType === "customer" ? "sales_invoice" : "supplier_invoice";
   const byParty = new Map<string, ReturnType<typeof D>[]>();
+  const adjust = openAdjustments(w, asOf);
   for (const d of w.documents) {
     if (d.kind !== kind || d.status !== "submitted" || d.date > asOf) continue;
-    const open = D(outstanding(d)).mul(d.currency === "PKR" ? 1 : D(d.fxRate));
+    const open = D(outstanding(d)).plus(adjust.get(d.id) ?? 0).mul(d.currency === "PKR" ? 1 : D(d.fxRate));
     if (open.isZero()) continue;
     const age = Math.floor((Date.parse(asOf) - Date.parse(d.dueDate)) / 86400000);
     const bucket = open.lt(0) ? 0 : age <= 0 ? 0 : age <= 30 ? 1 : age <= 60 ? 2 : age <= 90 ? 3 : 4;

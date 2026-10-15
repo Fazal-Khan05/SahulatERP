@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildDemoWorkspace } from '../../src/modules/erp/demo';
-import { accountBalance, execute } from '../../src/modules/erp/engine';
+import { businessToday } from '../../src/modules/erp/dates';
+import { accountBalance, execute, outstanding } from '../../src/modules/erp/engine';
 import { D, money, sum } from '../../src/modules/erp/money';
 import { agedBalances, landedCostPayable, partyStatement } from '../../src/modules/erp/reports';
 import { toggleModules } from '../../src/modules/erp/modules';
@@ -102,5 +103,76 @@ describe('D-01 supplier statement: bills raise what is owed; payments and return
     const closings = suppliers.map(p => partyStatement(w, p.id, '2000-01-01', '2099-12-31').closing);
     suppliers.forEach((p, i) => expect(closings[i], p.name).toBe(agedRow(w, 'supplier', p.id)));
     expect(money(sum(closings).plus(landedCostPayable(w)))).toBe(payable(w));
+  });
+});
+
+const cheque = (w: Workspace, partyId: string, invoiceId: string, amount: string, recorded: string) => run(w, 'create_receipt', { partyId, date: recorded, amount, method: 'cheque', chequeNo: 'CHQ-77', dueDate: recorded, allocations: [{ invoiceId, amount }] });
+const chequeTo = (w: Workspace, id: string, status: 'deposited' | 'cleared' | 'bounced', date: string) => run(w, 'update_cheque', { id, status, date, ...(status === 'deposited' ? { accountId: 'main-bank' } : {}) }).workspace;
+const aged = (w: Workspace, type: 'customer' | 'supplier', asOf: string) => { const t = agedBalances(w, type, asOf).totals; return [t.current, t.d30, t.d60, t.total]; };
+/** Today's outstanding by invoice, the figure the report used before D-12; it must still hold for any date after the last posting. */
+const outstandingNow = (w: Workspace, kind: string, asOf: string) => money(sum(w.documents.filter(d => d.kind === kind && d.status === 'submitted' && d.date <= asOf).map(d => D(outstanding(d)).mul(d.currency === 'PKR' ? 1 : D(d.fxRate)))));
+
+describe('D-12 aged balances as at a past date rebuild each open amount from what had cleared by then', () => {
+  it('a receipt after the as-at date is not counted; on and after its date it is', () => {
+    let { w, item, cust } = company(); let inv: string;
+    [w, inv] = document(w, 'sales_invoice', cust, item, '10', '100', { date: '2026-09-01', dueDate: '2026-09-01' });
+    w = pay(w, cust, inv, '400', '400', '2026-09-15');
+    w = pay(w, cust, inv, '600', '600', '2026-10-10');
+    expect(aged(w, 'customer', '2026-09-10')).toEqual(['0.0000', '1000.0000', '0.0000', '1000.0000']);
+    expect(aged(w, 'customer', '2026-09-30')).toEqual(['0.0000', '600.0000', '0.0000', '600.0000']);
+    expect(aged(w, 'customer', '2026-10-09')).toEqual(['0.0000', '0.0000', '600.0000', '600.0000']);
+    expect(aged(w, 'customer', '2026-10-10')[3]).toBe('0.0000');
+  });
+
+  it('a cheque counts from its clearing date, not the date it was recorded', () => {
+    let { w, item, cust } = company(); let inv: string;
+    [w, inv] = document(w, 'sales_invoice', cust, item, '10', '100', { date: '2026-09-01', dueDate: '2026-09-01' });
+    const c = cheque(w, cust, inv, '1000', '2026-09-20');
+    w = chequeTo(c.workspace, c.recordId, 'deposited', '2026-09-28');
+    w = chequeTo(w, c.recordId, 'cleared', '2026-10-05');
+    expect(aged(w, 'customer', '2026-09-30')[3]).toBe('1000.0000');
+    expect(aged(w, 'customer', '2026-10-05')[3]).toBe('0.0000');
+  });
+
+  it('a cheque that cleared and then bounced is paid only between those dates', () => {
+    let { w, item, cust } = company(); let inv: string;
+    [w, inv] = document(w, 'sales_invoice', cust, item, '10', '100', { date: '2026-09-01', dueDate: '2026-09-01' });
+    const c = cheque(w, cust, inv, '1000', '2026-09-20');
+    w = chequeTo(c.workspace, c.recordId, 'deposited', '2026-09-21');
+    w = chequeTo(w, c.recordId, 'cleared', '2026-09-22');
+    w = chequeTo(w, c.recordId, 'bounced', '2026-09-24');
+    expect(aged(w, 'customer', '2026-09-21')[3]).toBe('1000.0000');
+    expect(aged(w, 'customer', '2026-09-23')[3]).toBe('0.0000');
+    expect(aged(w, 'customer', '2026-09-24')[3]).toBe('1000.0000');
+    expect(agedBalances(w, 'customer', '2099-12-31').totals.total).toBe(accountBalance(w, '1100'));
+  });
+
+  it('a return dated after the as-at date is not deducted yet', () => {
+    let { w, item, cust } = company(); let inv: string;
+    [w, inv] = document(w, 'sales_invoice', cust, item, '10', '100', { date: '2026-09-01', dueDate: '2026-09-01' });
+    w = returnOf(w, inv, '2', '2026-10-05');
+    expect(aged(w, 'customer', '2026-09-30')[3]).toBe('1000.0000');
+    expect(aged(w, 'customer', '2026-10-05')[3]).toBe('800.0000');
+  });
+
+  it('aged payables: a USD bill paid after the as-at date is still open in PKR at the bill rate', () => {
+    let { w, item, sup } = company(); let bill: string;
+    [w, bill] = document(w, 'supplier_invoice', sup, item, '100', '10', { currency: 'USD', fxRate: '280', date: '2026-09-01', dueDate: '2026-09-01' });
+    w = pay(w, sup, bill, '400', '110000', '2026-10-10');
+    expect(aged(w, 'supplier', '2026-09-30')[3]).toBe('280000.0000');
+    expect(aged(w, 'supplier', '2026-10-10')[3]).toBe('168000.0000');
+    expect(aged(w, 'supplier', '2026-10-10')[3]).toBe(payable(w));
+  });
+
+  it("today's figures are unchanged: after the last posting the report equals today's outstanding and the controls", () => {
+    const w = buildDemoWorkspace();
+    for (const asOf of [businessToday(), '2026-12-31', '2099-12-31']) {
+      expect(agedBalances(w, 'customer', asOf).totals.total, asOf).toBe(outstandingNow(w, 'sales_invoice', asOf));
+      expect(agedBalances(w, 'supplier', asOf).totals.total, asOf).toBe(outstandingNow(w, 'supplier_invoice', asOf));
+    }
+    expect(agedBalances(w, 'customer', '2099-12-31').totals.total).toBe(accountBalance(w, '1100'));
+    // The demo's PDC-0982 cleared on 22 Sep and bounced on 24 Sep: on 23 Sep it was paid.
+    const c4 = (asOf: string) => agedBalances(w, 'customer', asOf).rows.find(r => r.partyId === 'c-4')?.total ?? '0.0000';
+    expect([c4('2026-09-21'), c4('2026-09-23'), c4('2026-09-24')]).toEqual(['65490.0000', '0.0000', '65490.0000']);
   });
 });

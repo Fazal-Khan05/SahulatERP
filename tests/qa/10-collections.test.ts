@@ -433,7 +433,8 @@ describe('10 Collections: receipts, cheques (PDC), follow-ups (COL)', () => {
     let { w, item, cust } = base();
     let old: string;
     [w, old] = invoice(w, cust, item, '50', { date: '2026-09-01', dueDate: '2026-09-01' });
-    w = receipt(w, cust, [{ invoiceId: old, amount: '1500' }]).workspace;
+    // Dated before the as-at date: since D-12 a receipt counts only once it has cleared, so a receipt dated today() would not net on 14 Oct.
+    w = receipt(w, cust, [{ invoiceId: old, amount: '1500' }], { date: '2026-10-01', dueDate: '2026-10-01' }).workspace;
     const row = agedBalances(w, 'customer', '2026-10-14').rows.find(r => r.partyId === cust)!;
     // The base 10,000 invoice is dated today(): it counts as current while today <= asOf, and is excluded after.
     expect(row.d60).toBe('3500.0000');

@@ -200,7 +200,7 @@ describe('17 shell', () => {
     expect(shell(freshCompany())).not.toContain('Branch filter');
   });
   it('NAV-049 notice: success neutral (role=status) vs error red (role=alert)', () => {
-    expect(wbSource).toContain("{notice&&<div className={noticeError?'error-note':'form-note'} role={noticeError?'alert':'status'}>{notice}</div>}");
+    expect(wbSource).toContain("{notice&&<div className={noticeError?'error-note':'form-note'} role={noticeError?'alert':'status'}>{notice}<button type=\"button\" className=\"notice-dismiss\" aria-label=\"Dismiss message\" onClick={()=>setNotice('')}>");
   });
   it('NAV-055 drawer applies safe-area padding', () => {
     expect(css).toContain('.sidebar.mobile-open{padding-bottom:calc(14px + env(safe-area-inset-bottom,0px))}');

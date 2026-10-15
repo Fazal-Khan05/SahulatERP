@@ -141,4 +141,10 @@ describe('agent F shell fixes', () => {
     expect(denied.notices.filter(Boolean)).toEqual(['ACCESS_DENIED']);
     expect(denied.errors).toContain(true);
   });
+  it('D-46 the shell notice sticks under the top bar and can be dismissed', () => {
+    expect(css).toContain('.main-content>.form-note,.main-content>.error-note{position:sticky;top:calc(var(--topbar-height) + var(--space-2));');
+    expect(css).toContain('@media(max-width:760px){.main-content>.form-note,.main-content>.error-note{top:calc(56px + var(--space-2))}}');
+    const wb = readFileSync(resolve(root, 'src/components/workbench.tsx'), 'utf8');
+    expect(wb).toContain("role={noticeError?'alert':'status'}>{notice}<button type=\"button\" className=\"notice-dismiss\" aria-label=\"Dismiss message\" onClick={()=>setNotice('')}>");
+  });
 });

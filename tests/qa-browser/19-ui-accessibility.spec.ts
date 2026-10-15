@@ -424,7 +424,7 @@ test.describe('layout, keyboard and accessibility on the busy company', () => {
     await s.context.close();
   });
 
-  test('UIX-089 notices are readable on phone [defect]', async ({ browser }) => {
+  test('UIX-089 notices are readable on phone', async ({ browser }) => {
     const s = await open(browser, { viewport: PHONE, isMobile: true, hasTouch: true });
     const { page } = s;
     await goModule(page, 'Sales');
@@ -440,7 +440,7 @@ test.describe('layout, keyboard and accessibility on the busy company', () => {
     expect(m.left).toBeGreaterThanOrEqual(0);
     expect(m.right).toBeLessThanOrEqual(m.vw);
     expect(m.sw).toBeLessThanOrEqual(m.cw);
-    // Actual: the notice is rendered in the page flow above the heading; after acting on a row further down it is off-screen.
+    // D-46: the notice sticks under the top bar, so it is on screen after acting on a row further down.
     await expect(notice, 'the notice is on screen after the action').toBeInViewport();
     await s.context.close();
   });

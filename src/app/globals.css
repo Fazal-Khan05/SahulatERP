@@ -420,6 +420,13 @@ button:focus-visible,a:focus-visible,[role=switch]:focus-visible{outline:2px sol
 .simulation-note{background:var(--warning-soft);color:var(--warning-text);border:1px solid color-mix(in srgb,var(--warning-text) 18%,transparent);border-radius:var(--radius-sm)}
 .form-note{background:var(--surface-muted);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)}
 .error-note{background:var(--danger-soft);color:var(--danger);border:1px solid color-mix(in srgb,var(--danger) 18%,transparent);border-radius:var(--radius-sm)}
+/* The shell notice sticks under the top bar, so the result of an action is in view wherever the page is scrolled. */
+.main-content>.form-note,.main-content>.error-note{position:sticky;top:calc(var(--topbar-height) + var(--space-2));z-index:calc(var(--z-sidebar) - 2);display:flex;align-items:flex-start;gap:var(--space-3);box-shadow:var(--shadow-md)}
+.main-content>.form-note{background:var(--surface)}
+.notice-dismiss{margin:-4px -4px -4px auto;flex-shrink:0;display:grid;place-items:center;width:28px;height:28px;border:0;border-radius:var(--radius-sm);background:transparent;color:inherit;opacity:.75;transition:opacity var(--duration-fast) var(--ease-out),background var(--duration-fast) var(--ease-out)}
+.notice-dismiss:hover{opacity:1;background:color-mix(in srgb,currentColor 10%,transparent)}
+@media(max-width:760px){.main-content>.form-note,.main-content>.error-note{top:calc(56px + var(--space-2))}}
+@media(pointer:coarse){.notice-dismiss{width:44px;height:44px;margin:-12px -12px -12px auto}}
 .empty-state{color:var(--text-muted);padding:var(--space-12) var(--space-5)}
 
 /* Tables */

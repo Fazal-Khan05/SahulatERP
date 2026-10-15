@@ -46,4 +46,10 @@ describe('agent F shell fixes', () => {
     // It must come after the colour layer's .dialog-content{border-radius:20px}, which would otherwise win.
     expect(css.indexOf(sheet)).toBeGreaterThan(css.indexOf('.dialog-content{border-radius:20px;box-shadow:var(--shadow-xl)}'));
   });
+  it('D-64 card hover styles only apply with a mouse, and the entrance animation does not pin the transform', () => {
+    const fine = css.slice(css.indexOf('@media(hover:hover) and (pointer:fine){'), css.indexOf('@media(hover:none)'));
+    expect(fine).toContain('.metric-card:hover{border-color:var(--border-strong);box-shadow:var(--shadow-sm)}');
+    expect(css.replace(fine, '')).not.toMatch(/\.metric-card:hover\{[^}]*box-shadow:var\(--shadow/);
+    expect(css).toMatch(/\.metric-grid>\.metric-card\{animation:view-in [^;}]* backwards;/);
+  });
 });

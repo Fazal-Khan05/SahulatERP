@@ -142,7 +142,7 @@ describe('17 shell', () => {
     expect(values).toEqual([['Total sales', formatMoney(s.sales)], ['Collections', formatMoney(s.collections)], ['Outstanding receivables', formatMoney(s.receivables)], ['Inventory value', formatMoney(s.inventory)]]);
   });
   it('NAV-037 metric cards stagger in by 40ms; reduced motion has no stagger [defect: cards never set --i, so every delay is 0]', () => {
-    expect(css).toContain('.metric-grid>.metric-card{animation:view-in var(--duration-slow) var(--ease-out) both;animation-delay:calc(var(--i,0) * 40ms)}');
+    expect(css).toContain('.metric-grid>.metric-card{animation:view-in var(--duration-slow) var(--ease-out) backwards;animation-delay:calc(var(--i,0) * 40ms)}');
     expect(owner).toMatch(/class="metric-card" style="--i:1"/);
   });
   it('NAV-038 sales & collections chart [case-corrected: weekly totals up to 12 weeks ending at the latest activity, not 6 months; bars violet (accent) and cyan (accent-2) with legend]', () => {

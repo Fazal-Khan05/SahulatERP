@@ -397,7 +397,6 @@ button:focus-visible,a:focus-visible,[role=switch]:focus-visible{outline:2px sol
 /* Cards and panels: flat, 1px border, no drop shadow */
 .card,.metric-card{background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--card-radius);box-shadow:none;transition:border-color var(--duration-base) var(--ease-out),box-shadow var(--duration-base) var(--ease-out)}
 .metric-card{padding:var(--space-5)}
-.metric-card:hover{border-color:var(--border-strong);box-shadow:var(--shadow-sm)}
 .metric-label{color:var(--text-muted);font-size:var(--text-sm)}
 .metric-icon{background:var(--surface-sunken);color:var(--text-muted);border-radius:var(--radius-sm)}
 .metric-card>strong{font-size:var(--text-2xl);font-weight:600;letter-spacing:var(--tracking-tight);margin:10px 0 2px}
@@ -584,8 +583,9 @@ a{text-underline-offset:3px}
 /* Module switch: prevents content teleporting; tens of times a day, so near-imperceptible. */
 @keyframes view-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 .view-enter{animation:view-in var(--duration-base) var(--ease-out) both}
-/* Dashboard tiles enter in a short cascade rather than all at once (first paint of a session). */
-.metric-grid>.metric-card{animation:view-in var(--duration-slow) var(--ease-out) both;animation-delay:calc(var(--i,0) * 40ms)}
+/* Dashboard tiles enter in a short cascade rather than all at once (first paint of a session). Backwards fill only:
+   a forwards fill would pin transform:none and cancel the hover lift once the entrance has finished. */
+.metric-grid>.metric-card{animation:view-in var(--duration-slow) var(--ease-out) backwards;animation-delay:calc(var(--i,0) * 40ms)}
 .metric-grid>.metric-card:nth-child(2){--i:1}.metric-grid>.metric-card:nth-child(3){--i:2}.metric-grid>.metric-card:nth-child(4){--i:3}
 /* Dialogs (occasional): overlay fades, panel settles from 97%; exits mirror entrances. Modals stay centered. */
 @keyframes overlay-in{from{opacity:0}to{opacity:1}}
@@ -609,6 +609,7 @@ a{text-underline-offset:3px}
   .metric-card:hover{transform:translateY(-1px)}
   .attention-row:hover>svg{transform:translateX(2px)}
   .module-card:hover{transform:translateY(-1px)}
+  .metric-card:hover{border-color:var(--border-strong);box-shadow:var(--shadow-sm)}
 }
 @media(hover:none){.metric-card:hover,.module-card:hover{box-shadow:none;border-color:var(--card-border)}}
 .metric-card{transition:border-color var(--duration-base) var(--ease-out),box-shadow var(--duration-base) var(--ease-out),transform var(--duration-base) var(--ease-out)}
@@ -684,7 +685,6 @@ button,a,[role=button],[role=tab],[role=switch],.nav-item,.tab,.chip,.badge,.swa
 .metric-card:nth-child(2){--tile-bg:var(--cyan-100);--tile-fg:var(--cyan-700)}
 .metric-card:nth-child(3){--tile-bg:var(--green-100);--tile-fg:var(--green-700)}
 .metric-card:nth-child(4){--tile-bg:#ffecc7;--tile-fg:#9a5200}
-.metric-card:hover{box-shadow:var(--shadow-sm)}
 .bar.sales,.legend-sales,.legend-square.green{background:var(--accent)}
 .bar.collections,.legend-collections,.legend-square.mint{background:var(--accent-2)}
 .badge.draft{background:var(--draft-soft);color:var(--draft-text)}

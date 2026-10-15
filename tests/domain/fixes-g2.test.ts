@@ -12,7 +12,7 @@ vi.mock('@/modules/erp/master-data', () => import('../../src/modules/erp/master-
 vi.mock('@/modules/erp/reports', () => import('../../src/modules/erp/reports'));
 vi.mock('@/modules/erp/access', () => import('../../src/modules/erp/access'));
 import { SettingsView, TaxSettings, settingsPayload } from '../../src/components/settings-view';
-import { readCsvRows } from '../../src/components/csv-import-dialog';
+import { fromCsvCell, readCsvRows } from '../../src/components/csv-import-dialog';
 import { InventoryView, stockLevels } from '../../src/components/inventory-view';
 import { CashBankView } from '../../src/components/cash-bank-view';
 import { DocumentsList } from '../../src/components/documents-list';
@@ -94,6 +94,13 @@ describe('G2 form fixes', () => {
     expect(spaced.tooMany).toBe(false);
     expect(spaced.rows).toHaveLength(2000);
     expect(await csvRows('sku,name,price\n')).toEqual({ headers: [], rows: [], tooMany: false });
+  });
+
+  it('D-20 import undoes the export guard on formula-like cells only', async () => {
+    expect(['\'+92 300 1234567', '\'=SUM(A1)', '\'-5', '\'@home', '\'\tx', "'quoted", "O'Neil", '+92', ''].map(fromCsvCell))
+      .toEqual(['+92 300 1234567', '=SUM(A1)', '-5', '@home', '\tx', "'quoted", "O'Neil", '+92', '']);
+    const { rows } = await csvRows('name,phone\nAli Traders,\'+92 300 1111111\nMetro,\'=HYPERLINK("x")\n');
+    expect(rows).toEqual([{ name: 'Ali Traders', phone: '+92 300 1111111' }, { name: 'Metro', phone: '=HYPERLINK("x")' }]);
   });
 
   it('D-37 a 20 MB file is refused without parsing it whole', async () => {

@@ -9,6 +9,12 @@ import { csvFields, mapHeader, toCsv, type EntitySpec } from '@/modules/erp/mast
 type Parsed = { headers: string[]; mapping: Record<string, string | null>; rows: Record<string, string>[] };
 /** Same limit as the `import_records` command. */
 export const maxImportRows = 2000;
+/**
+ * Undoes the CSV export's formula-injection guard, so re-importing our own export keeps "+92 300 …" rather than
+ * "'+92 300 …": one leading ' is removed when the rest starts with = + - @, a tab or a carriage return.
+ * Same rule as fromCsvCell() in master-data.ts (D-20); use that one once both are merged.
+ */
+export const fromCsvCell = (value: string) => /^'[=+\-@\t\r]/.test(value) ? value.slice(1) : value;
 
 /**
  * Reads CSV rows one at a time (blank lines skipped) and stops at the first row over the limit, so a huge file is
@@ -19,7 +25,7 @@ export function readCsvRows(input: File | string, done: (result: { headers: stri
   let headers: string[] = [];
   let tooMany = false;
   Papa.parse<Record<string, string>, File>(input as File, {
-    header: true, skipEmptyLines: 'greedy', transformHeader: h => h.trim(),
+    header: true, skipEmptyLines: 'greedy', transformHeader: h => h.trim(), transform: fromCsvCell,
     step: (row, parser) => {
       if (rows.length >= maxImportRows) { tooMany = true; parser.abort(); return; }
       headers = row.meta.fields ?? headers;

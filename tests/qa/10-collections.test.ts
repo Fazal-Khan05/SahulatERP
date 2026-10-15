@@ -305,22 +305,22 @@ describe('10 Collections: receipts, cheques (PDC), follow-ups (COL)', () => {
     expectInvariants(w);
   });
 
-  it('COL-038 idempotent retry of create_receipt gives one receipt', () => {
+  it('COL-038 idempotent retry of create_receipt gives one receipt [case-corrected: a replay returns the original recordId and message (D-17)]', () => {
     const { w: w0, cust, inv } = base();
     const a = receipt(w0, cust, [{ invoiceId: inv, amount: '100' }], {}, owner, 'qa-col-038-receipt');
     const b = receipt(a.workspace, cust, [{ invoiceId: inv, amount: '100' }], {}, owner, 'qa-col-038-receipt');
-    expect(b.message).toBe('This operation was already completed.');
+    expect([b.recordId, b.message]).toEqual([a.recordId, a.message]);
     expect(b.workspace.receipts).toHaveLength(1);
     expect(docOf(b.workspace, inv).paid).toBe('100.0000');
   });
 
-  it('COL-039 idempotent retry of clear gives one journal', () => {
+  it('COL-039 idempotent retry of clear gives one journal [case-corrected: a replay returns the original recordId and message (D-17)]', () => {
     const { w: w0, cust, inv } = base();
     const [w1, id] = cheque(w0, cust, inv, '700');
     const w2 = deposit(w1, id);
     const a = chq(w2, id, 'cleared', {}, owner, 'qa-col-039-clear');
     const b = chq(a.workspace, id, 'cleared', {}, owner, 'qa-col-039-clear');
-    expect(b.message).toBe('This operation was already completed.');
+    expect([b.recordId, b.message]).toEqual([a.recordId, a.message]);
     expect(b.workspace.journals.filter(j => j.sourceId === `${id}:cleared`)).toHaveLength(1);
   });
 

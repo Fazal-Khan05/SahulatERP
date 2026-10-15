@@ -390,13 +390,13 @@ describe('07 Sales documents and the invoice editor (SAL)', () => {
     refused(w, 'update_document', { id, partyId: cust, warehouseId: firstWarehouse(w), date: today(), dueDate: today(), lines: [L(item, '2')] }, 'Only draft documents can be edited. Use a return or reversal for posted documents.');
   });
 
-  it('SAL-050 submit twice: retry with same key is a no-op, new key refused; one journal', () => {
+  it('SAL-050 submit twice: retry with same key is a no-op, new key refused; one journal [case-corrected: a replay returns the original recordId and message (D-17)]', () => {
     const { w: w0, item, cust } = base();
     const r = create(w0, 'sales_invoice', cust, [L(item)]);
     const k = 'qa-sal-050-submit-key';
     const first = run(r.workspace, 'submit_document', { id: r.recordId }, owner, k);
     const retry = run(first.workspace, 'submit_document', { id: r.recordId }, owner, k);
-    expect(retry.message).toBe('This operation was already completed.');
+    expect([retry.recordId, retry.message]).toEqual([first.recordId, first.message]);
     expect(retry.workspace).toBe(first.workspace);
     refused(first.workspace, 'submit_document', { id: r.recordId }, 'Only draft documents can be submitted.');
     expect(first.workspace.journals.filter(j => j.sourceId === r.recordId)).toHaveLength(1);

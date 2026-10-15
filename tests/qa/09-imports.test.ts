@@ -528,13 +528,13 @@ describe('09 Imports and landed cost (IMP)', () => {
     expectInvariants(w);
   });
 
-  it('IMP-061 idempotent allocate retry gives one journal', () => {
+  it('IMP-061 idempotent allocate retry gives one journal [case-corrected: a replay returns the original recordId and message (D-17)]', () => {
     const { w: w0, grn } = withGrn();
     let [w, sh] = ship(w0, grn);
     w = cost(w, sh, 'Freight', '100');
     const first = allocate(w, sh, {}, owner, 'qa-imp-061-allocate');
     const retry = allocate(first.workspace, sh, {}, owner, 'qa-imp-061-allocate');
-    expect(retry.message).toBe('This operation was already completed.');
+    expect([retry.recordId, retry.message]).toEqual([first.recordId, first.message]);
     expect(landedJournals(retry.workspace)).toHaveLength(1);
   });
 

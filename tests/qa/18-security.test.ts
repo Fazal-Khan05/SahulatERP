@@ -386,13 +386,13 @@ describe('18 security', () => {
       if (!['Owner', 'Accountant', 'Auditor'].includes(role)) expect(v.journals, role).toEqual([]);
     }
   });
-  it('SEC-036 idempotency: same key twice → second returns "already completed"; no duplicate', () => {
+  it('SEC-036 idempotency: same key twice → second returns the original result; no duplicate [case-corrected: a replay returns the original recordId and message (D-17)]', () => {
     let item: string, cust: string; let w = freshCompany(); [w, item] = withItem(w, {}, { quantity: '5', cost: '1' }); [w, cust] = withParty(w);
     const c = { type: 'create_document', payload: { kind: 'sales_invoice', partyId: cust, warehouseId: w.warehouses[0].id, date: today(), dueDate: today(), lines: [{ itemId: item, quantity: '1', price: '1' }] }, idempotencyKey: 'sec-036-idem' };
     const first = execute(w, c, owner);
     const second = execute(first.workspace, c, owner);
     expect(second.workspace).toBe(first.workspace);
-    expect(second.message).toBe('This operation was already completed.');
+    expect([second.recordId, second.message]).toEqual([first.recordId, first.message]);
     expect(second.workspace.documents).toHaveLength(1);
   });
   it('SEC-037 idempotency key shorter than 8 chars → 400 validation', async () => {
@@ -406,10 +406,11 @@ describe('18 security', () => {
     expect((await POST({ type: 'save_company', payload: { name: 'Key Co', address: 'x' }, idempotencyKey: 'k'.repeat(101) })).status).toBe(400);
     expect((await POST({ type: 'save_company', payload: { name: 'Key Co', address: 'x' }, idempotencyKey: 'k'.repeat(100) })).status).toBe(200);
   });
-  it('SEC-039 same key, different payload [documented: treated as a replay — unchanged workspace, recordId "", "This operation was already completed."]', () => {
-    const w = run(freshCompany(), 'save_company', { name: 'First Name', address: 'x' }, owner, 'sec-039-same-key').workspace;
+  it('SEC-039 same key, different payload [case-corrected: treated as a replay — unchanged workspace and the first call\'s recordId and message (D-17)]', () => {
+    const first = run(freshCompany(), 'save_company', { name: 'First Name', address: 'x' }, owner, 'sec-039-same-key'); const w = first.workspace;
     const again = execute(w, { type: 'save_company', payload: { name: 'Second Name', address: 'y' }, idempotencyKey: 'sec-039-same-key' }, owner);
-    expect(again).toEqual({ workspace: w, recordId: '', message: 'This operation was already completed.' });
+    expect(again).toEqual({ workspace: w, recordId: first.recordId, message: 'Company details saved.' });
+    expect(again.workspace).toBe(w);
     expect(again.workspace.company.name).toBe('First Name');
   });
   it('SEC-040 the same idempotency key in two tenants is independent', () => {
@@ -710,19 +711,20 @@ describe('18 security', () => {
     const [after] = withParty(w, 'customer', { name: 'Café Traders' });
     expect(after.parties.filter(p => p.name.normalize('NFC') === 'Café Traders')).toHaveLength(2);
   });
-  it('SEC-092 command replay after commit: no double posting and no second commit', async () => {
+  it('SEC-092 command replay after commit: no double posting and no second commit [case-corrected: a replay returns the original recordId and message (D-17)]', async () => {
     let w = company(T); let item: string, cust: string, draft: string; [w, item] = withItem(w, {}, { quantity: '5', cost: '1' }); [w, cust] = withParty(w);
     [w, draft] = withDocument(w, 'sales_invoice', cust, [{ itemId: item, quantity: '1', price: '10' }], {}, false);
     seed([w], [[T, 'Owner']]);
     const c = cmd('submit_document', { id: draft });
-    expect((await POST(c)).status).toBe(200);
+    const original = await POST(c);
+    expect(original.status).toBe(200);
     const journals = stored().journals.length; const rpc = S.rpcCalls;
     const replay = await POST(c);
-    expect(replay.json.message).toBe('This operation was already completed.');
+    expect([replay.json.recordId, replay.json.message]).toEqual([original.json.recordId, original.json.message]);
     expect(S.rpcCalls).toBe(rpc);
     expect(stored().journals).toHaveLength(journals);
   });
-  it('SEC-093 timeout mid-commit (committed, error returned): retry with the same key is safe', async () => {
+  it('SEC-093 timeout mid-commit (committed, error returned): retry with the same key is safe [case-corrected: a replay returns the original recordId and message (D-17)]', async () => {
     let w = company(T); let item: string, cust: string, draft: string; [w, item] = withItem(w, {}, { quantity: '5', cost: '1' }); [w, cust] = withParty(w);
     [w, draft] = withDocument(w, 'sales_invoice', cust, [{ itemId: item, quantity: '1', price: '10' }], {}, false);
     seed([w], [[T, 'Owner']]); S.rpcMode = 'commit-then-error';
@@ -733,7 +735,7 @@ describe('18 security', () => {
     S.rpcMode = 'normal';
     const retry = await POST(c);
     expect(retry.status).toBe(200);
-    expect(retry.json.message).toBe('This operation was already completed.');
+    expect([retry.json.recordId, retry.json.message]).toEqual([draft, expect.stringContaining('submitted. Related balances updated.')]);
     expect(stored().journals.filter(j => j.sourceId === draft)).toHaveLength(1);
   });
   it('SEC-094 today() uses Asia/Karachi, not the server clock zone', () => {

@@ -124,10 +124,13 @@ function provisionModules(w:Workspace,modules:ToggleModule[]){
  // Ledger accounts are a fixed chart today (accountNames); number series derive from existing documents. Nothing else to seed.
 }
 export function payrollConfigured(w:Workspace){return ["eobiBase","employeeEobi","employerEobi","incomeTaxRate"].every(k=>w.settings[k as keyof Workspace["settings"]]!=="");}
+/** Completed commands kept for idempotent replay (a retry gets the original result): far more than any client retry window, while keeping the snapshot bounded. */
+const operationHistory=500;
 export function execute(input:Workspace,raw:unknown,actor:Actor):{workspace:Workspace;recordId:string;message:string}{
  const command=commandSchema.parse(raw);if(!canRun(actor.role,command.type,input))throw new Error("Your role does not permit this action.");
- const gate=moduleOfCommand(command.type,command.payload,input);if(gate&&!input.modules.includes(gate))throw new Error(`${moduleLabel(gate)} is turned off for this company. Turn it on in Settings → Features.`);if(input.operations.includes(command.idempotencyKey))return {workspace:input,recordId:"",message:"This operation was already completed."};
- const w=structuredClone(input);w.followUps??=[];const p=command.payload;let result="";let message="Changes saved.";
+ const gate=moduleOfCommand(command.type,command.payload,input);if(gate&&!input.modules.includes(gate))throw new Error(`${moduleLabel(gate)} is turned off for this company. Turn it on in Settings → Features.`);const done=input.operations.find(o=>o.key===command.idempotencyKey);if(done)return {workspace:input,recordId:done.recordId,message:done.message};
+ // Operation records are never mutated, so they are shared rather than deep-copied on every command.
+ const {operations,...rest}=input;const w:Workspace={...structuredClone(rest),operations};w.followUps??=[];const p=command.payload;let result="";let message="Changes saved.";
  switch(command.type){
  case "create_document":result=createDocument(w,p,actor).id;message="Draft saved. Review and submit to post it.";break;
  case "update_document":{const existing=found(w.documents,s(p,"id"),"Document");if(existing.status!=="draft")throw new Error("Only draft documents can be edited. Use a return or reversal for posted documents.");warehouseAccess(w,actor,existing.warehouseId);if(actor.role==="Salesperson"&&!existing.lines.every(l=>l.employeeId===actor.employeeId))throw new Error("Salespeople can edit their own drafts only.");result=createDocument(w,{...p,kind:existing.kind,...(existing.parentId?{parentId:existing.parentId}:{})},actor,existing).id;message=`${existing.number} updated.`;break;}
@@ -216,5 +219,5 @@ export function execute(input:Workspace,raw:unknown,actor:Actor):{workspace:Work
   for(const key of ["parties","items","employees"] as const)(w as unknown as Record<string,unknown>)[key]=staged[key];
   result=w.tenantId;message=`Imported ${rows.length} ${kind}: ${created} created, ${updated} updated.`;break;}
  }
- w.operations.push(command.idempotencyKey);w.revision=input.revision+1;w.audit.push({id:id(),date:new Date().toISOString(),actor:actor.name,role:actor.role,action:command.type,sourceId:result,detail:message});return {workspace:w,recordId:result,message};
+ w.operations=[...w.operations,{key:command.idempotencyKey,recordId:result,message}].slice(-operationHistory);w.revision=input.revision+1;w.audit.push({id:id(),date:new Date().toISOString(),actor:actor.name,role:actor.role,action:command.type,sourceId:result,detail:message});return {workspace:w,recordId:result,message};
 }

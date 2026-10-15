@@ -1,5 +1,9 @@
 import { toggleModules } from './modules';
-import type { Workspace } from './types';
+import type { Operation, Workspace } from './types';
+
+/** Before Oct 2026 an operation was only its idempotency key; its result was not kept. */
+const decodeOperation = (op: Operation | string): Operation =>
+  typeof op === 'string' ? { key: op, recordId: '', message: 'This operation was already completed.' } : op;
 
 /**
  * Reads a persisted snapshot and fills in fields added after it was written, so older
@@ -8,6 +12,7 @@ import type { Workspace } from './types';
  * - company contact, branding, modules and setup (Oct 2026 onboarding). A snapshot that
  *   predates module toggles has every module on and counts as set up when it already has
  *   documents or is the demo; an empty, non-demo one goes through the wizard.
+ * - operations as { key, recordId, message } (Oct 2026); older plain-string keys still replay.
  */
 export function decodeWorkspace(value: unknown): Workspace {
   const decoded = typeof value === 'string' ? JSON.parse(value) : value;
@@ -26,5 +31,6 @@ export function decodeWorkspace(value: unknown): Workspace {
     setup: raw.setup ?? { complete: !!raw.demo || hasData, step: 1 },
     followUps: raw.followUps ?? [],
     bankAccounts: raw.bankAccounts ?? [],
+    operations: ((raw.operations ?? []) as (Operation | string)[]).map(decodeOperation),
   };
 }

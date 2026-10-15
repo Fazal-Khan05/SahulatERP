@@ -528,10 +528,10 @@ describe('04 products (PRD)', () => {
     expect(w.items).toHaveLength(0);
   });
 
-  it('PRD-084 retrying an import with the same idempotency key creates no duplicates', () => {
+  it('PRD-084 retrying an import with the same idempotency key creates no duplicates [case-corrected: a replay returns the original recordId and message (D-17)]', () => {
     const first = run(freshCompany(), 'import_records', { kind: 'items', rows: importRows(4) }, owner, 'qa-prd-084-import');
     const retry = run(first.workspace, 'import_records', { kind: 'items', rows: importRows(4) }, owner, 'qa-prd-084-import');
-    expect(retry.message).toBe('This operation was already completed.');
+    expect([retry.recordId, retry.message]).toEqual([first.recordId, first.message]);
     expect(retry.workspace.items).toHaveLength(4);
   });
 

@@ -397,12 +397,12 @@ describe('02 onboarding (ONB)', () => {
     expect(w.plans).toEqual([]);
   });
 
-  it('ONB-059 double "Create my workspace": a retried key is a no-op and a second call is refused [browser part: button disabled while busy]', () => {
+  it('ONB-059 double "Create my workspace": a retried key is a no-op and a second call is refused [case-corrected: a replay returns the original recordId and message (D-17)] [browser part: button disabled while busy]', () => {
     let w = run(wizardStart(), 'save_company', company()).workspace;
     w = run(w, 'set_modules', { enabled: ['inventory'] }).workspace;
     const first = run(w, 'complete_setup', {}, owner, 'qa-onb-059-key');
     const retry = run(first.workspace, 'complete_setup', {}, owner, 'qa-onb-059-key');
-    expect(retry.message).toBe('This operation was already completed.');
+    expect([retry.recordId, retry.message]).toEqual([first.recordId, first.message]);
     expect(retry.workspace).toBe(first.workspace);
     expect(first.workspace.warehouses).toHaveLength(1);
     refused(first.workspace, 'complete_setup', {}, 'Setup is already complete.');

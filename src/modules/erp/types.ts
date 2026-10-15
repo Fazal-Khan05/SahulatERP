@@ -23,7 +23,9 @@ export type Payroll = { id: string; number: string; month: string; date: string;
 export type Audit = { id: string; date: string; actor: string; role: string; action: string; sourceId: string; detail: string };
 export type FollowUp = { id: string; partyId: string; date: string; note: string; nextDate: string; actor: string };
 export type ToggleModule = "sales" | "purchasing" | "inventory" | "imports" | "collections" | "cashbank" | "commissions" | "payroll" | "reports";
-export type BankAccount = { id: string; code: string; name: string; type: "bank" | "cash"; details: string; archived?: boolean };
+/** A completed command and its result, so a retry with the same idempotency key gets the original answer. */
+export type Operation = { key: string; recordId: string; message: string };
+export type BankAccount ={ id: string; code: string; name: string; type: "bank" | "cash"; details: string; archived?: boolean };
 export type Branding = { template: "standard"; logoPath?: string; letterheadPath?: string; accent: string; footer: string };
 export type Workspace = {
   schemaVersion: 1; tenantId: string; revision: number; demo: boolean;
@@ -37,7 +39,8 @@ export type Workspace = {
   shipments: Shipment[]; payrolls: Payroll[]; audit: Audit[]; followUps: FollowUp[]; bankAccounts: BankAccount[];
   periods: {month: string; locked: boolean}[];
   settings: { taxRate: string; employerEobi: string; employeeEobi: string; eobiBase: string; incomeTaxRate: string; numbering: string; approvalLimit: string };
-  operations: string[];
+  /** The most recent completed commands, oldest first (bounded by the engine). */
+  operations: Operation[];
 };
 export type Actor = { id: string; name: string; role: Role; employeeId?: string; branchIds: string[]; email?: string };
 export const DEMO_TENANT = "11111111-1111-4111-8111-111111111111";

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { decodeWorkspace } from '../../src/modules/erp/codec';
 import { canRun, execute } from '../../src/modules/erp/engine';
 import { blankWorkspace } from '../../src/modules/erp/seed';
 import { roles, type Actor, type Role, type Workspace } from '../../src/modules/erp/types';
@@ -61,5 +62,41 @@ describe('D-19 branding paths are exactly <tenant>/<logo|letterhead>.<png|jpg|jp
     for (const logoPath of bad) expect(() => run(w, 'save_branding', brand({ logoPath })), logoPath).toThrow('Branding files must belong to this company.');
     expect(() => run(w, 'save_branding', brand({ letterheadPath: `${t}/logo.png` }))).toThrow('Branding files must belong to this company.');
     expect(() => run(w, 'save_branding', brand({ letterheadPath: `${t}/../x/letterhead.jpg` }))).toThrow('Branding files must belong to this company.');
+  });
+});
+
+describe('D-17 a replayed command returns its original result', () => {
+  const party = (name: string) => ({ name, type: 'customer', city: '', email: '', taxId: '', registered: false, creditLimit: '0', terms: 0, customerClass: '' });
+  it('stores recordId and message with the key and returns them on replay, unchanged workspace', () => {
+    const w = completed();
+    const first = run(w, 'save_party', party('Replay Customer'), owner, 'fixes-b-replay-1');
+    expect(first.workspace.operations.at(-1)).toEqual({ key: 'fixes-b-replay-1', recordId: first.recordId, message: 'Replay Customer saved.' });
+    const again = run(first.workspace, 'save_party', party('Other Name'), owner, 'fixes-b-replay-1');
+    expect(again).toEqual({ workspace: first.workspace, recordId: first.recordId, message: 'Replay Customer saved.' });
+    expect(again.workspace).toBe(first.workspace);
+  });
+  it('old snapshots with plain-string operations load and replay without re-running the command', () => {
+    const w = completed();
+    const legacy = JSON.parse(JSON.stringify({ ...w, operations: ['old-key-0001', 'old-key-0002'] }));
+    const decoded = decodeWorkspace(JSON.stringify(legacy));
+    expect(decoded.operations).toEqual([
+      { key: 'old-key-0001', recordId: '', message: 'This operation was already completed.' },
+      { key: 'old-key-0002', recordId: '', message: 'This operation was already completed.' },
+    ]);
+    const replay = run(decoded, 'save_party', party('Never Saved'), owner, 'old-key-0002');
+    expect(replay).toEqual({ workspace: decoded, recordId: '', message: 'This operation was already completed.' });
+    const next = run(decoded, 'save_branding', { accent: '#222222', footer: '' }, owner, 'new-key-0001').workspace;
+    expect(next.operations.map(o => o.key)).toEqual(['old-key-0001', 'old-key-0002', 'new-key-0001']);
+    expect(decodeWorkspace({ ...legacy, operations: undefined }).operations).toEqual([]);
+  });
+  it('keeps only the most recent 500 operations and never mutates the input history', () => {
+    let w = completed();
+    for (let i = 0; i < 520; i++) w = run(w, 'save_branding', { accent: '#123456', footer: `f${i}` }, owner, `cap-key-${String(i).padStart(4, '0')}`).workspace;
+    expect(w.operations).toHaveLength(500);
+    expect(w.operations.at(-1)!.key).toBe('cap-key-0519');
+    expect(w.operations[0].key).toBe('cap-key-0020');
+    const before = JSON.stringify(w.operations);
+    run(w, 'save_branding', { accent: '#654321', footer: '' }, owner, 'cap-key-next');
+    expect(JSON.stringify(w.operations)).toBe(before);
   });
 });

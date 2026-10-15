@@ -294,11 +294,11 @@ describe('11 Cash and bank (CSH)', () => {
     expect(last(w).lines).toEqual([{ account: '5300', debit: '75.0000', credit: '0.0000' }, { account: '1001', debit: '0.0000', credit: '75.0000' }]);
   });
 
-  it('CSH-037 retrying a transfer with the same idempotency key posts one journal', () => {
+  it('CSH-037 retrying a transfer with the same idempotency key posts one journal [case-corrected: a replay returns the original recordId and message (D-17)]', () => {
     const w0 = freshCompany();
     const first = run(w0, 'bank_transfer', { fromId: 'main-bank', toId: 'cash', amount: '10', date: T }, owner, 'retry-transfer-1');
     const second = run(first.workspace, 'bank_transfer', { fromId: 'main-bank', toId: 'cash', amount: '10', date: T }, owner, 'retry-transfer-1');
-    expect(second.message).toBe('This operation was already completed.');
+    expect([second.recordId, second.message]).toEqual([first.recordId, first.message]);
     expect(second.workspace.journals).toHaveLength(1);
   });
 

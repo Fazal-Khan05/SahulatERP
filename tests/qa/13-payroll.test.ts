@@ -546,12 +546,12 @@ describe('13 Payroll (PAY)', () => {
     ]);
   });
 
-  it('PAY-066 pay retried with the same idempotency key posts one payment journal', () => {
+  it('PAY-066 pay retried with the same idempotency key posts one payment journal [case-corrected: a replay returns the original recordId and message (D-17)]', () => {
     let [w, id] = create(setup().w);
     w = advance(w, id, ['reviewed', 'approved']);
     const first = run(w, 'update_payroll', { id, status: 'paid' }, owner, 'qa-pay-retry-1');
     const second = run(first.workspace, 'update_payroll', { id, status: 'paid' }, owner, 'qa-pay-retry-1');
-    expect(second.message).toBe('This operation was already completed.');
+    expect([second.recordId, second.message]).toEqual([first.recordId, first.message]);
     expect(second.workspace.journals.filter(j => j.sourceId === `${id}:paid`)).toHaveLength(1);
   });
 

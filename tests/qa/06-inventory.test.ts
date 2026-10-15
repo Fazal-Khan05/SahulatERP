@@ -460,13 +460,13 @@ describe('06 inventory (INV)', () => {
     expect(() => postJournal(copy, moveSource, 'again', [{ account: '1200', debit: '1', credit: '0' }, { account: '5300', debit: '0', credit: '1' }])).toThrow('This source has already been posted.');
   });
 
-  it('INV-069 an idempotent retry of set_stock_quantity creates a single movement', () => {
+  it('INV-069 an idempotent retry of set_stock_quantity creates a single movement [case-corrected: a replay returns the original recordId and message (D-17)]', () => {
     const { w, item } = base();
     const first = setQty(w, item, '50', '45', {}, owner);
     const payload = { itemId: item, warehouseId: MAIN, expectedQuantity: '50', targetQuantity: '45', date: today(), reason: 'Physical count' };
     const once = run(w, 'set_stock_quantity', payload, owner, 'qa-inv-069');
     const retry = run(once.workspace, 'set_stock_quantity', payload, owner, 'qa-inv-069');
-    expect(retry.message).toBe('This operation was already completed.');
+    expect([retry.recordId, retry.message]).toEqual([once.recordId, once.message]);
     expect(retry.workspace.stockMoves.length).toBe(first.workspace.stockMoves.length);
   });
 

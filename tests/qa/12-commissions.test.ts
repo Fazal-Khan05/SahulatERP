@@ -736,13 +736,13 @@ describe('12 Commissions (COM)', () => {
 
   it.todo('COM-089 [browser] LIVE label shows on Commissions in the sidebar');
 
-  it('COM-090 approve retried with the same key changes nothing the second time', () => {
+  it('COM-090 approve retried with the same key changes nothing the second time [case-corrected: a replay returns the original recordId and message (D-17)]', () => {
     const c = setup();
     let [w, inv] = invoice(c, c.w);
     w = pay(w, c.cust, inv, '5000');
     const first = run(w, 'approve_commission', { ids: [com(w, inv).id] }, undefined, 'qa-approve-retry');
     const second = run(first.workspace, 'approve_commission', { ids: [com(w, inv).id] }, undefined, 'qa-approve-retry');
-    expect(second.message).toBe('This operation was already completed.');
+    expect([second.recordId, second.message]).toEqual([first.recordId, first.message]);
     expect(second.workspace).toBe(first.workspace);
   });
 

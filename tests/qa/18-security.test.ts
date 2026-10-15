@@ -690,7 +690,7 @@ describe('18 security', () => {
   it('SEC-088 clickjacking: framing blocked by X-Frame-Options DENY', () => {
     expect(src('next.config.ts')).toContain('{key:"X-Frame-Options",value:"DENY"}');
   });
-  it('SEC-089 open redirect in next= is blocked for every variant [defect: "/\\evil.com" redirects off-site]', async () => {
+  it('SEC-089 open redirect in next= is blocked for every variant', async () => {
     for (const next of ['https://evil.com', '//evil.com', '/\\evil.com', '/\\/evil.com', '%2F%2Fevil.com']) {
       const r = await callbackRoute.GET(new Request(`http://localhost/auth/callback?next=${encodeURIComponent(next)}`));
       expect(new URL(r.headers.get('location')!).host, next).toBe('localhost');

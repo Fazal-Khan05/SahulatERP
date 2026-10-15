@@ -5,7 +5,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { scopeWorkspace } from '../../src/modules/erp/access';
 import { buildDemoWorkspace } from '../../src/modules/erp/demo';
 import { blankWorkspace } from '../../src/modules/erp/seed';
@@ -13,6 +13,12 @@ import { DEMO_TENANT, PARTNER_TENANT, roles, type Role } from '../../src/modules
 
 type Row = Record<string, unknown>;
 const root = resolve(__dirname, '../..');
+
+const S = vi.hoisted(() => ({ exchanged: [] as string[] }));
+vi.mock('@/lib/supabase/server', () => ({
+  createServerSupabase: async () => ({ auth: { exchangeCodeForSession: async (code: string) => { S.exchanged.push(code); return {}; } } }),
+}));
+import * as callbackRoute from '../../src/app/auth/callback/route';
 
 // ---------- D-07: role-aware reads on the relational projection (PGlite with the real migrations) ----------
 const supabaseStubs = `
@@ -124,5 +130,39 @@ describe('D-07 RLS: only full-ledger members read the projection directly', () =
       `select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
        where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity and c.relname <> 'schema_migrations'`)).rows;
     expect(unprotected).toEqual([]);
+  });
+});
+
+// ---------- D-18: /auth/callback?next= only redirects within the app ----------
+describe('D-18 auth callback redirect stays on the app origin', () => {
+  const location = async (next: string, origin = 'http://localhost') => {
+    const res = await callbackRoute.GET(new Request(`${origin}/auth/callback?code=c&next=${encodeURIComponent(next)}`));
+    expect(res.status).toBe(307);
+    return res.headers.get('location')!;
+  };
+
+  it('falls back to / for every off-site variant', async () => {
+    const offSite = [
+      'https://evil.com', 'http://evil.com/account/reset', '//evil.com', '///evil.com', '/\\evil.com', '/\\/evil.com', '\\\\evil.com',
+      '/\t/evil.com', '/\n/evil.com', '\t//evil.com', ' //evil.com', '/\r\n/evil.com', 'https:evil.com', 'http://localhost@evil.com',
+      'http://localhost.evil.com/', 'https://localhost/', 'javascript:alert(1)', 'data:text/html,hi', 'http://[::1', '',
+    ];
+    for (const next of offSite) expect(await location(next), JSON.stringify(next)).toBe('http://localhost/');
+  });
+
+  it('keeps encoded slashes and backslashes on the app as a path', async () => {
+    for (const next of ['/%5Cevil.com', '/%2F%2Fevil.com', '%2F%2Fevil.com', '/%5C%5Cevil.com']) {
+      expect(new URL(await location(next)).host, next).toBe('localhost');
+    }
+  });
+
+  it('keeps legitimate in-app destinations, including query and hash', async () => {
+    expect(await location('/account/reset')).toBe('http://localhost/account/reset');
+    expect(await location('/sales?tab=invoices#top')).toBe('http://localhost/sales?tab=invoices#top');
+    expect(await location('http://localhost/account/reset')).toBe('http://localhost/account/reset');
+    expect(await location('/account/reset', 'https://erp.example.com')).toBe('https://erp.example.com/account/reset');
+    const res = await callbackRoute.GET(new Request('http://localhost/auth/callback'));
+    expect(res.headers.get('location')).toBe('http://localhost/');
+    expect(S.exchanged.length).toBeGreaterThan(0);
   });
 });

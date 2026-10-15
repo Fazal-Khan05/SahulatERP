@@ -135,7 +135,7 @@ test('SET-060 Active tab has a violet underline', async () => {
   expect(other).not.toBe('rgb(107, 61, 245)');
 });
 
-test('SET-069 Branding preview typography and colours match the print page [defect]', async () => {
+test('SET-069 Branding preview typography and colours match the print page', async () => {
   const { page, context } = s;
   await settings(page, 'Company & documents');
   const read = (p: Page, root: string) => p.evaluate(r => {

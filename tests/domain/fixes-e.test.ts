@@ -90,6 +90,14 @@ describe('D-47 printed labels meet 4.5:1 on the white sheet', () => {
   });
 });
 
+describe('D-69 the branding preview uses the print font', () => {
+  it('sets the print font stack on .doc itself, so the in-app preview does not inherit the app font', () => {
+    const stack = 'font-family: Arial, Helvetica, "Noto Naskh Arabic", sans-serif;';
+    expect(printCss.split('\n').find(line => line.startsWith('.doc {'))).toContain(stack);
+    expect(printCss.split('\n').find(line => line.startsWith('.print-page {'))).toContain(stack);
+  });
+});
+
 describe('D-15 reprints use the invoice-time tax snapshot', () => {
   const sell = (w: Workspace, partyId: string) => {
     const created = run(w, 'create_document', { kind: 'sales_invoice', partyId, warehouseId: 'khi-main', date: '2026-10-15', dueDate: '2026-11-14', lines: [{ itemId: 'i-1', quantity: '1', price: '2400', taxRate: '18' }] });

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { toggleModules } from '../../src/modules/erp/modules';
 import { F, PHONE, freshBuilder, gotoApp, home, openModule, readWorkspaceApi, richWorkspace, sharedSession, signedInPage, writeQaWorkspace, type Session, AUTH_FILE, QA_TENANT, authState } from './helpers';
 
 /** The rich company plus one payroll run in every status: 06 paid, 07 approved, 08 reviewed, 09 draft. */
@@ -124,8 +125,8 @@ test('PAY-096 Payroll transition buttons are keyboard focusable and operable', a
   expect(w.payrolls.find(p => p.number === 'PAY-2026-08')!.status).toBe('paid');
 });
 
-test('PAY-062 Settings → Payroll is visible while Payroll is on [defect]', async () => {
-  const { page } = s;
+test('PAY-062 Settings → Payroll is visible while Payroll is on', async () => {
+  const { page, context } = s;
   // A real (non-demo) company: payroll settings start blank, so the engine asks for Settings → Payroll.
   const b = freshBuilder();
   b.run('save_employee', { name: F.salesperson, role: 'Order Booker', territory: 'Karachi', salary: '45000', allowance: '0', deduction: '0', attendance: 30, active: true });
@@ -141,6 +142,26 @@ test('PAY-062 Settings → Payroll is visible while Payroll is on [defect]', asy
     await expect(page.getByRole('tab', { name: 'Payroll' }), 'Settings has a Payroll section while Payroll is on').toBeVisible({ timeout: 5000 });
     await page.getByRole('tab', { name: 'Payroll' }).click();
     await expect(page.getByLabel(/EOBI/).first()).toBeVisible();
+    // Entering the rates there lets the first payroll run go through.
+    await page.getByLabel('Employer EOBI (%)').fill('5');
+    await page.getByLabel('Employee EOBI (%)').fill('1');
+    await page.getByLabel('EOBI wage base (PKR)').fill('37000');
+    await page.getByLabel('Income-tax rate (%)').fill('5');
+    await page.getByRole('button', { name: 'Save changes' }).click();
+    await expect(page.getByText('Payroll and tax settings saved.')).toBeVisible({ timeout: 30_000 });
+    expect((await readWorkspaceApi(context.request)).settings).toMatchObject({ employerEobi: '5', employeeEobi: '1', eobiBase: '37000', incomeTaxRate: '5' });
+    await openModule(page, 'Payroll');
+    await runsCard(page).getByRole('button', { name: 'Create payroll' }).click();
+    await expect(runsCard(page).locator('tbody tr').filter({ hasText: 'PAY-' })).toHaveCount(1, { timeout: 30_000 });
+    expect((await readWorkspaceApi(context.request)).payrolls).toHaveLength(1);
+    // With Payroll off the tab keeps only the tax settings.
+    await writeQaWorkspace(freshBuilder(toggleModules.filter(m => m !== 'payroll')).w);
+    await gotoApp(page);
+    await openModule(page, 'Settings');
+    await expect(page.getByRole('tab', { name: 'Payroll' })).toHaveCount(0);
+    await page.getByRole('tab', { name: 'Tax & numbering' }).click();
+    await expect(page.getByLabel('Default sales-tax rate (%)')).toBeVisible();
+    await expect(page.getByLabel(/EOBI/)).toHaveCount(0);
   } finally {
     await writeQaWorkspace(payrollWorkspace());
   }

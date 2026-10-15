@@ -105,14 +105,13 @@ test('SET-042 Hide dialog on phone is a bottom sheet with a 16px password input'
   expect(font).toBe('16px');
 });
 
-test('SET-043 Access tab shows company name, tax id and revision', async () => {
-  const { page, context } = s;
+test('SET-043 Access tab shows company name, tax id and revision [case-corrected: the internal revision number is no longer shown (NAV-043, D-57)]', async () => {
+  const { page } = s;
   await settings(page, 'Access');
-  const w = await readWorkspaceApi(context.request);
   const grid = page.locator('.settings-grid');
   await expect(grid).toContainText('QA Trading Company');
   await expect(grid).toContainText('1234567-8');
-  await expect(grid.locator('div').filter({ hasText: 'Revision' }).locator('strong')).toHaveText(String(w.revision));
+  await expect(grid).not.toContainText('Revision');
 });
 
 test('SET-045 View as Salesperson: reduced sidebar, "Previewing as Salesperson" chip, Exit preview', async () => {
@@ -153,7 +152,7 @@ test('SET-069 Branding preview typography and colours match the print page', asy
   expect(preview).toEqual(printed);
 });
 
-test('SET-075 Settings → Features shows an "N turned on" count matching the switches [defect]', async () => {
+test('SET-075 Settings → Features shows an "N turned on" count matching the switches', async () => {
   const { page } = s;
   await settings(page, 'Features');
   const on = await page.locator('.module-card input[role=switch]:checked').count();

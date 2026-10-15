@@ -8,6 +8,8 @@ import { documentView, sampleInvoiceView } from '@/modules/erp/documents';
 import type { Branding, Workspace } from '@/modules/erp/types';
 
 export type BrandingDraft = Pick<Branding, 'accent' | 'footer'>;
+// fetch() rejects only when the request never reached the server; the browser's own text ("Failed to fetch") means nothing to a user.
+const offline = () => { throw new Error('No internet connection. Check your connection and try again.'); };
 const swatches = ['#087f69', '#1f5fa8', '#7a3fa0', '#b94145', '#c2611a', '#2f3e4e', '#0e7490', '#4d7c0f'];
 
 /**
@@ -41,7 +43,7 @@ export function BrandingForm({ workspace, company, value, onChange, onWorkspace,
     try {
       const form = new FormData();
       form.set('kind', kind); form.set('file', file);
-      const response = await fetch('/api/branding/upload', { method: 'POST', headers: { 'x-tenant-id': workspace.tenantId }, body: form });
+      const response = await fetch('/api/branding/upload', { method: 'POST', headers: { 'x-tenant-id': workspace.tenantId }, body: form }).catch(offline);
       const result = await response.json();
       if (!response.ok || !result.success) throw new Error(result.message || 'Upload failed.');
       onWorkspace(result.workspace);
@@ -52,7 +54,7 @@ export function BrandingForm({ workspace, company, value, onChange, onWorkspace,
     setBusy(kind); setError('');
     try {
       const payload = { ...workspace.branding, ...value, [kind === 'logo' ? 'logoPath' : 'letterheadPath']: undefined };
-      const response = await fetch('/api/workspace', { method: 'POST', headers: { 'content-type': 'application/json', 'x-tenant-id': workspace.tenantId }, body: JSON.stringify({ type: 'save_branding', payload, idempotencyKey: crypto.randomUUID() }) });
+      const response = await fetch('/api/workspace', { method: 'POST', headers: { 'content-type': 'application/json', 'x-tenant-id': workspace.tenantId }, body: JSON.stringify({ type: 'save_branding', payload, idempotencyKey: crypto.randomUUID() }) }).catch(offline);
       const result = await response.json();
       if (!response.ok || !result.success) throw new Error(result.message || 'Could not remove the image.');
       onWorkspace(result.workspace);
@@ -90,9 +92,9 @@ export function BrandingForm({ workspace, company, value, onChange, onWorkspace,
       </label>
       {error && <p className="error-note" role="alert">{error}</p>}
     </div>
-    <div className="branding-preview" aria-label="Invoice preview">
+    <div className="branding-preview">
       <span className="branding-label">Preview{invoice ? ` · ${invoice.number}` : ' · sample invoice'}</span>
-      <div className="branding-preview-frame"><DocumentPreview view={view} company={previewCompany} branding={{ ...workspace.branding, ...value }} assets={assets} compact/></div>
+      <div className="branding-preview-frame" tabIndex={0} role="region" aria-label="Invoice preview"><DocumentPreview view={view} company={previewCompany} branding={{ ...workspace.branding, ...value }} assets={assets} compact/></div>
     </div>
   </div>;
 }

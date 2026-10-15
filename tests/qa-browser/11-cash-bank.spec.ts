@@ -40,7 +40,7 @@ test('CSH-049 Account cards show a bank or cash type icon', async () => {
   }
 });
 
-test('CSH-050 Negative balance is styled red [defect]', async () => {
+test('CSH-050 Negative balance is styled red', async () => {
   const { page, context } = s;
   const w = await readWorkspaceApi(context.request);
   const petty = w.bankAccounts.find(a => a.name === 'Petty cash')!;

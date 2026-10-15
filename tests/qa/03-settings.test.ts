@@ -75,9 +75,9 @@ function busyCompany() {
 }
 
 describe('03 settings (SET)', () => {
-  it('SET-001 Settings shows tabs Company & documents, Features, Access, Audit history', () => {
+  it('SET-001 Settings shows tabs Company & documents, Features, Access, Audit history [case-corrected: D-09 adds a "Payroll & tax" tab after Company & documents]', () => {
     const html = settingsHtml(freshCompany());
-    expect([...html.matchAll(/role="tab" aria-selected="(?:true|false)" class="tab[^"]*">([^<]+)</g)].map(m => m[1])).toEqual(['Company &amp; documents', 'Features', 'Access', 'Audit history']);
+    expect([...html.matchAll(/role="tab" aria-selected="(?:true|false)" class="tab[^"]*">([^<]+)</g)].map(m => m[1])).toEqual(['Company &amp; documents', 'Payroll &amp; tax', 'Features', 'Access', 'Audit history']);
   });
 
   it('SET-002 changing the company name saves company then branding [browser part: combined "Company details and document branding saved." notice; sidebar switcher]', () => {
@@ -439,11 +439,11 @@ describe('03 settings (SET)', () => {
     expect(roleModules).toMatch(/Owner:nav\.map\(item=>item\.key\),Accountant:nav\.map\(item=>item\.key\),Auditor:nav\.map\(item=>item\.key\)/);
   });
 
-  it('SET-059 tabs are role=tab with aria-selected [browser part: Arrow/Tab keyboard reach]', () => {
+  it('SET-059 tabs are role=tab with aria-selected [browser part: Arrow/Tab keyboard reach] [case-corrected: five tabs since D-09 added Payroll & tax]', () => {
     const html = settingsHtml(freshCompany());
     expect(html).toContain('role="tablist"');
     expect(html.match(/role="tab" aria-selected="true"/g)).toHaveLength(1);
-    expect(html.match(/role="tab" aria-selected="false"/g)).toHaveLength(3);
+    expect(html.match(/role="tab" aria-selected="false"/g)).toHaveLength(4);
   });
 
   it.todo('SET-060 [browser] active tab has a violet underline');

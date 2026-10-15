@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { writeFileSync } from 'node:fs';
 import { PHONE, gotoApp, home, openModule, readWorkspaceApi, sharedSession, signedInPage, type Session, keepSignedIn } from './helpers';
 
 let s: Session;
@@ -43,7 +44,7 @@ test('PRD-054 Products table on phone: horizontal scroll hint and bold first col
   expect(scroll).toBe(true);
 });
 
-test('PRD-076 20 MB CSV is refused without freezing the browser [documented: the whole file is parsed on the main thread, then refused with "Import at most 2,000 rows at a time."] [defect]', async () => {
+test('PRD-076 20 MB CSV is refused without freezing the browser [documented: reading stops at the first row over 2,000, then "Import at most 2,000 rows at a time."]', async () => {
   test.setTimeout(120_000);
   const { page } = s;
   await products(page);
@@ -54,8 +55,12 @@ test('PRD-076 20 MB CSV is refused without freezing the browser [documented: the
   const count = Math.ceil(20 * 1024 * 1024 / row.length);
   const csv = 'sku,name,category,unit,price,cost\n' + Array.from({ length: count }, (_, i) => row.replace('000000', String(i).padStart(6, '0'))).join('');
   expect(csv.length).toBeGreaterThan(20 * 1024 * 1024);
+  // Chosen from disk as a user would: an in-memory buffer is base64-decoded by Playwright on the page's main
+  // thread (several seconds for 20 MB) before the app even sees the file, which this case is not about.
+  const file = test.info().outputPath('big.csv');
+  writeFileSync(file, csv);
   const started = Date.now();
-  await page.getByLabel('Choose CSV file').setInputFiles({ name: 'big.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
+  await page.getByLabel('Choose CSV file').setInputFiles(file);
   await expect(dialog.getByRole('alert')).toHaveText('Import at most 2,000 rows at a time.', { timeout: 60_000 });
   const elapsed = Date.now() - started;
   const longest = await page.evaluate(() => (window as unknown as { qaLongest: number }).qaLongest);

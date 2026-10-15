@@ -12,6 +12,8 @@ import type { Actor, BankAccount, Workspace } from '@/modules/erp/types';
 type CommandResult = { ok: boolean; message: string };
 type CommandFn = (type: string, payload: Record<string, unknown>) => Promise<CommandResult>;
 type ModalKind = 'account' | 'transfer' | 'expense' | null;
+/** Overdrawn balances (below zero) show in the danger colour; the minus sign stays as the non-colour cue. */
+const balanceTone = (value: string) => D(value).lt(0) ? { color: 'var(--danger)' } : undefined;
 
 /** Bank and cash accounts with balances and activity, transfers, petty expenses and the cheque register. */
 export function CashBankView({ workspace, actor, editable, busy, command }: { workspace: Workspace; actor: Actor; editable: boolean; busy: string; command: CommandFn }) {
@@ -41,31 +43,33 @@ export function CashBankView({ workspace, actor, editable, busy, command }: { wo
 
   return <div className="stack">
     <div className="metric-grid">
-      <section className="metric-card"><div className="metric-label">All cash & bank<span className="metric-icon"><Wallet size={18}/></span></div><strong>{formatMoney(money(total))}</strong><small>Posted balances</small></section>
-      {accounts.slice(0, 3).map(a => <section className="metric-card" key={a.id}><div className="metric-label">{a.name}<span className="metric-icon">{a.type === 'bank' ? <Landmark size={18}/> : <Banknote size={18}/>}</span></div><strong>{formatMoney(accountBalance(workspace, a.code))}</strong><small>{a.type === 'bank' ? a.details || 'Bank account' : 'Cash'}</small></section>)}
+      <section className="metric-card"><div className="metric-label">All cash & bank<span className="metric-icon"><Wallet size={18}/></span></div><strong style={balanceTone(money(total))}>{formatMoney(money(total))}</strong><small>Posted balances</small></section>
+      {accounts.slice(0, 3).map(a => <section className="metric-card" key={a.id}><div className="metric-label">{a.name}<span className="metric-icon">{a.type === 'bank' ? <Landmark size={18}/> : <Banknote size={18}/>}</span></div><strong style={balanceTone(accountBalance(workspace, a.code))}>{formatMoney(accountBalance(workspace, a.code))}</strong><small>{a.type === 'bank' ? a.details || 'Bank account' : 'Cash'}</small></section>)}
     </div>
     <section className="card">
       <div className="card-heading"><div><h2>Accounts</h2><p>{accounts.length} active · select one to see its activity</p></div>
         {canManage && <div className="inventory-actions"><Button variant="outline" disabled={accounts.length < 2} onClick={() => setModal('transfer')}><ArrowLeftRight size={16}/>Transfer</Button><Button variant="outline" disabled={!accounts.length} onClick={() => setModal('expense')}><Receipt size={16}/>Record expense</Button><Button onClick={() => { setEditing(null); setModal('account'); }}><Plus size={16}/>New account</Button></div>}
       </div>
-      <div className="table-scroll"><table><thead><tr><th>Account</th><th>Type</th><th>Details</th><th>Ledger code</th><th>Balance</th><th>Actions</th></tr></thead><tbody>
+      <div className="table-scroll" tabIndex={0} role="region" aria-label="Accounts table"><table><thead><tr><th>Account</th><th>Type</th><th>Details</th><th>Ledger code</th><th>Balance</th><th>Actions</th></tr></thead><tbody>
         {accounts.map(a => <tr key={a.id} className={selected === a.code ? 'row-selected' : undefined}>
-          <td><button className="text-button" onClick={() => setSelected(a.code)}><strong>{a.name}</strong></button></td><td>{a.type}</td><td>{a.details || '—'}</td><td>{a.code}</td><td>{formatMoney(accountBalance(workspace, a.code))}</td>
+          <td><button className="text-button" onClick={() => setSelected(a.code)}><strong>{a.name}</strong></button></td><td>{a.type}</td><td>{a.details || '—'}</td><td>{a.code}</td><td style={balanceTone(accountBalance(workspace, a.code))}>{formatMoney(accountBalance(workspace, a.code))}</td>
           <td><div className="inventory-row-actions"><Button size="sm" variant="outline" onClick={() => setSelected(a.code)}>Activity</Button>{canManage && <Button size="sm" variant="ghost" aria-label={`Edit ${a.name}`} onClick={() => { setEditing(a); setModal('account'); }}>Edit</Button>}</div></td>
         </tr>)}
-        {!legacy.isZero() && <tr className={selected === '1000' ? 'row-selected' : undefined}><td><button className="text-button" onClick={() => setSelected('1000')}><strong>Bank & cash (legacy)</strong></button></td><td>—</td><td>Receipts recorded before accounts existed</td><td>1000</td><td>{formatMoney(money(legacy))}</td><td><Button size="sm" variant="outline" onClick={() => setSelected('1000')}>Activity</Button></td></tr>}
+        {!legacy.isZero() && <tr className={selected === '1000' ? 'row-selected' : undefined}><td><button className="text-button" onClick={() => setSelected('1000')}><strong>Bank & cash (legacy)</strong></button></td><td>—</td><td>Receipts recorded before accounts existed</td><td>1000</td><td style={balanceTone(money(legacy))}>{formatMoney(money(legacy))}</td><td><Button size="sm" variant="outline" onClick={() => setSelected('1000')}>Activity</Button></td></tr>}
         {!accounts.length && legacy.isZero() && <tr><td colSpan={6}><div className="empty-state">No accounts yet. Add your bank account and a cash-in-hand account.</div></td></tr>}
       </tbody></table></div>
     </section>
     <section className="card">
-      <div className="card-heading"><div><h2>Activity · {selectedName}</h2><p>Balance {formatMoney(activity.balance)} · latest {activity.rows.length} movements</p></div></div>
-      <div className="table-scroll"><table><thead><tr><th>Date</th><th>Journal</th><th>Description</th><th>In</th><th>Out</th><th>Balance</th></tr></thead><tbody>
-        {activity.rows.length ? activity.rows.map((r, i) => <tr key={`${r.journal}-${i}`}><td>{r.date}</td><td>{r.journal}</td><td>{r.memo}</td><td>{r.debit ? formatMoney(r.debit) : ''}</td><td>{r.credit ? formatMoney(r.credit) : ''}</td><td>{formatMoney(r.balance)}</td></tr>) : <tr><td colSpan={6}><div className="empty-state">No movements on this account yet.</div></td></tr>}
+      <div className="card-heading"><div><h2>Activity · {selectedName}</h2><p>Balance <span style={balanceTone(activity.balance)}>{formatMoney(activity.balance)}</span> · latest {activity.rows.length} movements</p></div></div>
+      <div className="table-scroll" tabIndex={0} role="region" aria-label={`Activity for ${selectedName}`}><table><thead><tr><th>Date</th><th>Journal</th><th>Description</th><th>In</th><th>Out</th><th>Balance</th></tr></thead><tbody>
+        {activity.rows.length ? activity.rows.map((r, i) => <tr key={`${r.journal}-${i}`}><td>{r.date}</td><td>{r.journal}</td><td>{r.memo}</td><td>{r.debit ? formatMoney(r.debit) : ''}</td><td>{r.credit ? formatMoney(r.credit) : ''}</td><td style={balanceTone(r.balance)}>{formatMoney(r.balance)}</td></tr>) : <tr><td colSpan={6}><div className="empty-state">No movements on this account yet.{canManage && accounts.length
+          ? <div className="form-actions" style={{ justifyContent: 'center', marginTop: 14 }}>{accounts.length > 1 && <Button variant="outline" onClick={() => setModal('transfer')}><ArrowLeftRight size={16}/>Transfer</Button>}<Button variant="outline" onClick={() => setModal('expense')}><Receipt size={16}/>Record expense</Button></div>
+          : ' Receipts, transfers and expenses posted to it appear here.'}</div></td></tr>}
       </tbody></table></div>
     </section>
     <section className="card">
       <div className="card-heading"><div><h2>Cheques in hand</h2><p>{cheques.length} awaiting deposit or clearance · deposit into an account, then mark cleared or bounced</p></div></div>
-      <div className="table-scroll"><table><thead><tr><th>Cheque</th><th>Customer / supplier</th><th>Cheque date</th><th>Amount</th><th>Status</th><th>Account</th><th>Actions</th></tr></thead><tbody>
+      <div className="table-scroll" tabIndex={0} role="region" aria-label="Cheques in hand table"><table><thead><tr><th>Cheque</th><th>Customer / supplier</th><th>Cheque date</th><th>Amount</th><th>Status</th><th>Account</th><th>Actions</th></tr></thead><tbody>
         {cheques.length ? cheques.map(r => <ChequeRow key={r.id} receipt={r} workspace={workspace} editable={editable} busy={busy} command={command}/>) : <tr><td colSpan={7}><div className="empty-state">No cheques waiting.</div></td></tr>}
       </tbody></table></div>
     </section>

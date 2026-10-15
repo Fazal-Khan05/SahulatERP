@@ -51,15 +51,15 @@ export function DocumentsList({ side, workspace, actor, editable, busy, command 
       <label>To date<input aria-label="To date" type="date" value={toDate} min={fromDate || undefined} onChange={e => setToDate(e.target.value)}/></label>
       {filtered && <button className="list-filter-clear" type="button" onClick={clear}>Clear filters</button>}
     </div>
-    <div className="table-scroll"><table><thead><tr>{['Document', partyType === 'customer' ? 'Customer' : 'Supplier', 'Date', 'Type', 'Status', 'Total', 'Action'].map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>{visible.length ? visible.map(d => <tr key={d.id}>
-      <td>{d.number}</td><td>{documentPartyName(workspace, d)}</td><td>{d.date}</td><td>{documentTitle(d.kind)}</td><td><span className={`badge ${d.status === 'submitted' ? 'success' : d.status === 'draft' ? 'warning' : 'info'}`}>{d.status}</span></td><td>{formatMoney(d.total)}{d.currency !== 'PKR' ? ` ${d.currency}` : ''}</td>
+    <div className="table-scroll" tabIndex={0} role="region" aria-label={`${side === 'sales' ? 'Sales' : 'Purchase'} documents table`}><table><thead><tr>{['Document', partyType === 'customer' ? 'Customer' : 'Supplier', 'Date', 'Type', 'Status', 'Total', 'Action'].map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>{visible.length ? visible.map(d => <tr key={d.id}>
+      <td>{d.number}</td><td>{documentPartyName(workspace, d)}</td><td>{d.date}</td><td>{documentTitle(d.kind)}</td><td><span className={`badge ${d.status === 'submitted' ? 'success' : d.status === 'draft' ? 'warning' : 'info'}`}>{d.status}</span></td><td>{formatMoney(d.total, d.currency)}</td>
       <td><div className="inventory-row-actions">
         <Button size="sm" variant="outline" aria-label={`View ${d.kind === 'sales_invoice' ? 'invoice' : documentTitle(d.kind).toLowerCase()} ${d.number}`} onClick={() => setSelectedId(d.id)}>View</Button>
         {editable && d.status === 'draft' && <Button size="sm" disabled={!!busy} onClick={() => command('submit_document', { id: d.id })}>Submit</Button>}
         {convertible(d) && <Button size="sm" variant="outline" aria-label={`Convert ${d.number}`} onClick={() => setConverting(d)}><ArrowRight size={14}/>{nextKind[d.kind] === 'delivery' ? 'Deliver' : nextKind[d.kind] === 'goods_receipt' ? 'Receive' : nextKind[d.kind] === 'sales_invoice' || nextKind[d.kind] === 'supplier_invoice' ? 'Invoice' : 'Convert'}</Button>}
         <a className="button button-outline button-sm" href={`/print/${d.kind}/${d.id}?tenant=${workspace.tenantId}`} target="_blank" rel="noopener" aria-label={`Print ${d.number}`}><Printer size={14}/>Print</a>
       </div></td>
-    </tr>) : <tr><td colSpan={7}><div className="empty-state">{all.length ? `No ${side === 'sales' ? 'sales' : 'purchase'} documents match these filters.` : `No ${side === 'sales' ? 'sales' : 'purchase'} documents yet.`}</div></td></tr>}</tbody></table></div>
+    </tr>) : <tr><td colSpan={7}><div className="empty-state">{all.length ? <>No {side === 'sales' ? 'sales' : 'purchase'} documents match these filters. <button className="text-button" type="button" onClick={clear}>Reset filters</button></> : `No ${side === 'sales' ? 'sales' : 'purchase'} documents yet.${editable ? ` Create one with ${side === 'sales' ? 'New invoice' : 'New purchase order'} above.` : ''}`}</div></td></tr>}</tbody></table></div>
     <p className="table-scroll-hint">Swipe sideways to see every column.</p>
     <DocumentDetails workspace={workspace} actor={actor} documentId={selectedId} editable={editable} busy={busy} command={command} onClose={() => setSelectedId(null)}/>
     {creating && <DocumentEditor open kind={creating} workspace={workspace} actor={actor} busy={busy} onClose={() => setCreating(null)} command={command}/>}

@@ -211,7 +211,7 @@ test('ONB-085 Step transition: forward slides in from the right, back from the l
   await context.close();
 });
 
-test('ONB-088 Owner finishes setup while a second session is on the card; that session\'s next action shows the workspace [documented: simulated with the same owner in a second browser context; no second member account] [defect]', async ({ browser }) => {
+test('ONB-088 Owner finishes setup while a second session is on the card; that session\'s next action shows the workspace [documented: simulated with the same owner in a second browser context; no second member account]', async ({ browser }) => {
   const first = await openWizard(browser, 4);
   const second = await signedInPage(browser);
   await second.page.goto(APP);
@@ -227,7 +227,7 @@ test('ONB-088 Owner finishes setup while a second session is on the card; that s
   expect(state, JSON.stringify(state)).toMatchObject({ overview: true, card: 0 });
 });
 
-test('ONB-093 Logo upload while offline shows a clear error and can be retried [defect]', async ({ browser }) => {
+test('ONB-093 Logo upload while offline shows a clear error and can be retried', async ({ browser }) => {
   const { context, page } = await openWizard(browser, 2);
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
   await context.setOffline(true);

@@ -7,6 +7,34 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dial
 import { csvFields, mapHeader, toCsv, type EntitySpec } from '@/modules/erp/master-data';
 
 type Parsed = { headers: string[]; mapping: Record<string, string | null>; rows: Record<string, string>[] };
+/** Same limit as the `import_records` command. */
+export const maxImportRows = 2000;
+/**
+ * Undoes the CSV export's formula-injection guard, so re-importing our own export keeps "+92 300 …" rather than
+ * "'+92 300 …": one leading ' is removed when the rest starts with = + - @, a tab or a carriage return.
+ * Same rule as fromCsvCell() in master-data.ts (D-20); use that one once both are merged.
+ */
+export const fromCsvCell = (value: string) => /^'[=+\-@\t\r]/.test(value) ? value.slice(1) : value;
+
+/**
+ * Reads CSV rows one at a time (blank lines skipped) and stops at the first row over the limit, so a huge file is
+ * refused after its first chunk instead of being parsed whole on the main thread.
+ */
+export function readCsvRows(input: File | string, done: (result: { headers: string[]; rows: Record<string, string>[]; tooMany: boolean }) => void, failed: () => void = () => {}) {
+  const rows: Record<string, string>[] = [];
+  let headers: string[] = [];
+  let tooMany = false;
+  Papa.parse<Record<string, string>, File>(input as File, {
+    header: true, skipEmptyLines: 'greedy', transformHeader: h => h.trim(), transform: fromCsvCell,
+    step: (row, parser) => {
+      if (rows.length >= maxImportRows) { tooMany = true; parser.abort(); return; }
+      headers = row.meta.fields ?? headers;
+      rows.push(row.data);
+    },
+    complete: () => done({ headers, rows, tooMany }),
+    error: failed,
+  });
+}
 
 /**
  * CSV import for one entity: parse in the browser, match columns by header, show a preview and
@@ -30,17 +58,12 @@ export function CsvImportDialog({ spec, open, busy, onClose, onImport }: {
   function parse(file: File | undefined) {
     if (!file) return;
     setError(''); setFileName(file.name);
-    Papa.parse<Record<string, string>>(file, {
-      header: true, skipEmptyLines: 'greedy', transformHeader: h => h.trim(),
-      complete: result => {
-        const headers = result.meta.fields ?? [];
-        if (!headers.length || !result.data.length) { setError('The file has no data rows.'); setParsed(null); return; }
-        if (result.data.length > 2000) { setError('Import at most 2,000 rows at a time.'); setParsed(null); return; }
-        const mapping = Object.fromEntries(headers.map(h => [h, mapHeader(h, fields)]));
-        setParsed({ headers, mapping, rows: result.data });
-      },
-      error: () => { setError('The file could not be read. Save it as CSV (UTF-8) and try again.'); setParsed(null); },
-    });
+    readCsvRows(file, ({ headers, rows, tooMany }) => {
+      if (tooMany) { setError('Import at most 2,000 rows at a time.'); setParsed(null); return; }
+      if (!headers.length || !rows.length) { setError('The file has no data rows.'); setParsed(null); return; }
+      const mapping = Object.fromEntries(headers.map(h => [h, mapHeader(h, fields)]));
+      setParsed({ headers, mapping, rows });
+    }, () => { setError('The file could not be read. Save it as CSV (UTF-8) and try again.'); setParsed(null); });
   }
   function template() {
     const example: Record<string, string> = { name: `Example ${spec.singular}`, sku: 'ABC-001', city: 'Karachi', phone: '+92 300 1234567', email: 'contact@example.com', taxId: '1234567-8', registered: 'yes', customerClass: spec.key === 'suppliers' ? 'Importer' : 'Retailer', creditLimit: '100000', terms: '30', category: 'General', unit: 'pcs', price: '1000', cost: '800', hsCode: '8504.4000', reorderLevel: '20', weight: '1', volume: '0.01', role: 'Order Booker', territory: 'Karachi', salary: '50000', allowance: '5000', deduction: '0', attendance: '30', active: 'yes', manager: '' };
@@ -76,7 +99,7 @@ export function CsvImportDialog({ spec, open, busy, onClose, onImport }: {
           {unmapped.length > 0 && <small className="field-hint">Ignored columns are not imported. Rename a header to one of: {fields.map(f => f.key).join(', ')}.</small>}
           {required.length > 0 && <p className="error-note">Missing required column{required.length > 1 ? 's' : ''}: {required.join(', ')}.</p>}
         </div>
-        <div className="table-scroll import-preview"><table><thead><tr>{parsed.headers.map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>{parsed.rows.slice(0, 5).map((row, i) => <tr key={i}>{parsed.headers.map(h => <td key={h}>{row[h]}</td>)}</tr>)}</tbody></table></div>
+        <div className="table-scroll import-preview" tabIndex={0} role="region" aria-label="First rows of the file"><table><thead><tr>{parsed.headers.map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>{parsed.rows.slice(0, 5).map((row, i) => <tr key={i}>{parsed.headers.map(h => <td key={h}>{row[h]}</td>)}</tr>)}</tbody></table></div>
         <p className="import-count">{parsed.rows.length} row{parsed.rows.length === 1 ? '' : 's'} in the file{parsed.rows.length > 5 ? ', first 5 shown' : ''}.</p>
         <div className="import-mode" role="radiogroup" aria-label="Import mode">
           <label><input type="radio" name="mode" checked={mode === 'create'} onChange={() => setMode('create')}/> Create only <small>rows that already exist are reported as errors</small></label>

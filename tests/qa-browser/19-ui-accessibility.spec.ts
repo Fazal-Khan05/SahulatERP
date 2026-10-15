@@ -337,7 +337,7 @@ test.describe('layout, keyboard and accessibility on the busy company', () => {
     await s.context.close();
   });
 
-  test('UIX-062 a single radius scale 6/10/14/20 (no stray radii) [defect]', async ({ browser }) => {
+  test('UIX-062 a single radius scale 6/10/14/20 (no stray radii)', async ({ browser }) => {
     const s = await open(browser, { viewport: DESKTOP });
     const { page } = s;
     const stray = new Map<string, string>();

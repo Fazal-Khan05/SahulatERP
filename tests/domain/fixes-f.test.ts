@@ -55,4 +55,12 @@ describe('agent F shell fixes', () => {
   it('D-53 under reduced motion the provisioning ring turns slowly instead of freezing', () => {
     expect(css).toContain('@media(prefers-reduced-motion:reduce){.provision-ring{animation-duration:3s!important;animation-iteration-count:infinite!important}');
   });
+  it('D-71 every border radius in globals.css is on the 6/10/14/20 scale (or a pill/circle)', () => {
+    const ok = (v: string) => /^(0|0px|6px|10px|14px|20px|999px|50%|100%|var\(--[\w-]+\))$/.test(v);
+    const stray = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].flatMap(([, sel, body]) => [...body.matchAll(/border-radius:([^;]+)/g)].map(m => [sel.trim().split('\n').pop()!.trim(), m[1].trim()] as const))
+      .filter(([sel]) => !sel.includes('::before')) // the 3px active-nav bar is a pseudo-element
+      .filter(([sel, v]) => !(sel === '.skeleton' && v === '8px')) // legacy rule pinned by UIX-088; overridden by the token rule below it
+      .filter(([, v]) => !v.split(/\s+/).every(ok));
+    expect(stray).toEqual([]);
+  });
 });

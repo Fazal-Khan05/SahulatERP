@@ -332,7 +332,7 @@ describe('19 ui accessibility', () => {
     ['UIX-058', '[browser] dates YYYY-MM-DD in tables, friendly in top bar'],
     ['UIX-059', '[browser] empty states offer a next action'],
     ['UIX-060', '[browser] error copy is plain English and names the fix'],
-    ['UIX-062', '[browser] computed radii follow 6/10/14/20 (legacy rules in globals.css still declare 5/7/9px)'],
+    ['UIX-062', '[browser] computed radii follow 6/10/14/20'],
     ['UIX-071', '[browser] desktop zoom 200% without overlap'],
     ['UIX-072', '[manual] Windows high-contrast mode keeps borders visible'],
     ['UIX-073', '[manual] Safari desktop matches Chrome'],

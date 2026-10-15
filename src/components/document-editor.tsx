@@ -54,6 +54,8 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
   const [dueDate, setDueDate] = useState(existing?.dueDate ?? addDays(today, 30));
   const [dueTouched, setDueTouched] = useState(!!existing);
   const [currency, setCurrency] = useState(existing?.currency ?? (sales ? 'PKR' : 'USD'));
+  // Amounts show in the document's own currency (purchases can be USD/CNY; sales are always PKR).
+  const docCurrency = sales ? 'PKR' : currency;
   const [fxRate, setFxRate] = useState(existing?.fxRate ?? (sales ? '1' : ''));
   const [notes, setNotes] = useState(existing?.notes ?? '');
   const [creditOverride, setCreditOverride] = useState(existing?.creditOverride ?? '');
@@ -172,7 +174,7 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
             <td><input aria-label={`Line ${index + 1} discount`} className="num" type="number" min="0" max="100" step="0.01" placeholder="0" value={l.discount} onChange={e => update(l.key, { discount: e.target.value })}/></td>
             <td><input aria-label={`Line ${index + 1} tax`} className="num" type="number" min="0" max="100" step="0.01" placeholder="0" value={l.taxRate} onChange={e => update(l.key, { taxRate: e.target.value })}/></td>
             {sales && <td><select aria-label={`Line ${index + 1} salesperson`} value={l.employeeId} onChange={e => update(l.key, { employeeId: e.target.value })}><option value="">—</option>{people.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></td>}
-            <td className="num amount">{lineTotal ? formatMoney(lineTotal) : '—'}</td>
+            <td className="num amount">{lineTotal ? formatMoney(lineTotal, docCurrency) : '—'}</td>
             <td><button type="button" className="icon-button" aria-label={`Remove line ${index + 1}`} disabled={lines.length === 1} onClick={() => setLines(c => c.filter(x => x.key !== l.key))}><Trash2 size={15}/></button></td>
           </tr>;
         })}</tbody>
@@ -184,9 +186,9 @@ export function DocumentEditor({ open, kind, existing, workspace, actor, busy, o
           {kind === 'sales_invoice' && actor.role === 'Owner' && matchedParty && D(matchedParty.creditLimit).gt(0) && <label className="editor-notes">Credit-limit override reason <span className="field-optional">owner only, if the limit is exceeded</span><input value={creditOverride} onChange={e => setCreditOverride(e.target.value)} maxLength={500}/></label>}
         </div>
         <table className="doc-totals editor-totals"><tbody>
-          <tr><th>Net</th><td>{formatMoney(money(totals.net))}</td></tr>
-          <tr><th>Tax</th><td>{formatMoney(money(totals.tax))}</td></tr>
-          <tr className="emphasis"><th>Total{!sales && currency !== 'PKR' ? ` (${currency})` : ''}</th><td>{formatMoney(money(totals.total))}</td></tr>
+          <tr><th>Net</th><td>{formatMoney(money(totals.net), docCurrency)}</td></tr>
+          <tr><th>Tax</th><td>{formatMoney(money(totals.tax), docCurrency)}</td></tr>
+          <tr className="emphasis"><th>Total{!sales && currency !== 'PKR' ? ` (${currency})` : ''}</th><td>{formatMoney(money(totals.total), docCurrency)}</td></tr>
           {!sales && currency !== 'PKR' && fxRate && <tr><th>≈ PKR</th><td>{formatMoney(money(totals.total.mul(fxRate || 0)))}</td></tr>}
         </tbody></table>
       </div>

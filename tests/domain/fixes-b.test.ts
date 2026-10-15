@@ -149,6 +149,20 @@ describe('D-29 names and SKUs are trimmed before their length checks', () => {
   });
 });
 
+describe('D-54 set_modules refuses unknown module keys', () => {
+  it('names the unknown keys and changes nothing', () => {
+    const w = completed();
+    const before = JSON.stringify(w);
+    expect(() => run(w, 'set_modules', { enabled: ['sales', 'crypto'] })).toThrow('Unknown feature "crypto". Choose from: sales, purchasing, inventory, imports, collections, cashbank, commissions, payroll, reports.');
+    expect(() => run(w, 'set_modules', { enabled: ['Sales', 'fbr'] })).toThrow('Unknown feature "Sales", "fbr".');
+    expect(() => run(w, 'set_modules', { enabled: ['__proto__'] })).toThrow('Unknown feature "__proto__".');
+    expect(JSON.stringify(w)).toBe(before);
+  });
+  it('still accepts the always-on modules as no-ops', () => {
+    expect(run(completed(), 'set_modules', { enabled: ['sales', 'dashboard', 'accounting', 'settings'] }).workspace.modules).toEqual(['sales']);
+  });
+});
+
 describe('D-10 cancel_payroll releases a stale draft so the month can be created again', () => {
   const settings = { taxRate: '', employerEobi: '5', employeeEobi: '1', eobiBase: '32000', incomeTaxRate: '5', numbering: 'FB', approvalLimit: '0' };
   const month = '2026-10';

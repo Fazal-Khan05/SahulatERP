@@ -28,6 +28,8 @@ export const moduleCatalogue: ModuleDefinition[] = [
 ];
 
 export const toggleModules = moduleCatalogue.map(item => item.key);
+/** Navigation modules that are always on. set_modules accepts and ignores them; any other unknown key is refused. */
+export const alwaysOnModules: Module[] = ["dashboard", "accounting", "settings"];
 
 export const presets: { key: string; label: string; description: string; modules: ToggleModule[] }[] = [
   { key: "all", label: "All features", description: "Every module, including payroll.", modules: moduleCatalogue.map(item => item.key) },

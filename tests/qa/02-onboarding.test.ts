@@ -461,7 +461,7 @@ describe('02 onboarding (ONB)', () => {
     refused(wizardStart(), 'save_setup_step', { step: 9 }, /invalid_union|Invalid input/);
   });
 
-  it('ONB-077 set_modules with unknown key "crypto" is a validation error [defect]', () => {
+  it('ONB-077 set_modules with unknown key "crypto" is a validation error', () => {
     let error: unknown;
     try { run(freshCompany(), 'set_modules', { enabled: ['sales', 'crypto'] }); } catch (e) { error = e; }
     expect(error, 'unknown module key should be refused, not silently dropped').toBeInstanceOf(Error);

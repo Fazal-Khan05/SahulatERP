@@ -555,6 +555,14 @@ tbody tr:hover{background:var(--surface-muted)}
 /* Browser surfaces carry the design too */
 .topbar-date{color:var(--text-subtle);font-size:var(--text-xs);font-variant-numeric:tabular-nums}
 @media(max-width:900px){.topbar-date{display:none}}
+/* The top bar never widens the page: the module name shrinks with an ellipsis, the right-hand controls keep their size. */
+.breadcrumb{min-width:0}
+.breadcrumb strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.topbar-right{flex-shrink:0}
+@media(max-width:760px){.topbar{gap:8px}.breadcrumb{flex:1 1 auto;gap:8px}.breadcrumb>span,.breadcrumb>svg,.topbar-divider,.mini-avatar{display:none}.topbar-right{gap:4px}}
+/* Metric figures scale with their card, so a long amount never spills out of a narrow tile. */
+.metric-card{container-type:inline-size;min-width:0}
+.metric-card>strong{font-size:clamp(1rem,17cqi,var(--text-2xl));overflow-wrap:anywhere}
 html{scrollbar-color:var(--gray-300) transparent;scrollbar-width:thin}
 *::-webkit-scrollbar{width:10px;height:10px}
 *::-webkit-scrollbar-thumb{background:var(--gray-300);border-radius:999px;border:2px solid transparent;background-clip:padding-box}

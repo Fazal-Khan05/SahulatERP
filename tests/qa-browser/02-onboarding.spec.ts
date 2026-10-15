@@ -118,14 +118,14 @@ test('ONB-066 Global search excludes records of modules that are off', async ({ 
   await context.close();
 });
 
-test('ONB-067 Setup card at 390 px: full screen, numbered steps except the current one, sticky footer, no horizontal scroll [defect]', async ({ browser }) => {
+test('ONB-067 Setup card at 390 px: full screen, numbered steps except the current one, sticky footer, no horizontal scroll', async ({ browser }) => {
   const { context, page } = await openWizard(browser, 2, { viewport: PHONE, isMobile: true, hasTouch: true });
   const box = await card(page).boundingBox();
   expect(box!.height).toBeGreaterThanOrEqual(PHONE.height - 1);
   const titles = await page.locator('.setup-steps li').evaluateAll(lis => lis.map(li => ({ current: li.classList.contains('current'), shown: getComputedStyle(li.querySelector('.setup-step-title')!).display !== 'none', index: li.querySelector('.setup-step-index')!.textContent })));
   for (const t of titles) expect(t.shown).toBe(t.current);
   expect(await page.locator('.setup-actions').evaluate(el => getComputedStyle(el).position)).toBe('sticky');
-  // The invoice preview table on step 2 (Documents) widens the card past the 390 px screen.
+  // D-35: nothing behind or inside the card (top bar, invoice preview) widens the page past the 390 px screen.
   const widths = await page.evaluate(() => ({ card: Math.round(document.querySelector('.setup-card')!.getBoundingClientRect().width), page: document.documentElement.scrollWidth, screen: screen.width }));
   await context.close();
   expect(widths, JSON.stringify(widths)).toEqual({ card: 390, page: 390, screen: 390 });
@@ -144,7 +144,7 @@ test('ONB-068 Setup card on iPad portrait: centred with scrim [case-corrected: t
   await context.close();
 });
 
-test('ONB-069 Documents step on phone: preview below the form, scrollable inside the card [defect]', async ({ browser }) => {
+test('ONB-069 Documents step on phone: preview below the form, scrollable inside the card', async ({ browser }) => {
   const { context, page } = await openWizard(browser, 2, { viewport: PHONE, isMobile: true, hasTouch: true });
   const [controls, preview] = [await page.locator('.branding-controls').boundingBox(), await page.locator('.branding-preview').boundingBox()];
   expect(preview!.y).toBeGreaterThanOrEqual(controls!.y + controls!.height - 1);

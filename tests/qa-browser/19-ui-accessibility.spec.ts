@@ -48,7 +48,7 @@ const overlaps = (page: Page, selector: string) => page.evaluate(sel => {
 test.describe('layout, keyboard and accessibility on the busy company', () => {
   test.beforeAll(async () => { await writeQaWorkspace(richWorkspace().w); });
 
-  test('UIX-001 every module at 390×844 has no horizontal page scroll [defect]', async ({ browser }) => {
+  test('UIX-001 every module at 390×844 has no horizontal page scroll', async ({ browser }) => {
     const s = await open(browser, { viewport: PHONE, hasTouch: true });
     const bad: string[] = [];
     for (const m of MODULES) {
@@ -57,8 +57,7 @@ test.describe('layout, keyboard and accessibility on the busy company', () => {
       if (scroll > inner) bad.push(`${m}: scrollWidth ${scroll} > ${inner} (${(await sticksOut(s.page, inner)).join('; ')})`);
     }
     saveEvidence('uix-001-phone-overflow.json', bad);
-    // Actual: the top bar does not shrink — "Workspace › <Module>" plus search, bell and avatar push the avatar off-screen
-    // whenever the module name cannot wrap (Commissions, Purchasing, Collections, Accounting …).
+    // D-35: on a phone the top bar keeps only the menu button, the module name (ellipsis), search and the bell.
     expect(bad).toEqual([]);
     await s.context.close();
   });
@@ -114,7 +113,7 @@ test.describe('layout, keyboard and accessibility on the busy company', () => {
     await s.context.close();
   });
 
-  test('UIX-005 320px width is usable and wraps (drawer, dialogs, no horizontal scroll) [defect]', async ({ browser }) => {
+  test('UIX-005 320px width is usable and wraps (drawer, dialogs, no horizontal scroll)', async ({ browser }) => {
     const s = await open(browser, { viewport: { width: 320, height: 640 }, hasTouch: true });
     const bad: string[] = [];
     for (const m of MODULES) {
@@ -627,13 +626,12 @@ test.describe('setup wizard on a phone', () => {
     await s.context.close();
   });
 
-  test('UIX-099 setup card is full-screen on phone [defect]', async ({ browser }) => {
+  test('UIX-099 setup card is full-screen on phone', async ({ browser }) => {
     for (const step of [1, 3] as const) {
       const s = await wizard(browser, step);
       const m = await s.page.locator('.setup-card').evaluate(el => { const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height, radius: getComputedStyle(el).borderTopLeftRadius, vw: window.innerWidth, vh: window.innerHeight, page: document.documentElement.scrollWidth }; });
       saveEvidence(`uix-099-step-${step}.json`, m);
-      // Actual: the blurred workspace behind the card is 407 px wide (top bar + empty "Recent sales" table), so mobile
-      // Chrome zooms the page out and the card no longer fills the screen.
+      // D-35: the blurred workspace behind the card used to be 407 px wide because of the top bar.
       expect(m.page, `step ${step}: nothing behind the card widens the page`).toBeLessThanOrEqual(390);
       expect(m.left, `step ${step}`).toBe(0);
       expect(m.top, `step ${step}`).toBe(0);

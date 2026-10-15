@@ -318,3 +318,37 @@ describe('D-30 workspace API error mapping', () => {
     log.mockRestore();
   });
 });
+
+// ---------- D-32: commands must be sent as JSON ----------
+describe('D-32 workspace POST requires application/json', () => {
+  const body = () => JSON.stringify(command('save_company', { name: 'Typed Co', address: 'x' }));
+
+  it('refuses every other content type with 415 before touching the session, snapshot or database', async () => {
+    for (const type of ['text/plain', 'text/plain;charset=UTF-8', 'application/x-www-form-urlencoded', 'multipart/form-data; boundary=x', 'application/jsonp', 'text/json', '']) {
+      resetStore();
+      const headers: Record<string, string> = type ? { 'content-type': type } : {};
+      const request = new Request('http://localhost/api/workspace', { method: 'POST', headers: { 'x-tenant-id': TENANT, ...headers }, body: new Blob([body()]) });
+      if (!type) expect(request.headers.get('content-type')).toBeNull();
+      const r = await send(request);
+      expect(r.status, type).toBe(415);
+      expect(r.json, type).toEqual({ success: false, message: 'Send the command as JSON (Content-Type: application/json).' });
+      expect([S.events, S.commits], type).toEqual([[], 0]);
+    }
+  });
+
+  it('accepts application/json with parameters and in any letter case', async () => {
+    for (const type of ['application/json', 'application/json; charset=utf-8', 'Application/JSON', ' application/json ;charset=UTF-8']) {
+      resetStore();
+      const r = await send(jsonPost(body(), { 'content-type': type }));
+      expect([r.status, r.json.success], type).toEqual([200, true]);
+      expect(S.commits, type).toBe(1);
+    }
+  });
+
+  it("the app's own clients send JSON", () => {
+    const workbench = readFileSync(resolve(root, 'src/components/workbench.tsx'), 'utf8');
+    const branding = readFileSync(resolve(root, 'src/components/branding-form.tsx'), 'utf8');
+    expect(workbench).toContain("fetch('/api/workspace',{method:'POST',headers:{'content-type':'application/json'");
+    expect(branding).toContain("fetch('/api/workspace', { method: 'POST', headers: { 'content-type': 'application/json'");
+  });
+});

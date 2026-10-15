@@ -11,7 +11,7 @@ function tenantOf(request: Request) {
   return request.headers.get('x-tenant-id') || new URL(request.url).searchParams.get('tenant');
 }
 
-const badRequest = (message: string) => Response.json({ success: false, message }, { status: 400 });
+const badRequest = (message: string, status = 400) => Response.json({ success: false, message }, { status });
 
 export async function GET(request: Request) {
   try {
@@ -24,6 +24,9 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    // Commands are JSON only, so a plain form or text post from another site is never parsed as one.
+    const mediaType = (request.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
+    if (mediaType !== 'application/json') return badRequest('Send the command as JSON (Content-Type: application/json).', 415);
     const tenantId = tenantOf(request);
     const { actor, user } = await requireMember(tenantId);
     const { workspace, revision } = await readWorkspace(tenantId!);

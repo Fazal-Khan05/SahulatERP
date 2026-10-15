@@ -448,10 +448,14 @@ describe('18 security', () => {
     expect(r.status).toBe(400);
     expect(r.json.success).toBe(false);
   });
-  it('SEC-046 Content-Type text/plain is refused with 400 [defect: the body is parsed regardless of content type]', async () => {
+  it('SEC-046 Content-Type text/plain is refused [case-corrected: 415 Unsupported Media Type, not 400]', async () => {
     seed([company(T)], [[T, 'Owner']]);
+    const before = JSON.stringify(stored(T));
     const r = await POST(cmd('save_company', { name: 'Plain Co', address: 'x' }), T, { 'content-type': 'text/plain' });
-    expect(r.status).toBe(400);
+    expect(r.status).toBe(415);
+    expect(r.json.success).toBe(false);
+    expect(JSON.stringify(stored(T))).toBe(before);
+    expect(S.rpcCalls).toBe(0);
   });
   it('SEC-047 GET /api/workspace signed out → 401 [documented: signed-in GET returns the role-scoped workspace]', async () => {
     seed([company(T)], [[T, 'Owner']]); S.user = null;

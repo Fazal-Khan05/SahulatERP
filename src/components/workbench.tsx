@@ -155,7 +155,8 @@ function SearchDialog({open,close,workspace,role,choose}:{open:boolean;close:()=
 const searchCache=new WeakMap<Workspace,Map<Role,SearchHit[]>>();
 /**
  * Every record the role may open, each with a lower-cased haystack. Built once per workspace snapshot and role
- * (a new snapshot arrives after every command); details are formatted only for the few results on screen.
+ * (a new snapshot arrives after every command); receipt, shipment and journal details are formatted only for the
+ * few results on screen.
  * Receipts are found by number or cheque number, shipments by number, container or GD number, and journals (ledger
  * roles only) by number or memo, unless the record that posted the journal sits in a module the role cannot see.
  */

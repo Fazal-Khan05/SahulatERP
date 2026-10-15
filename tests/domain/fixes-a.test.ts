@@ -69,3 +69,37 @@ describe('D-05 precision is enforced at input (4 dp, half-up)', () => {
     expectInvariants(r.workspace);
   });
 });
+
+describe('D-23 invalid or empty numbers give a clean validation message', () => {
+  const message = (f: () => unknown) => { try { f(); } catch (e) { return (e as Error).message; } return ''; };
+  it('D-23 empty, blank and non-numeric values never surface a raw DecimalError', () => {
+    const t = trading();
+    const stockLine = (quantity: unknown, cost: unknown = '5') => () => run(t.w, 'bulk_stock_increase', { warehouseId: t.wh, date: today(), purpose: 'opening_stock', reason: 'x', lines: [{ itemId: t.item, quantity, cost }] });
+    const docLine = (extra: Record<string, unknown>) => () => run(t.w, 'create_document', { kind: 'sales_invoice', partyId: t.cust, warehouseId: t.wh, date: today(), dueDate: today(), lines: [line(t.item, '1', '10', extra)] });
+    const cases: [() => unknown, string][] = [
+      [stockLine(''), 'Amount must be greater than zero.'],
+      [stockLine('   '), 'Amount must be greater than zero.'],
+      [stockLine('abc'), 'Enter a valid number below one trillion.'],
+      [stockLine('NaN'), 'Enter a valid number below one trillion.'],
+      [stockLine('5', ''), 'Amount must be greater than zero.'],
+      [docLine({ price: '' }), 'Enter a valid number below one trillion.'],
+      [docLine({ price: 'abc' }), 'Enter a valid number below one trillion.'],
+      [docLine({ discount: '' }), 'Enter a valid number below one trillion.'],
+      [docLine({ discount: 'x' }), 'Enter a valid number below one trillion.'],
+      [docLine({ taxRate: 'abc' }), 'Enter a valid number below one trillion.'],
+      [() => run(t.w, 'stock_adjust', { itemId: t.item, warehouseId: t.wh, quantity: '', reason: 'x', date: today() }), 'Enter a valid number below one trillion.'],
+      [() => run(t.w, 'create_journal', { memo: 'x', date: today(), lines: [{ account: '1000', debit: 'abc', credit: '0' }, { account: '3000', debit: '0', credit: '1' }] }), 'Enter a valid number below one trillion.'],
+    ];
+    for (const [f, expected] of cases) {
+      const text = message(f);
+      expect(text).toContain(expected);
+      expect(text).not.toContain('DecimalError');
+    }
+  });
+
+  it('D-23 a blank amount yields exactly one issue, not one per chained check', () => {
+    const t = trading();
+    const text = message(() => run(t.w, 'bulk_stock_increase', { warehouseId: t.wh, date: today(), purpose: 'opening_stock', reason: 'x', lines: [{ itemId: t.item, quantity: '', cost: '5' }] }));
+    expect(JSON.parse(text)).toHaveLength(1);
+  });
+});

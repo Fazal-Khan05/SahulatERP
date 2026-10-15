@@ -105,9 +105,8 @@ describe('08 Purchasing, foreign currency, supplier payments (PUR)', () => {
     expect(documentView(r.workspace, d).meta).toContainEqual({ label: 'Exchange rate', value: '1 USD = 280 PKR' });
   });
 
-  it('PUR-007 USD with empty rate refused with a clear message [defect]', () => {
+  it('PUR-007 USD with empty rate refused with a clear message', () => {
     const { w, item, sup } = base();
-    // Expected "Amount must be greater than zero."; actual raw "[DecimalError] Invalid argument: " (route.ts shows it verbatim).
     refused(w, 'create_document', { kind: 'purchase_order', partyId: sup, warehouseId: firstWarehouse(w), date: today(), dueDate: today(), currency: 'USD', fxRate: '', lines: [L(item)] }, 'Amount must be greater than zero.');
   });
 

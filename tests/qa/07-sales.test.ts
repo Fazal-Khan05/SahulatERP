@@ -113,9 +113,9 @@ describe('07 Sales documents and the invoice editor (SAL)', () => {
     refused(w, 'create_document', { kind: 'sales_invoice', partyId: cust, warehouseId: firstWarehouse(w), date: today(), dueDate: today(), lines: [] }, /expected array to have >=1 items/);
   });
 
-  it('SAL-009 qty empty refused by engine with a validation message, never a raw library error [browser: editor message "Enter a quantity on line 1."]', () => {
+  it('SAL-009 qty empty refused by engine "Amount must be greater than zero.", never a raw library error [browser: editor message "Enter a quantity on line 1."]', () => {
     const { w, item, cust } = base();
-    const message = refused(w, 'create_document', { kind: 'sales_invoice', partyId: cust, warehouseId: firstWarehouse(w), date: today(), dueDate: today(), lines: [L(item, '')] }, /valid number|greater than zero/);
+    const message = refused(w, 'create_document', { kind: 'sales_invoice', partyId: cust, warehouseId: firstWarehouse(w), date: today(), dueDate: today(), lines: [L(item, '')] }, 'Amount must be greater than zero.');
     expect(message).not.toContain('DecimalError');
   });
 

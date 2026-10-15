@@ -69,7 +69,8 @@ export function agedBalances(w: Workspace, partyType: "customer" | "supplier", a
     byParty.set(d.partyId, row);
   }
   const toRow = (partyId: string, name: string, b: ReturnType<typeof D>[]): AgedRow => ({ partyId, name, current: money(b[0]), d30: money(b[1]), d60: money(b[2]), d90: money(b[3]), over90: money(b[4]), total: money(sum(b)) });
-  const rows = [...byParty].map(([partyId, b]) => toRow(partyId, w.parties.find(p => p.id === partyId)?.name ?? partyId, b)).sort((a, b) => D(b.total).cmp(a.total));
+  const names = new Map(w.parties.map(p => [p.id, p.name]));
+  const rows = [...byParty].map(([partyId, b]) => toRow(partyId, names.get(partyId) ?? partyId, b)).sort((a, b) => D(b.total).cmp(a.total));
   const totals = toRow("", "Total", [0, 1, 2, 3, 4].map(i => sum([...byParty.values()].map(b => b[i]))));
   return { rows, totals };
 }

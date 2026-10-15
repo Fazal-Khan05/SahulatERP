@@ -29,7 +29,8 @@ export function SettingsView({ workspace, realRole, role, setRole, busy, command
   const readOnly = role === 'Auditor';
   // Once setup is done only the owner or an accountant may change company details, branding and features (the server
   // refuses everyone else); a role preview shows what that role would get.
-  const companyLocked = readOnly || !companyEditors.includes(realRole) || !companyEditors.includes(role);
+  // Same rule as the server (D-08): after setup only roles allowed to run save_company may edit; a role preview can only narrow it.
+  const companyLocked = readOnly || !canRun(realRole, 'save_company', workspace) || !canRun(role, 'save_company', workspace);
   const payrollOn = workspace.modules.includes('payroll');
   const tabs: { key: Tab; label: string }[] = [{ key: 'company', label: 'Company & documents' }, { key: 'tax', label: payrollOn ? 'Payroll & tax' : 'Tax & numbering' }, { key: 'features', label: 'Features' }, { key: 'access', label: 'Access' }, { key: 'audit', label: 'Audit history' }];
   return <div className="stack">
@@ -42,7 +43,6 @@ export function SettingsView({ workspace, realRole, role, setRole, busy, command
   </div>;
 }
 
-const companyEditors: Role[] = ['Owner', 'Accountant'];
 const companyEditorsNote = <p className="field-hint">Only the owner or an accountant can change these.</p>;
 
 function CompanySettings({ workspace, busy, readOnly, command, onWorkspace }: { workspace: Workspace; busy: string; readOnly: boolean; command: SettingsViewCommand; onWorkspace: (next: Workspace) => void }) {

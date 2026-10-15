@@ -4,17 +4,13 @@ import Papa from 'papaparse';
 import { Download, FileUp, Loader2, Upload } from 'lucide-react';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
-import { csvFields, mapHeader, toCsv, type EntitySpec } from '@/modules/erp/master-data';
+import { csvFields, fromCsvCell, mapHeader, toCsv, type EntitySpec } from '@/modules/erp/master-data';
 
 type Parsed = { headers: string[]; mapping: Record<string, string | null>; rows: Record<string, string>[] };
 /** Same limit as the `import_records` command. */
 export const maxImportRows = 2000;
-/**
- * Undoes the CSV export's formula-injection guard, so re-importing our own export keeps "+92 300 …" rather than
- * "'+92 300 …": one leading ' is removed when the rest starts with = + - @, a tab or a carriage return.
- * Same rule as fromCsvCell() in master-data.ts (D-20); use that one once both are merged.
- */
-export const fromCsvCell = (value: string) => /^'[=+\-@\t\r]/.test(value) ? value.slice(1) : value;
+// Re-importing our own export undoes its formula-injection guard (D-20); the rule lives with toCsv.
+export { fromCsvCell };
 
 /**
  * Reads CSV rows one at a time (blank lines skipped) and stops at the first row over the limit, so a huge file is

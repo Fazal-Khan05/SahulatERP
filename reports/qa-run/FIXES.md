@@ -81,3 +81,4 @@ Every defect from the QA run (`DEFECTS.md`) with the commit(s) that fixed it on 
 | D-75 | S4 | Company address newlines lost in the print header | PRN-091 | `9fc8272` Fix D-75: company address line breaks print in the header |
 | D-76 | S4 | Document-chain rows are not links | PRN-056 | `85331a5` Fix D-76: document-chain rows open their document |
 | D-77 | S2 | An expiring session is refreshed but not saved (found during fix verification) | AUTH-050 | `a0da162` Fix D-77: session-refresh proxy saves refreshed Supabase sessions |
+| D-78 | S4 | Production CSS drops the standard backdrop-filter (found during fix verification) | SET-041 | `8bcf73e` Fix D-78: prefixed backdrop-filter first so the production minifier keeps the standard property |

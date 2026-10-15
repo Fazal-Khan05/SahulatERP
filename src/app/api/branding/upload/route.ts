@@ -2,11 +2,17 @@ import { brandingKinds, storeBrandingFile, type BrandingKind } from '@/lib/brand
 import { commitWorkspace, readWorkspace, requireMember } from '@/lib/workspace-store';
 import { scopeWorkspace } from '@/modules/erp/access';
 import { execute } from '@/modules/erp/engine';
+import type { Role, Workspace } from '@/modules/erp/types';
 import { failureResponse, isRefusal, refusalResponse } from '../../errors';
 
 export const dynamic = 'force-dynamic';
 
 const chooseImage = () => Response.json({ success: false, message: 'Choose a logo or letterhead image.' }, { status: 400 });
+
+// Who may run save_branding (the engine's rule since D-08): any member but an Auditor while the company is being
+// set up; afterwards only the Owner or an Accountant. Checked before the file is stored, so a refused member
+// cannot replace the stored logo or letterhead.
+const mayChangeBranding = (role: Role, workspace: Workspace) => role === 'Owner' || role === 'Accountant' || (!workspace.setup.complete && role !== 'Auditor');
 
 /** Multipart upload of a logo or letterhead; stores the file, then saves its path on the workspace branding. */
 export async function POST(request: Request) {
@@ -14,6 +20,8 @@ export async function POST(request: Request) {
     const tenantId = request.headers.get('x-tenant-id');
     const { actor } = await requireMember(tenantId);
     if (actor.role === 'Auditor') return Response.json({ success: false, message: 'Auditors cannot change branding.' }, { status: 403 });
+    const { workspace, revision } = await readWorkspace(tenantId!);
+    if (!mayChangeBranding(actor.role, workspace)) return Response.json({ success: false, message: 'Your role does not permit this action.' }, { status: 403 });
     let form: FormData;
     try { form = await request.formData(); } catch { return chooseImage(); }
     const kind = String(form.get('kind') ?? '');
@@ -22,7 +30,6 @@ export async function POST(request: Request) {
     const stored = await storeBrandingFile(tenantId!, kind as BrandingKind, file);
     if ('error' in stored) return Response.json({ success: false, message: stored.error }, { status: 400 });
 
-    const { workspace, revision } = await readWorkspace(tenantId!);
     const payload = { ...workspace.branding, [kind === 'logo' ? 'logoPath' : 'letterheadPath']: stored.path };
     let result: ReturnType<typeof execute>;
     try { result = execute(workspace, { type: 'save_branding', payload, idempotencyKey: `branding-${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }, actor); }

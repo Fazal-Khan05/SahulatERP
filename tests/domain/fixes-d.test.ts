@@ -28,6 +28,8 @@ const S = vi.hoisted(() => ({
   commit: (async () => true) as (tenant: string, expected: number, workspace: unknown) => Promise<boolean>,
   commits: 0,
   events: [] as string[],
+  uploads: [] as string[],
+  signed: [] as string[],
 }));
 vi.mock('server-only', () => ({}));
 vi.mock('@/lib/supabase/server', () => ({
@@ -39,13 +41,18 @@ vi.mock('@/lib/workspace-store', () => ({
   commitWorkspace: (tenant: string, expected: number, workspace: unknown) => { S.commits++; return S.commit(tenant, expected, workspace); },
 }));
 vi.mock('@/lib/password', () => ({ verifyPassword: async () => ({ ok: true }) }));
-vi.mock('@/lib/supabase/admin', () => ({ createAdminSupabase: () => ({ storage: { from: () => ({ remove: async () => ({}), upload: async () => ({ error: null }) }) } }) }));
+vi.mock('@/lib/supabase/admin', () => ({ createAdminSupabase: () => ({ storage: { from: () => ({
+  remove: async () => ({}),
+  upload: async (path: string) => { S.uploads.push(path); return { error: null }; },
+  createSignedUrl: async (path: string) => { S.signed.push(path); return { data: { signedUrl: `https://storage.test/${path}?token=t` } }; },
+}) } }) }));
 vi.mock('@/lib/branding-store', () => import('../../src/lib/branding-store'));
 vi.mock('@/modules/erp/access', () => import('../../src/modules/erp/access'));
 vi.mock('@/modules/erp/engine', () => import('../../src/modules/erp/engine'));
 vi.mock('@/modules/erp/modules', () => import('../../src/modules/erp/modules'));
 import * as callbackRoute from '../../src/app/auth/callback/route';
 import * as uploadRoute from '../../src/app/api/branding/upload/route';
+import * as brandingFileRoute from '../../src/app/api/branding/[kind]/route';
 import * as workspaceRoute from '../../src/app/api/workspace/route';
 
 // ---------- D-07: role-aware reads on the relational projection (PGlite with the real migrations) ----------
@@ -407,5 +414,65 @@ describe('D-22 signed-in responses are never stored; signing out empties the cac
   it('the sign-out response clears the browser cache, and only that response', async () => {
     expect((await headersFor('/auth/signout'))['Clear-Site-Data']).toBe('"cache"');
     for (const path of ['/', '/auth/callback', '/api/workspace', '/auth/signout/x']) expect((await headersFor(path))['Clear-Site-Data'], path).toBeUndefined();
+  });
+});
+
+// ---------- D-19 / D-08 hardening: branding upload and signed branding files ----------
+describe('D-19 branding upload is refused before storing, and only exact branding objects are signed', () => {
+  const OTHER = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+  const png = () => new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0, 0, 0])], 'logo.png', { type: 'image/png' });
+  function as(role: Role, setupComplete: boolean) {
+    const base = companyWorkspace();
+    resetStore({ ...base, setup: { ...base.setup, complete: setupComplete } });
+    S.member = async () => ({ actor: { id: 'u-d', name: 'D Member', role, branchIds: [] }, user: { id: 'u-d', email: 'd@qa.example' } });
+    S.uploads = [];
+  }
+  async function upload(kind = 'logo') {
+    const form = new FormData(); form.set('kind', kind); form.set('file', png());
+    const r = await uploadRoute.POST(new Request('http://localhost/api/branding/upload', { method: 'POST', headers: { 'x-tenant-id': TENANT }, body: form }));
+    return { status: r.status, json: await r.json() as Row };
+  }
+
+  it('after setup, only the Owner or an Accountant may upload; everyone else is refused before the file is stored', async () => {
+    for (const role of roles) {
+      as(role, true);
+      const r = await upload();
+      if (role === 'Owner' || role === 'Accountant') {
+        expect([r.status, r.json.path, S.uploads, S.commits], role).toEqual([200, `${TENANT}/logo.png`, [`${TENANT}/logo.png`], 1]);
+      } else {
+        expect(r.status, role).toBe(403);
+        expect(r.json.message, role).toBe(role === 'Auditor' ? 'Auditors cannot change branding.' : 'Your role does not permit this action.');
+        expect([S.uploads, S.commits], role).toEqual([[], 0]);
+      }
+    }
+  });
+
+  it('while the company is being set up, any member but an Auditor may upload', async () => {
+    for (const role of roles) {
+      as(role, false);
+      const r = await upload('letterhead');
+      expect(r.status, role).toBe(role === 'Auditor' ? 403 : 200);
+      expect(S.uploads, role).toEqual(role === 'Auditor' ? [] : [`${TENANT}/letterhead.png`]);
+    }
+  });
+
+  it('/api/branding/<kind> signs only <tenant>/<kind>.<png|jpg|jpeg> of the member’s own company', async () => {
+    const get = async (kind: string, branding: Row) => {
+      resetStore({ ...companyWorkspace(), branding: { ...companyWorkspace().branding, ...branding } });
+      S.signed = [];
+      const r = await brandingFileRoute.GET(new Request(`http://localhost/api/branding/${kind}?tenant=${TENANT}`), { params: Promise.resolve({ kind }) });
+      return { status: r.status, location: r.headers.get('location'), signed: S.signed };
+    };
+    for (const ext of ['png', 'jpg', 'jpeg']) {
+      expect(await get('logo', { logoPath: `${TENANT}/logo.${ext}` }), ext).toEqual({ status: 302, location: `https://storage.test/${TENANT}/logo.${ext}?token=t`, signed: [`${TENANT}/logo.${ext}`] });
+    }
+    expect((await get('letterhead', { letterheadPath: `${TENANT}/letterhead.jpg` })).status).toBe(302);
+    for (const [kind, branding] of [
+      ['logo', { logoPath: `${TENANT}/../${OTHER}/logo.png` }], ['logo', { logoPath: `${OTHER}/logo.png` }], ['logo', { logoPath: `${TENANT}/letterhead.png` }],
+      ['letterhead', { letterheadPath: `${TENANT}/logo.png` }], ['logo', { logoPath: `${TENANT}/logo.svg` }], ['logo', { logoPath: `${TENANT}/logo.png/../../${OTHER}/logo.png` }],
+      ['logo', { logoPath: `/${TENANT}/logo.png` }], ['logo', {}],
+    ] as const) {
+      expect(await get(kind, branding), JSON.stringify(branding)).toEqual({ status: 404, location: null, signed: [] });
+    }
   });
 });

@@ -145,7 +145,7 @@ test.describe('print page and A4 output', () => {
     await tab.close();
   });
 
-  test('PRN-039 A4 portrait: 10 lines fit one page; 60 lines break across pages without splitting a row [defect]', async () => {
+  test('PRN-039 A4 portrait: 10 lines fit one page; 60 lines break across pages without splitting a row', async () => {
     const tab = await context.newPage();
     await openPrint(tab, fx.ids.inv60);
     const sixty = pdfPages(await tab.pdf({ format: 'A4' }));
@@ -155,20 +155,17 @@ test.describe('print page and A4 output', () => {
     await openPrint(tab, fx.ids.inv10);
     const ten = pdfPages(await tab.pdf({ format: 'A4' }));
     saveEvidence('prn-039-a4-10-lines.json', ten);
-    // Actual: two pages; the footer ("Bank: … Computer-generated document …") is pushed alone onto page 2.
     expect(ten, '10-line invoice fits one A4 page').toHaveLength(1);
     await tab.close();
   });
 
-  test('PRN-040 Letter print fits: nothing cut off at the page edge, 10 lines on one page [defect]', async () => {
+  test('PRN-040 Letter print fits: nothing cut off at the page edge, 10 lines on one page', async () => {
     const tab = await context.newPage();
     await openPrint(tab, fx.ids.inv10);
     const letter = pdfPages(await tab.pdf({ format: 'Letter' }));
     saveEvidence('prn-040-letter-10-lines.json', letter);
     const text = letter.join('');
     for (let i = 1; i <= 10; i++) expect(text).toContain(rowText(i));
-    // Actual: the totals table is 100% wide (globals.css `table{width:100%}`) beside the notes column, so the amounts
-    // run past the right margin and Chromium clips them ("Balance dueRs " with no figure).
     expect.soft(text, 'totals amounts printed in full').toContain(`Balance due${sumTo(10)}`);
     expect.soft(letter, '10-line invoice fits one Letter page').toHaveLength(1);
     await tab.setViewportSize({ width: 763, height: 950 }); // Letter 8.5 in minus the 14 mm side margins
@@ -177,7 +174,7 @@ test.describe('print page and A4 output', () => {
     await tab.close();
   });
 
-  test('PRN-044 100-line invoice paginates; totals on the last page [defect]', async () => {
+  test('PRN-044 100-line invoice paginates; totals on the last page', async () => {
     const tab = await context.newPage();
     await openPrint(tab, fx.ids.inv100);
     const pages = pdfPages(await tab.pdf({ format: 'A4' }));
@@ -185,8 +182,8 @@ test.describe('print page and A4 output', () => {
     expect(pages.length).toBeGreaterThan(2);
     for (let i = 1; i <= 100; i++) expect(pages.filter(p => p.includes(rowText(i))), `row ${i}`).toHaveLength(1);
     expect(pages.filter(p => p.includes('Balance due')), 'totals printed once').toHaveLength(1);
-    // Actual: totals sit on the second-last page with the amount clipped; the last page holds only the footer.
     expect(pages.at(-1), 'last page carries the totals with the full balance').toContain(`Balance due${sumTo(100)}`);
+    expect(pages.at(-1), 'the totals print with the last line, never alone').toContain(rowText(100));
     await tab.close();
   });
 
@@ -279,14 +276,12 @@ test.describe('long content in the print layout', () => {
     }
   }
 
-  test('PRN-045 120-character product name wraps within its column [defect]', async () => {
+  test('PRN-045 120-character product name wraps within its column', async () => {
     await eachLayout(fx.ids.invLong, async () => {
       const cell = page.locator('.doc-lines tbody td').first();
       const name = cell.locator('strong');
       await expect(name).toHaveText(LONG_ITEM);
       const box = await name.evaluate(el => ({ sw: el.scrollWidth, cw: el.clientWidth, h: el.getBoundingClientRect().height, lh: parseFloat(getComputedStyle(el).lineHeight), ws: getComputedStyle(el).whiteSpace }));
-      // Actual: the app-wide `td{white-space:nowrap}` (globals.css) reaches the print template, so the name stays on one
-      // line and the lines table grows wider than the A4 sheet.
       expect(box.ws, 'description may wrap').not.toBe('nowrap');
       expect(box.sw).toBeLessThanOrEqual(box.cw);
       expect(box.h).toBeGreaterThan(box.lh * 1.5); // wrapped onto more than one line
@@ -296,13 +291,12 @@ test.describe('long content in the print layout', () => {
     });
   });
 
-  test('PRN-046 2,000-character notes wrap and are not clipped [defect]', async () => {
+  test('PRN-046 2,000-character notes wrap and are not clipped', async () => {
     await eachLayout(fx.ids.invLong, async layout => {
       const notes = page.locator('.doc-notes p');
       await expect(notes).toHaveText(NOTES);
       const m = await notes.evaluate(el => { const r = el.getBoundingClientRect(); const doc = document.querySelector('article.doc')!.getBoundingClientRect(); return { sw: el.scrollWidth, cw: el.clientWidth, width: r.width, docWidth: doc.width, left: r.left, docLeft: doc.left }; });
       saveEvidence(`prn-046-notes-${layout.replace(' ', '-')}.json`, m);
-      // Actual: the totals table takes 100% of the row (globals.css `table{width:100%}`), squeezing the notes column to ~0 px.
       expect(m.width, 'notes column has room to wrap').toBeGreaterThan(m.docWidth * 0.3);
       expect(m.sw, 'notes text not clipped').toBeLessThanOrEqual(m.cw);
       expect(m.left).toBeGreaterThanOrEqual(m.docLeft);
@@ -452,7 +446,7 @@ test.describe('document details dialog', () => {
     return details(page);
   }
 
-  test('PRN-056 details show the QUO → SO → DN → INV chain and its links open each document [defect]', async () => {
+  test('PRN-056 details show the QUO → SO → DN → INV chain and its links open each document', async () => {
     const { page } = s;
     const [quo, so, dn, inv] = [s.ids.quo, s.ids.so, s.ids.dn, s.ids.chainInv].map(num);
     let dialog = await openDetails(page, s.ids.so);
@@ -462,7 +456,7 @@ test.describe('document details dialog', () => {
     dialog = await openDetails(page, s.ids.dn);
     await expect(section(dialog, 'Document chain')).toContainText(so);
     await expect(section(dialog, 'Document chain')).toContainText(inv);
-    // "Links work": a chain row should open the linked document. Actual: plain text rows, nothing to click.
+    // "Links work": a chain row opens the linked document in the dialog.
     const target = section(dialog, 'Document chain').locator('.invoice-related-row').filter({ hasText: inv });
     await expect(target.locator('a, button'), 'chain row is a link').toHaveCount(1);
     await target.locator('a, button').click();

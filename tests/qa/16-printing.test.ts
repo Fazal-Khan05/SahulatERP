@@ -219,10 +219,10 @@ describe('16 printing', () => {
   it('PRN-015 quantity 0.5 prints "0.5 kg"', async () => {
     expect(await print('sales_invoice', F.inv)).toContain('<td class="num">0.5 kg</td>');
   });
-  it('PRN-016 quantity 1,234,567 printed with thousands separators [defect]', async () => {
+  it('PRN-016 quantity 1,234,567 printed with thousands separators', async () => {
     const html = await print('sales_invoice', F.bigInv);
-    expect(html).toContain('<td class="num">1234567 pcs</td>');
-    expect(html).toContain('1,234,567 pcs');
+    expect(html).not.toContain('1234567 pcs');
+    expect(html).toContain('<td class="num">1,234,567 pcs</td>');
   });
   it('PRN-017 totals: subtotal, tax, total, paid, returns, balance due with correct arithmetic', async () => {
     const doc = docOf(F.inv);
@@ -238,12 +238,12 @@ describe('16 printing', () => {
     expect(totals(html)['Customer credit']).toBe('Rs 200');
     expect(html).toContain('class="emphasis credit"');
   });
-  it('PRN-020 draft invoice print shows a visible DRAFT status [defect]', async () => {
+  it('PRN-020 draft invoice print shows a visible DRAFT status', async () => {
     const html = await print('sales_invoice', F.draftInv);
     expect(docOf(F.draftInv).status).toBe('draft');
     expect(text(html).toUpperCase()).toContain('DRAFT');
   });
-  it('PRN-021 cancelled invoice print shows CANCELLED [defect]', async () => {
+  it('PRN-021 cancelled invoice print shows CANCELLED', async () => {
     const html = await print('sales_invoice', F.cancelledInv);
     expect(text(html)).toContain('Cancelled: Customer changed order');
     expect(text(html).replace('Cancelled: Customer changed order', '').toUpperCase()).toContain('CANCELLED');
@@ -267,7 +267,7 @@ describe('16 printing', () => {
     expect(html).toContain('<h1>Delivery note</h1>');
     expect(html).toContain('<td class="num">5 pcs</td><td class="num">Rs 100</td>');
   });
-  it('PRN-026 USD purchase order shows currency, rate and totals in both currencies [defect: amounts carry "Rs" and no PKR equivalent]', async () => {
+  it('PRN-026 USD purchase order shows currency, rate and totals in both currencies', async () => {
     const html = await print('purchase_order', F.po);
     expect(html).toContain('<dt>Exchange rate</dt><dd>1 USD = 280.5 PKR</dd>');
     expect(text(html)).toContain('amounts in USD');
@@ -394,7 +394,7 @@ describe('16 printing', () => {
     expect(html).toContain('--doc-accent:#123456');
     expect(html).toContain('<p>New footer</p>');
   });
-  it('PRN-069 printed tax details come from the invoice-time tax snapshot [defect: print uses the current party tax id]', async () => {
+  it('PRN-069 printed tax details come from the invoice-time tax snapshot', async () => {
     const doc = docOf(F.inv);
     expect(doc.taxSnapshot).toMatchObject({ registered: true, taxId: '1234567-8' });
     const party = F.w.parties.find(p => p.id === F.cust)!;
@@ -402,6 +402,9 @@ describe('16 printing', () => {
     seed([changed], [[T, 'Owner']]);
     const t = text(await print('sales_invoice', F.inv));
     expect(t).toContain('NTN / STRN: 1234567-8');
+    // Registered at invoice time, so the later de-registration and new tax id do not reach the reprint.
+    expect(t).not.toContain('9999999-9');
+    expect(t).not.toContain('Unregistered for sales tax');
   });
   it('PRN-070 amount in words [documented: not present on the template]', async () => {
     expect(text(await print('sales_invoice', F.inv))).not.toMatch(/\bonly\b|rupees/i);
@@ -410,11 +413,11 @@ describe('16 printing', () => {
     expect(text(await print('sales_invoice', F.inv))).toContain('Computer-generated document · Print Test Traders · amounts in PKR');
     expect(text(await print('purchase_order', F.po))).toContain('amounts in USD');
   });
-  it('PRN-072 rate formatting "Rs 2,400" for PKR and "$10.00" for USD [defect: USD rates print as "Rs 10"]', async () => {
+  it('PRN-072 rate formatting "Rs 2,400" for PKR and "$10.00" for USD', async () => {
     expect(await print('sales_invoice', F.inv)).toContain('<td class="num">Rs 100</td>');
     const po = await print('purchase_order', F.po);
-    expect(po).toContain('<td class="num">Rs 10</td>');
-    expect(po).toContain('$10.00');
+    expect(po).not.toContain('<td class="num">Rs 10</td>');
+    expect(po).toContain('<td class="num">$10.00</td>');
   });
   it('PRN-073 discount column [case-corrected: "0%" is printed for zero discounts as well, not only when non-zero]', async () => {
     const html = await print('sales_invoice', F.inv);
@@ -462,7 +465,7 @@ describe('16 printing', () => {
   it('PRN-090 invoice number barcode/QR [documented: not present]', async () => {
     expect(await print('sales_invoice', F.inv)).not.toMatch(/<canvas|qr|barcode/i);
   });
-  it('PRN-091 company address with newlines prints line breaks in the header [defect: address span has no pre-line/pre-wrap]', async () => {
+  it('PRN-091 company address with newlines prints line breaks in the header', async () => {
     const multi = run(F.w, 'save_company', { name: 'Print Test Traders', address: 'Plot 12\nJodia Bazar\nKarachi', phone: '', email: '', taxId: '' }).workspace;
     seed([multi], [[T, 'Owner']]);
     expect(await print('sales_invoice', F.inv)).toContain('<span>Plot 12\nJodia Bazar\nKarachi</span>');

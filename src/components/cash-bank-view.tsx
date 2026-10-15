@@ -50,7 +50,7 @@ export function CashBankView({ workspace, actor, editable, busy, command }: { wo
       <div className="card-heading"><div><h2>Accounts</h2><p>{accounts.length} active · select one to see its activity</p></div>
         {canManage && <div className="inventory-actions"><Button variant="outline" disabled={accounts.length < 2} onClick={() => setModal('transfer')}><ArrowLeftRight size={16}/>Transfer</Button><Button variant="outline" disabled={!accounts.length} onClick={() => setModal('expense')}><Receipt size={16}/>Record expense</Button><Button onClick={() => { setEditing(null); setModal('account'); }}><Plus size={16}/>New account</Button></div>}
       </div>
-      <div className="table-scroll"><table><thead><tr><th>Account</th><th>Type</th><th>Details</th><th>Ledger code</th><th>Balance</th><th>Actions</th></tr></thead><tbody>
+      <div className="table-scroll" tabIndex={0} role="region" aria-label="Accounts table"><table><thead><tr><th>Account</th><th>Type</th><th>Details</th><th>Ledger code</th><th>Balance</th><th>Actions</th></tr></thead><tbody>
         {accounts.map(a => <tr key={a.id} className={selected === a.code ? 'row-selected' : undefined}>
           <td><button className="text-button" onClick={() => setSelected(a.code)}><strong>{a.name}</strong></button></td><td>{a.type}</td><td>{a.details || '—'}</td><td>{a.code}</td><td style={balanceTone(accountBalance(workspace, a.code))}>{formatMoney(accountBalance(workspace, a.code))}</td>
           <td><div className="inventory-row-actions"><Button size="sm" variant="outline" onClick={() => setSelected(a.code)}>Activity</Button>{canManage && <Button size="sm" variant="ghost" aria-label={`Edit ${a.name}`} onClick={() => { setEditing(a); setModal('account'); }}>Edit</Button>}</div></td>
@@ -61,7 +61,7 @@ export function CashBankView({ workspace, actor, editable, busy, command }: { wo
     </section>
     <section className="card">
       <div className="card-heading"><div><h2>Activity · {selectedName}</h2><p>Balance <span style={balanceTone(activity.balance)}>{formatMoney(activity.balance)}</span> · latest {activity.rows.length} movements</p></div></div>
-      <div className="table-scroll"><table><thead><tr><th>Date</th><th>Journal</th><th>Description</th><th>In</th><th>Out</th><th>Balance</th></tr></thead><tbody>
+      <div className="table-scroll" tabIndex={0} role="region" aria-label={`Activity for ${selectedName}`}><table><thead><tr><th>Date</th><th>Journal</th><th>Description</th><th>In</th><th>Out</th><th>Balance</th></tr></thead><tbody>
         {activity.rows.length ? activity.rows.map((r, i) => <tr key={`${r.journal}-${i}`}><td>{r.date}</td><td>{r.journal}</td><td>{r.memo}</td><td>{r.debit ? formatMoney(r.debit) : ''}</td><td>{r.credit ? formatMoney(r.credit) : ''}</td><td style={balanceTone(r.balance)}>{formatMoney(r.balance)}</td></tr>) : <tr><td colSpan={6}><div className="empty-state">No movements on this account yet.{canManage && accounts.length
           ? <div className="form-actions" style={{ justifyContent: 'center', marginTop: 14 }}>{accounts.length > 1 && <Button variant="outline" onClick={() => setModal('transfer')}><ArrowLeftRight size={16}/>Transfer</Button>}<Button variant="outline" onClick={() => setModal('expense')}><Receipt size={16}/>Record expense</Button></div>
           : ' Receipts, transfers and expenses posted to it appear here.'}</div></td></tr>}
@@ -69,7 +69,7 @@ export function CashBankView({ workspace, actor, editable, busy, command }: { wo
     </section>
     <section className="card">
       <div className="card-heading"><div><h2>Cheques in hand</h2><p>{cheques.length} awaiting deposit or clearance · deposit into an account, then mark cleared or bounced</p></div></div>
-      <div className="table-scroll"><table><thead><tr><th>Cheque</th><th>Customer / supplier</th><th>Cheque date</th><th>Amount</th><th>Status</th><th>Account</th><th>Actions</th></tr></thead><tbody>
+      <div className="table-scroll" tabIndex={0} role="region" aria-label="Cheques in hand table"><table><thead><tr><th>Cheque</th><th>Customer / supplier</th><th>Cheque date</th><th>Amount</th><th>Status</th><th>Account</th><th>Actions</th></tr></thead><tbody>
         {cheques.length ? cheques.map(r => <ChequeRow key={r.id} receipt={r} workspace={workspace} editable={editable} busy={busy} command={command}/>) : <tr><td colSpan={7}><div className="empty-state">No cheques waiting.</div></td></tr>}
       </tbody></table></div>
     </section>

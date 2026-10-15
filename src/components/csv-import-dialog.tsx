@@ -93,7 +93,7 @@ export function CsvImportDialog({ spec, open, busy, onClose, onImport }: {
           {unmapped.length > 0 && <small className="field-hint">Ignored columns are not imported. Rename a header to one of: {fields.map(f => f.key).join(', ')}.</small>}
           {required.length > 0 && <p className="error-note">Missing required column{required.length > 1 ? 's' : ''}: {required.join(', ')}.</p>}
         </div>
-        <div className="table-scroll import-preview"><table><thead><tr>{parsed.headers.map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>{parsed.rows.slice(0, 5).map((row, i) => <tr key={i}>{parsed.headers.map(h => <td key={h}>{row[h]}</td>)}</tr>)}</tbody></table></div>
+        <div className="table-scroll import-preview" tabIndex={0} role="region" aria-label="First rows of the file"><table><thead><tr>{parsed.headers.map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>{parsed.rows.slice(0, 5).map((row, i) => <tr key={i}>{parsed.headers.map(h => <td key={h}>{row[h]}</td>)}</tr>)}</tbody></table></div>
         <p className="import-count">{parsed.rows.length} row{parsed.rows.length === 1 ? '' : 's'} in the file{parsed.rows.length > 5 ? ', first 5 shown' : ''}.</p>
         <div className="import-mode" role="radiogroup" aria-label="Import mode">
           <label><input type="radio" name="mode" checked={mode === 'create'} onChange={() => setMode('create')}/> Create only <small>rows that already exist are reported as errors</small></label>

@@ -51,7 +51,7 @@ export function DocumentsList({ side, workspace, actor, editable, busy, command 
       <label>To date<input aria-label="To date" type="date" value={toDate} min={fromDate || undefined} onChange={e => setToDate(e.target.value)}/></label>
       {filtered && <button className="list-filter-clear" type="button" onClick={clear}>Clear filters</button>}
     </div>
-    <div className="table-scroll"><table><thead><tr>{['Document', partyType === 'customer' ? 'Customer' : 'Supplier', 'Date', 'Type', 'Status', 'Total', 'Action'].map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>{visible.length ? visible.map(d => <tr key={d.id}>
+    <div className="table-scroll" tabIndex={0} role="region" aria-label={`${side === 'sales' ? 'Sales' : 'Purchase'} documents table`}><table><thead><tr>{['Document', partyType === 'customer' ? 'Customer' : 'Supplier', 'Date', 'Type', 'Status', 'Total', 'Action'].map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>{visible.length ? visible.map(d => <tr key={d.id}>
       <td>{d.number}</td><td>{documentPartyName(workspace, d)}</td><td>{d.date}</td><td>{documentTitle(d.kind)}</td><td><span className={`badge ${d.status === 'submitted' ? 'success' : d.status === 'draft' ? 'warning' : 'info'}`}>{d.status}</span></td><td>{formatMoney(d.total)}{d.currency !== 'PKR' ? ` ${d.currency}` : ''}</td>
       <td><div className="inventory-row-actions">
         <Button size="sm" variant="outline" aria-label={`View ${d.kind === 'sales_invoice' ? 'invoice' : documentTitle(d.kind).toLowerCase()} ${d.number}`} onClick={() => setSelectedId(d.id)}>View</Button>

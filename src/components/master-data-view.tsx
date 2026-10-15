@@ -75,7 +75,7 @@ export function MasterDataView({ spec, workspace, editable, busy, command }: {
       {canArchive && <label>Status<select aria-label="Record status" value={status} onChange={event => setStatus(event.target.value as typeof status)}><option value="active">{spec.key === 'employees' ? 'Active' : 'Active'}</option><option value="archived">{spec.key === 'employees' ? 'Inactive' : 'Archived'}</option><option value="all">All</option></select></label>}
       {(query || status !== 'active') && <button className="list-filter-clear" type="button" onClick={() => { setQuery(''); setStatus('active'); }}>Clear filters</button>}
     </div>
-    <div className="table-scroll"><table><thead><tr>{spec.columns.map(c => <th key={c.key}>{c.label}</th>)}<th>Actions</th></tr></thead><tbody>
+    <div className="table-scroll" tabIndex={0} role="region" aria-label={`${spec.label} table`}><table><thead><tr>{spec.columns.map(c => <th key={c.key}>{c.label}</th>)}<th>Actions</th></tr></thead><tbody>
       {visible.length ? visible.map(record => <tr key={record.id} className={isArchived(record) ? 'row-archived' : undefined}>
         {spec.columns.map((c, i) => <td key={c.key}>{i === 0 ? <strong>{cell(record, c)}</strong> : cell(record, c)}</td>)}
         <td><div className="inventory-row-actions">

@@ -92,9 +92,9 @@ export function BrandingForm({ workspace, company, value, onChange, onWorkspace,
       </label>
       {error && <p className="error-note" role="alert">{error}</p>}
     </div>
-    <div className="branding-preview" aria-label="Invoice preview">
+    <div className="branding-preview">
       <span className="branding-label">Preview{invoice ? ` · ${invoice.number}` : ' · sample invoice'}</span>
-      <div className="branding-preview-frame"><DocumentPreview view={view} company={previewCompany} branding={{ ...workspace.branding, ...value }} assets={assets} compact/></div>
+      <div className="branding-preview-frame" tabIndex={0} role="region" aria-label="Invoice preview"><DocumentPreview view={view} company={previewCompany} branding={{ ...workspace.branding, ...value }} assets={assets} compact/></div>
     </div>
   </div>;
 }

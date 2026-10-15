@@ -458,6 +458,8 @@ tbody tr:hover{background:var(--surface-muted)}
 .dialog-close:hover{background:var(--border);color:var(--text)}
 .dialog-content h2{font-size:var(--text-xl)}
 .search-dialog .search-input{min-height:48px;font-size:var(--text-md)}
+/* Touch and phone: 16px so iOS does not zoom into the search field on focus. */
+@media(pointer:coarse),(max-width:760px){.search-dialog .search-input{font-size:16px}}
 .search-result:hover,.search-result:focus-visible{background:var(--surface-sunken)}
 .search-module{color:var(--accent-text)}
 

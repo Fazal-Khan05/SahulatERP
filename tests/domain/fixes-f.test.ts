@@ -36,4 +36,8 @@ describe('agent F shell fixes', () => {
     expect(css).toMatch(/\.setup-foot\{[^}]*background:rgba\(16,31,82,\.7\)/);
     expect(css).toContain('.table-scroll:focus-visible,.branding-preview-frame:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}');
   });
+  it('D-61 the search input is 16px on touch and phone so iOS does not zoom', () => {
+    expect(css).toContain('@media(pointer:coarse),(max-width:760px){.search-dialog .search-input{font-size:16px}}');
+    expect(css.indexOf('@media(pointer:coarse),(max-width:760px){.search-dialog .search-input')).toBeGreaterThan(css.indexOf('.search-dialog .search-input{min-height:48px;font-size:var(--text-md)}'));
+  });
 });

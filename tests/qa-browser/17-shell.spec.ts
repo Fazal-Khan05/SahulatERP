@@ -832,12 +832,12 @@ test('NAV-074 Workspace menu scales in from the trigger origin', async () => {
 
 // ============================================================ phone menus, long names, small heights
 
-test('NAV-080 Search dialog on phone is full width with a 16px input [defect]', async ({ browser }) => {
+test('NAV-080 Search dialog on phone is full width with a 16px input', async ({ browser }) => {
   const { context, page } = await phoneSession(browser);
   await page.getByRole('button', { name: /^Search anything/ }).tap();
   await expect(searchDialog(page)).toBeVisible();
   await searchDialog(page).evaluate(el => Promise.all(el.getAnimations().map(a => a.finished)));
-  // The phone rule input{font-size:16px} loses to .search-dialog .search-input{font-size:var(--text-md)}.
+  // D-61: .search-dialog .search-input is 16px on touch/phone (it used to override the global 16px input rule).
   expect.soft(await searchInput(page).evaluate(el => getComputedStyle(el).fontSize), 'search input is 16px on a touch phone').toBe('16px');
   await expect(searchInput(page)).toBeFocused();
   await searchInput(page).fill(F.metro);
@@ -846,7 +846,7 @@ test('NAV-080 Search dialog on phone is full width with a 16px input [defect]', 
   const layout = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, layoutViewport: innerWidth, screen: visualViewport!.width }));
   test.info().annotations.push({ type: 'measured', description: `sheet ${Math.round(b.width)} px wide; ${JSON.stringify(layout)}` });
   expect(Math.round(b.x)).toBe(0);
-  // On a touch phone the top bar overflows the 390 px screen, the layout viewport widens and the sheet with it.
+  // D-35: the top bar no longer overflows the 390 px screen, so the layout viewport and the sheet stay 390 px.
   expect.soft(Math.round(b.width), 'search sheet matches the 390 px screen').toBe(PHONE.width);
   expect.soft(layout.scrollWidth, 'no horizontal overflow behind the sheet').toBeLessThanOrEqual(PHONE.width);
   await context.close();

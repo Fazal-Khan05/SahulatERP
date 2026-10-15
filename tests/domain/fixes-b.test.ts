@@ -163,6 +163,20 @@ describe('D-54 set_modules refuses unknown module keys', () => {
   });
 });
 
+describe('D-55 follow-ups are for customers only', () => {
+  const party = (name: string, type: string) => ({ name, type, city: '', email: '', taxId: '', registered: false, creditLimit: '0', terms: 0, customerClass: '' });
+  it('refuses a supplier and an unknown party, accepts a customer', () => {
+    let w = completed();
+    const supplier = run(w, 'save_party', party('A Supplier', 'supplier')); w = supplier.workspace;
+    const customer = run(w, 'save_party', party('A Customer', 'customer')); w = customer.workspace;
+    const note = { note: 'Call back', nextDate: '2026-10-20' };
+    expect(() => run(w, 'follow_up', { partyId: supplier.recordId, ...note })).toThrow('Follow-ups can only be recorded for customers.');
+    expect(() => run(w, 'follow_up', { partyId: 'missing', ...note })).toThrow('Customer not found.');
+    const saved = run(w, 'follow_up', { partyId: customer.recordId, ...note }, as('Recovery Officer'));
+    expect(saved.workspace.followUps.map(f => f.partyId)).toEqual([customer.recordId]);
+  });
+});
+
 describe('D-10 cancel_payroll releases a stale draft so the month can be created again', () => {
   const settings = { taxRate: '', employerEobi: '5', employeeEobi: '1', eobiBase: '32000', incomeTaxRate: '5', numbering: 'FB', approvalLimit: '0' };
   const month = '2026-10';

@@ -414,10 +414,9 @@ describe('10 Collections: receipts, cheques (PDC), follow-ups (COL)', () => {
     expect(w.followUps.filter(f => f.nextDate <= today())).toHaveLength(1);
   });
 
-  it('COL-053 follow-up on a supplier via API is refused [defect]', () => {
+  it('COL-053 follow-up on a supplier via API is refused', () => {
     let { w } = base();
     let sup: string; [w, sup] = withParty(w, 'supplier');
-    // Actual: accepted — follow_up only checks that the party exists (any type).
     refused(w, 'follow_up', { partyId: sup, note: 'Call', nextDate: '2026-10-20' }, /Customer not found|customer/i);
   });
 

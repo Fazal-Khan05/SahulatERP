@@ -83,7 +83,7 @@ test.describe('layout, keyboard and accessibility on the busy company', () => {
     await s.context.close();
   });
 
-  test('UIX-003 768×1024 tablet: sidebar shown beside readable content, no horizontal scroll [defect]', async ({ browser }) => {
+  test('UIX-003 768×1024 tablet: sidebar shown beside readable content, no horizontal scroll', async ({ browser }) => {
     const s = await open(browser, { viewport: { width: 768, height: 1024 }, hasTouch: true });
     const bad: string[] = [];
     for (const m of MODULES) {
@@ -95,7 +95,7 @@ test.describe('layout, keyboard and accessibility on the busy company', () => {
       if (l.small) bad.push(`${m}: ${l.small} text nodes under 11px`);
     }
     saveEvidence('uix-003-tablet.json', bad);
-    // Actual: Overview keeps four metric cards in a row; "Rs 217,354.…" spills out of its card and widens the page to ~799 px.
+    // D-62: below 960 px the metric tiles wrap two per row, so long amounts stay inside their cards.
     expect(bad).toEqual([]);
     await s.context.close();
   });

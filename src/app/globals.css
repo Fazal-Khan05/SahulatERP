@@ -563,6 +563,8 @@ tbody tr:hover{background:var(--surface-muted)}
 /* Metric figures scale with their card, so a long amount never spills out of a narrow tile. */
 .metric-card{container-type:inline-size;min-width:0}
 .metric-card>strong{font-size:clamp(1rem,17cqi,var(--text-2xl));overflow-wrap:anywhere}
+/* Tablets: the content column beside the sidebar fits two tiles per row, not four. */
+@media(max-width:960px){.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 html{scrollbar-color:var(--gray-300) transparent;scrollbar-width:thin}
 *::-webkit-scrollbar{width:10px;height:10px}
 *::-webkit-scrollbar-thumb{background:var(--gray-300);border-radius:999px;border:2px solid transparent;background-clip:padding-box}

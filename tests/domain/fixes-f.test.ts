@@ -18,4 +18,7 @@ describe('agent F shell fixes', () => {
     expect(css).toContain('.metric-card{container-type:inline-size;min-width:0}');
     expect(css).toContain('.metric-card>strong{font-size:clamp(1rem,17cqi,var(--text-2xl));overflow-wrap:anywhere}');
   });
+  it('D-62 tablet metric tiles wrap two per row below 960 px', () => {
+    expect(css).toContain('@media(max-width:960px){.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}');
+  });
 });

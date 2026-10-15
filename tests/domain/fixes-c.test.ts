@@ -189,7 +189,7 @@ describe('D-25 statement shows a bounced cheque and its reversal', () => {
     expect(s.lines.map(l => [l.date, l.reference, l.description, l.debit, l.credit, l.balance])).toEqual([
       ['2026-09-01', 'INV-2026-0001', 'Sales invoice', '1000.0000', '', '1000.0000'],
       ['2026-09-22', 'REC-0001', 'Receipt · cheque CHQ-77', '', '1000.0000', '0.0000'],
-      ['2026-09-24', 'REC-0001', 'Cheque bounced · reversal CHQ-77', '1000.0000', '', '1000.0000'],
+      ['2026-09-24', 'REC-0001', 'Cheque bounced · CHQ-77', '1000.0000', '', '1000.0000'],
     ]);
     expect(s.closing).toBe(accountBalance(w, '1100'));
     // A period that starts between clearing and bounce opens at zero.
@@ -211,7 +211,7 @@ describe('D-25 statement shows a bounced cheque and its reversal', () => {
     w = chequeTo(chequeTo(c.workspace, c.recordId, 'deposited', DAY), c.recordId, 'cleared', '2026-10-11');
     w = chequeTo(w, c.recordId, 'bounced', '2026-10-12');
     const s = partyStatement(w, sup, '2026-01-01', '2026-12-31');
-    expect(s.lines.map(l => [l.description, l.balance])).toEqual([['Supplier bill', '1000.0000'], ['Payment · cheque CHQ-77', '0.0000'], ['Cheque bounced · reversal CHQ-77', '1000.0000']]);
+    expect(s.lines.map(l => [l.description, l.balance])).toEqual([['Supplier bill', '1000.0000'], ['Payment · cheque CHQ-77', '0.0000'], ['Cheque bounced · CHQ-77', '1000.0000']]);
     expect(s.closing).toBe(payable(w));
   });
 

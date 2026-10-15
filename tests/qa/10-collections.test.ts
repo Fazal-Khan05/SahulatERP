@@ -747,7 +747,7 @@ describe('10 Collections: receipts, cheques (PDC), follow-ups (COL)', () => {
     expect(commissionTotals(w, emp)).toMatchObject({ earned: '500.0000', released: '500.0000', paid: '0.0000' });
     const st = partyStatement(w, cust, '2000-01-01', '2999-12-31');
     // Since D-25 the bounced cheque keeps its receipt line and is followed by its reversal, so the history is visible.
-    expect(st.lines.map(l => [l.description, l.debit, l.credit, l.balance])).toEqual([['Sales invoice', '10000.0000', '', '10000.0000'], ['Receipt · cash', '', '4000.0000', '6000.0000'], ['Receipt · cheque BAH-600', '', '6000.0000', '0.0000'], ['Cheque bounced · reversal BAH-600', '6000.0000', '', '6000.0000'], ['Receipt · cash', '', '6000.0000', '0.0000']]);
+    expect(st.lines.map(l => [l.description, l.debit, l.credit, l.balance])).toEqual([['Sales invoice', '10000.0000', '', '10000.0000'], ['Receipt · cash', '', '4000.0000', '6000.0000'], ['Receipt · cheque BAH-600', '', '6000.0000', '0.0000'], ['Cheque bounced · BAH-600', '6000.0000', '', '6000.0000'], ['Receipt · cash', '', '6000.0000', '0.0000']]);
     expect(st.closing).toBe('0.0000');
     expect(summary(w).collections).toBe('10000.0000');
     expectInvariants(w);

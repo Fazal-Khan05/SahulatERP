@@ -104,7 +104,7 @@ export function partyStatement(w: Workspace, partyId: string, from: string, to: 
     const cheque = r.chequeNo ? ` ${r.chequeNo}` : "";
     events.push({ date: cleared, reference: r.number, description: customer ? `Receipt · ${r.method}${cheque}` : `Payment · ${r.method}${cheque}`, amount: amount.negated(), order: 3 });
     // On the same day the reversal follows its own receipt line, so a cheque re-received in cash later that day reads in order.
-    if (bounced) events.push({ date: bounced, reference: r.number, description: `Cheque bounced · reversal${cheque}`, amount, order: 3, step: 1 });
+    if (bounced) events.push({ date: bounced, reference: r.number, description: `Cheque bounced${r.chequeNo ? ` · ${r.chequeNo}` : ""}`, amount, order: 3, step: 1 });
   }
   events.sort((a, b) => a.date.localeCompare(b.date) || a.order - b.order || a.reference.localeCompare(b.reference) || (a.step ?? 0) - (b.step ?? 0));
   let balance = sum(events.filter(e => e.date < from).map(e => e.amount));

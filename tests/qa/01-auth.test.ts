@@ -60,6 +60,9 @@ const S = vi.hoisted(() => {
   return state;
 });
 
+// Cookie jar behind next/headers, used only by the real server client in AUTH-065.
+const jar = vi.hoisted(() => new Map<string, { value: string; options: Record<string, unknown> }>());
+vi.mock('next/headers', () => ({ cookies: async () => ({ getAll: () => [...jar].map(([name, c]) => ({ name, value: c.value })), set: (name: string, value: string, options: Record<string, unknown>) => jar.set(name, { value, options }) }) }));
 vi.mock('server-only', () => ({}));
 vi.mock('@/lib/supabase/server', () => ({ createServerSupabase: async () => S.server() }));
 vi.mock('@/lib/supabase/admin', () => ({ createAdminSupabase: () => S.admin() }));
@@ -206,11 +209,12 @@ describe('01 auth', () => {
     expect(text(html)).toContain('Workspace unavailable');
     expect(html).not.toMatch(/at \w+ \(|Error:/);
   });
-  it('AUTH-032 forgot password with empty email is validated client-side before any request [defect]', () => {
-    // reset() is a type="button" handler that calls resetPasswordForEmail(email) without checking the email first.
+  it('AUTH-032 forgot password with empty email is validated client-side before any request', () => {
+    // reset() is a type="button" handler (no native form validation), so it checks the address itself before posting.
     const source = src('src/components/login-screen.tsx');
     const reset = source.slice(source.indexOf('async function reset()'), source.indexOf('return <main'));
     expect(reset).toMatch(/if\s*\(\s*!email/);
+    expect(reset.search(/if\s*\(\s*!email/)).toBeLessThan(reset.indexOf("postAuth('/auth/forgot'"));
   });
   it('AUTH-035 reset page shows "Choose a password of at least 8 characters" (initially checking the link)', () => {
     const t = text(renderToStaticMarkup(createElement(ResetPassword)));
@@ -266,12 +270,22 @@ describe('01 auth', () => {
     const clientFiles = ['src/components/login-screen.tsx', 'src/components/reset-password.tsx', 'src/components/workbench.tsx', 'src/lib/supabase/client.ts', 'src/app/layout.tsx'];
     for (const f of clientFiles) expect(src(f), f).not.toMatch(/SERVICE_ROLE|SECRET|createAdminSupabase/);
   });
-  it('AUTH-065 session cookies are HttpOnly; no token in localStorage [defect]', async () => {
-    // @supabase/ssr stores the session in cookies (not localStorage) but its defaults are httpOnly:false so the browser client can read them.
-    const { DEFAULT_COOKIE_OPTIONS } = await import('@supabase/ssr/dist/main/utils/constants.js') as unknown as { DEFAULT_COOKIE_OPTIONS: { httpOnly: boolean; sameSite: string } };
-    expect(DEFAULT_COOKIE_OPTIONS.sameSite).toBe('lax');
-    expect(src('src/lib/supabase/server.ts')).not.toMatch(/httpOnly/);
-    expect(DEFAULT_COOKIE_OPTIONS.httpOnly).toBe(true);
+  it('AUTH-065 session cookies are HttpOnly; no token in localStorage', async () => {
+    // The real server client signs in (only next/headers and Supabase's HTTP answer are faked) and writes the session as HttpOnly, SameSite=Lax cookies.
+    const { createServerSupabase } = await vi.importActual<typeof import('../../src/lib/supabase/server')>('../../src/lib/supabase/server');
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://qa.supabase.co');
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'sb_publishable_qa');
+    vi.stubGlobal('fetch', async () => Response.json({ access_token: 'header.payload.signature', token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 3600, refresh_token: 'refresh-qa', user: { id: USER.id, aud: 'authenticated', email: USER.email, app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() } }));
+    jar.clear();
+    try { expect((await (await createServerSupabase()).auth.signInWithPassword({ email: USER.email, password: 'secret-123' })).error).toBeNull(); }
+    finally { vi.unstubAllGlobals(); vi.unstubAllEnvs(); }
+    expect(jar.size).toBeGreaterThan(0);
+    for (const [name, { options }] of jar) {
+      expect(name).toMatch(/^sb-qa-auth-token/);
+      expect(options, name).toMatchObject({ httpOnly: true, sameSite: 'lax', path: '/' });
+    }
+    // No browser Supabase client is left: the login and reset screens post to the /auth/* route handlers instead.
+    for (const f of ['src/components/login-screen.tsx', 'src/components/reset-password.tsx', 'src/lib/supabase/client.ts']) expect(src(f), f).not.toMatch(/@supabase\/|createBrowserClient|auth-token/);
   });
   it('AUTH-068 member:create for an existing email updates the password and creates no second company [documented: verified from script source; not run against hosted]', () => {
     const s = src('scripts/create-member.ts');
@@ -316,10 +330,12 @@ describe('01 auth', () => {
     const html = renderToStaticMarkup(createElement(Workbench, el.props as never));
     expect(text(html)).toContain('Demo workspace');
   });
-  it('AUTH-083 controls are disabled until hydrated so no click is lost [defect: login "Sign in securely" is enabled in server HTML; workbench nav is disabled]', () => {
+  it('AUTH-083 controls are disabled until hydrated so no click is lost (login buttons and workbench nav)', () => {
     const wb = renderToStaticMarkup(createElement(Workbench, { initialWorkspace: buildDemoWorkspace(), actor: { id: 'o', name: 'Owner', role: 'Owner', branchIds: [] }, memberships: [] }));
     expect([...wb.matchAll(/<button data-module="[^"]+" class="nav-item[^"]*"( disabled="")?/g)].every(m => m[1])).toBe(true);
-    expect(loginHtml()).toMatch(/<button type="submit"[^>]*disabled=""/);
+    const login = loginHtml();
+    expect(login).toMatch(/<button class="button button-primary" type="submit" disabled="">/);
+    expect(login).toMatch(/<button type="button" class="text-button" disabled="">Forgot your password\?<\/button>/);
   });
   it('AUTH-087 JavaScript disabled: static login renders and a native submit carries no credentials (inputs have no name)', () => {
     const html = loginHtml();

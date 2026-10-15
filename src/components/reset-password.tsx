@@ -1,21 +1,30 @@
 'use client';
 import { useEffect, useState, type FormEvent } from 'react';
 import { CheckCircle2, Loader2, LockKeyhole, ShieldCheck } from 'lucide-react';
-import { createBrowserSupabase } from '@/lib/supabase/client';
+import { postAuth } from '@/lib/supabase/client';
 import { Button } from './ui/button';
 
 type State = 'checking' | 'ready' | 'expired' | 'saved';
 
+// The reset session that last set a password here. A refresh, or the same emailed link again, then shows the
+// finished state instead of a second form.
+const CHANGED = 'sahulat-password-changed';
+const changedLink = () => { try { return localStorage.getItem(CHANGED); } catch { return null; } };
+
 export function ResetPassword() {
   const [state, setState] = useState<State>('checking');
+  const [link, setLink] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
 
   // The callback route exchanged the emailed code for a recovery session; without one the link is expired or used.
+  // The session cookies are HttpOnly, so the server answers whether there is one.
   useEffect(() => {
-    createBrowserSupabase().auth.getUser().then(({ data }) => setState(data.user ? 'ready' : 'expired'));
+    fetch('/auth/password', { cache: 'no-store' })
+      .then(response => response.json() as Promise<{ ready?: boolean; link?: string }>)
+      .then(({ ready, link = '' }) => { setLink(link); setState(!ready ? 'expired' : changedLink() === link ? 'saved' : 'ready'); }, () => setState('expired'));
   }, []);
 
   async function submit(event: FormEvent) {
@@ -23,9 +32,10 @@ export function ResetPassword() {
     if (password.length < 8) return setMessage('Use at least 8 characters.');
     if (password !== confirm) return setMessage('The two passwords do not match.');
     setBusy(true);
-    const { error } = await createBrowserSupabase().auth.updateUser({ password });
+    const error = await postAuth('/auth/password', { password });
     setBusy(false);
-    if (error) return setMessage(error.message);
+    if (error) return setMessage(error);
+    try { localStorage.setItem(CHANGED, link); } catch { /* storage blocked: a refresh shows the form again, nothing worse */ }
     setState('saved');
   }
 

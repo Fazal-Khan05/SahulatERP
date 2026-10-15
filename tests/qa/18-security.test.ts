@@ -749,8 +749,8 @@ describe('18 security', () => {
     const logs = files.flatMap(f => [...src(f).matchAll(/console\.(log|error|warn|info)\(([^;]*)\)/g)].map(m => `${f}: ${m[2]}`));
     expect(logs).toEqual([
       'src/app/api/demo-reset/route.ts: \'Demo reset: unexpected failure\', error',
-      'src/app/api/errors.ts: `${context}: commit rejected by database`, message',
-      'src/app/api/errors.ts: `${context}: unexpected failure`, error',
+      'src/app/api/workspace/errors.ts: `${context}: commit rejected by database`, message',
+      'src/app/api/workspace/errors.ts: `${context}: unexpected failure`, error',
       "src/app/api/workspace/route.ts: 'Empty workspace command body', { method: request.method, length: request.headers.get('content-length'), type: request.headers.get('content-type') }",
     ]);
   });

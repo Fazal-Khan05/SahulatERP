@@ -3,7 +3,7 @@ import { commitWorkspace, readWorkspace, requireMember } from '@/lib/workspace-s
 import { scopeWorkspace } from '@/modules/erp/access';
 import { execute } from '@/modules/erp/engine';
 import type { Role, Workspace } from '@/modules/erp/types';
-import { failureResponse, isRefusal, refusalResponse } from '../../errors';
+import { failureResponse, isRefusal, refusalResponse } from '../../workspace/errors';
 
 export const dynamic = 'force-dynamic';
 

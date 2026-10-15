@@ -693,6 +693,8 @@ button,a,[role=button],[role=tab],[role=switch],.nav-item,.tab,.chip,.badge,.swa
 /* Overlays: indigo tint and a stronger blur so the workspace shows through every popup the same way */
 .dialog-overlay,.sidebar-scrim{background:rgba(16,31,82,.38);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
 .dialog-content{border-radius:20px;box-shadow:var(--shadow-xl)}
+/* Phone bottom sheets meet the screen edge: rounded on top only (this layer comes after the sheet rule above). */
+@media(max-width:760px){.dialog-content{border-radius:20px 20px 0 0}}
 /* Login: a soft wash of the three brand colours instead of flat grey */
 .login-visual{background:var(--surface);isolation:isolate}
 .login-visual::before{inset:0;width:auto;height:auto;border:0;border-radius:0;background:radial-gradient(circle at 28% 22%,rgba(107,61,245,.22),transparent 48%),radial-gradient(circle at 82% 72%,rgba(18,208,250,.22),transparent 46%),radial-gradient(circle at 70% 12%,rgba(250,18,227,.14),transparent 40%);filter:blur(36px);z-index:-1;opacity:1}

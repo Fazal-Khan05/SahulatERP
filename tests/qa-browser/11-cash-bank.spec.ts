@@ -56,7 +56,7 @@ test('CSH-050 Negative balance is styled red', async () => {
   expect(isRed(colours.table), `table colour ${colours.table} is red`).toBe(true);
 });
 
-test('CSH-051 Cash & bank dialogs open as bottom sheets on a phone [defect]', async ({ browser }) => {
+test('CSH-051 Cash & bank dialogs open as bottom sheets on a phone', async ({ browser }) => {
   const phone = await signedInPage(browser, { viewport: PHONE, hasTouch: true, isMobile: true, reducedMotion: 'reduce' });
   const { page } = phone;
   const boxes: Record<string, unknown> = {};

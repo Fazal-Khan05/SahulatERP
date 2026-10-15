@@ -40,4 +40,10 @@ describe('agent F shell fixes', () => {
     expect(css).toContain('@media(pointer:coarse),(max-width:760px){.search-dialog .search-input{font-size:16px}}');
     expect(css.indexOf('@media(pointer:coarse),(max-width:760px){.search-dialog .search-input')).toBeGreaterThan(css.indexOf('.search-dialog .search-input{min-height:48px;font-size:var(--text-md)}'));
   });
+  it('D-63 phone bottom sheets have square bottom corners', () => {
+    const sheet = '@media(max-width:760px){.dialog-content{border-radius:20px 20px 0 0}}';
+    expect(css).toContain(sheet);
+    // It must come after the colour layer's .dialog-content{border-radius:20px}, which would otherwise win.
+    expect(css.indexOf(sheet)).toBeGreaterThan(css.indexOf('.dialog-content{border-radius:20px;box-shadow:var(--shadow-xl)}'));
+  });
 });

@@ -543,7 +543,7 @@ test('NAV-053 Phone: tapping an item closes the drawer and navigates', async ({ 
   await context.close();
 });
 
-test('NAV-054 Phone: Escape closes the drawer [defect]', async ({ browser }) => {
+test('NAV-054 Phone: Escape closes the drawer', async ({ browser }) => {
   const { context, page } = await phoneSession(browser);
   await page.getByRole('button', { name: 'Open navigation' }).tap();
   await expect(page.locator('.sidebar.mobile-open')).toBeVisible();

@@ -147,4 +147,9 @@ describe('agent F shell fixes', () => {
     const wb = readFileSync(resolve(root, 'src/components/workbench.tsx'), 'utf8');
     expect(wb).toContain("role={noticeError?'alert':'status'}>{notice}<button type=\"button\" className=\"notice-dismiss\" aria-label=\"Dismiss message\" onClick={()=>setNotice('')}>");
   });
+  it('D-59 Escape closes the phone drawer and returns focus to the menu button', () => {
+    const wb = readFileSync(resolve(root, 'src/components/workbench.tsx'), 'utf8');
+    expect(wb).toContain("if(event.key!=='Escape'||document.querySelector('[role=menu],[role=dialog]'))return;setMobile(false);menuButton.current?.focus()");
+    expect(wb).toContain('<button ref={menuButton} type="button" className="mobile-menu"');
+  });
 });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
   ArrowDownLeft, Bell, Boxes, Check, ChevronDown, ChevronRight, CircleDollarSign, ClipboardList,
@@ -10,6 +10,7 @@ import {
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
 import { DocumentDetails } from './document-details';
+import { ItemDetails } from './item-details';
 import { DocumentEditor } from './document-editor';
 import { DocumentsList } from './documents-list';
 import { PaymentDialog } from './document-dialogs';
@@ -114,17 +115,28 @@ function NotificationBell({items,go}:{items:[Module,string,number][];go:(module:
     </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>;
 }
 
-function SearchDialog({open,close,workspace,role,go}:{open:boolean;close:()=>void;workspace:Workspace;role:Role;go:(module:Module)=>void}){
-  const [query,setQuery]=useState('');
+type SearchHit={key:string;title:string;detail:string;module:Module;open?:{document?:string;item?:string}};
+const salesKinds=['quotation','sales_order','delivery','sales_invoice','credit_note'];
+const documentModule=(kind:string):Module=>salesKinds.includes(kind)?'sales':'purchasing';
+function SearchDialog({open,close,workspace,role,choose}:{open:boolean;close:()=>void;workspace:Workspace;role:Role;choose:(hit:SearchHit)=>void}){
+  const [query,setQuery]=useState('');const [active,setActive]=useState(-1);const listId=useId();
   const needle=query.trim().toLocaleLowerCase();
-  const results=useMemo(()=>{if(!needle)return [];const salesKinds=['quotation','sales_order','delivery','sales_invoice','credit_note'];const rows:{key:string;title:string;detail:string;module:Module}[]=[
-    ...workspace.documents.map(d=>({key:d.id,title:d.number,detail:`${d.kind.replaceAll('_',' ')} · ${documentPartyName(workspace,d)} · ${formatMoney(d.total)}`,module:(salesKinds.includes(d.kind)?'sales':'purchasing') as Module})),
+  const results=useMemo(()=>{if(!needle)return [];const rows:SearchHit[]=[
+    ...workspace.documents.map(d=>({key:d.id,title:d.number,detail:`${d.kind.replaceAll('_',' ')} · ${documentPartyName(workspace,d)} · ${formatMoney(d.total)}`,module:documentModule(d.kind),open:{document:d.id}})),
     ...workspace.parties.map(p=>({key:p.id,title:p.name,detail:`${p.type} · ${p.city}`,module:(p.type==='customer'?'collections':'purchasing') as Module})),
-    ...workspace.items.map(i=>({key:i.id,title:i.name,detail:`${i.sku} · ${i.category}`,module:'inventory' as Module})),
+    ...workspace.items.map(i=>({key:i.id,title:i.name,detail:`${i.sku} · ${i.category}`,module:'inventory' as Module,open:{item:i.id}})),
   ];return rows.filter(r=>canView(role,r.module,workspace)&&`${r.title} ${r.detail}`.toLocaleLowerCase().includes(needle)).slice(0,8)},[needle,workspace,role]);
-  return <Dialog open={open} onOpenChange={value=>{if(!value){close();setQuery('')}}}><DialogContent className="search-dialog"><DialogTitle>Search</DialogTitle><DialogDescription>Documents, customers, suppliers and products in this workspace.</DialogDescription>
-    <input className="search-input" autoFocus type="search" aria-label="Search the workspace" placeholder="Invoice number, customer, SKU…" value={query} onChange={event=>setQuery(event.target.value)}/>
-    <div className="search-results" role="list">{needle&&!results.length&&<div className="empty-state">No matches for “{query}”.</div>}{results.map(r=><button key={`${r.module}:${r.key}`} role="listitem" className="search-result" onClick={()=>{go(r.module);close();setQuery('')}}><span><strong>{r.title}</strong><small>{r.detail}</small></span><span className="search-module">{labels[r.module]}</span></button>)}</div>
+  // ↑/↓ move a highlight while focus stays in the field (aria-activedescendant); Enter opens it, or the first result.
+  useEffect(()=>{if(active>=0)document.getElementById(`${listId}-${active}`)?.scrollIntoView({block:'nearest'})},[active,listId]);
+  const reset=()=>{setQuery('');setActive(-1)};
+  const pick=(hit:SearchHit)=>{close();reset();choose(hit)};
+  const onKey=(event:ReactKeyboardEvent<HTMLInputElement>)=>{
+    if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();if(!results.length)return;const step=event.key==='ArrowDown'?1:-1;setActive(index=>index<0?(step>0?0:results.length-1):(index+step+results.length)%results.length)}
+    else if(event.key==='Enter'&&results.length){event.preventDefault();pick(results[Math.max(active,0)])}
+  };
+  return <Dialog open={open} onOpenChange={value=>{if(!value){close();reset()}}}><DialogContent className="search-dialog"><DialogTitle>Search</DialogTitle><DialogDescription>Documents, customers, suppliers and products in this workspace.</DialogDescription>
+    <input className="search-input" autoFocus type="search" aria-label="Search the workspace" placeholder="Invoice number, customer, SKU…" aria-controls={listId} aria-activedescendant={active>=0&&active<results.length?`${listId}-${active}`:undefined} value={query} onKeyDown={onKey} onChange={event=>{setQuery(event.target.value);setActive(-1)}}/>
+    <div className="search-results" id={listId} role="list">{needle&&!results.length&&<div className="empty-state">No matches for “{query}”.</div>}{results.map((r,index)=><button key={`${r.module}:${r.key}`} id={`${listId}-${index}`} role="listitem" className="search-result" data-highlighted={index===active?'':undefined} aria-current={index===active||undefined} onClick={()=>pick(r)}><span><strong>{r.title}</strong><small>{r.detail}</small></span><span className="search-module">{labels[r.module]}</span></button>)}</div>
   </DialogContent></Dialog>;
 }
 
@@ -136,6 +148,8 @@ export function Workbench({initialWorkspace,actor,memberships}:Props){
   // Finishing setup unblurs the workspace behind the card once; later loads render normally.
   const [revealed,setRevealed]=useState(false);const wasSettingUp=useRef(!initialWorkspace.setup.complete);const [modal,setModal]=useState<Modal>(null);const [stockTransferOpen,setStockTransferOpen]=useState(false);const [busy,setBusy]=useState('');const [notice,setNotice]=useState('');const [role,setRole]=useState<Role>(actor.role);
   const [branch,setBranch]=useState('');const [searchOpen,setSearchOpen]=useState(false);const [resetOpen,setResetOpen]=useState(false);
+  // A search result opens its record over its module: documents in the details dialog, products in the product dialog.
+  const [openDocumentId,setOpenDocumentId]=useState<string|null>(null);const [openItemId,setOpenItemId]=useState<string|null>(null);
   // Navigation stays disabled until React has hydrated so a click on the server-rendered page is never lost.
   const [ready,setReady]=useState(false);useEffect(()=>setReady(true),[]);
   const previewing=role!==actor.role;
@@ -154,6 +168,8 @@ export function Workbench({initialWorkspace,actor,memberships}:Props){
   function signInAgain(){setNotice('Your session has ended. Taking you to sign in…');setNoticeError(false);window.location.assign(`/?tenant=${encodeURIComponent(workspace.tenantId)}`)}
   async function resetDemo(){setBusy('reset');setNotice('');try{const response=await fetch('/api/demo-reset',{method:'POST'});const result=await response.json();if(sessionEnded(response.status,result)){signInAgain();return}if(response.ok)setWorkspace(result.workspace);setNotice(response.ok?result.message:result.message||'The demo could not be reset.')}finally{setBusy('');setResetOpen(false)}}
   const go=(module:Module)=>{setActive(module);setMobile(false)};
+  const openSearchHit=(hit:SearchHit)=>{go(hit.module);setOpenDocumentId(hit.open?.document??null);setOpenItemId(hit.open?.item??null)};
+  const openDocument=openDocumentId?view.documents.find(d=>d.id===openDocumentId):undefined;
   const changeRole=(next:Role)=>{setRole(next);if(!canView(next,active,workspace))setActive('dashboard')};
   useEffect(()=>{if(!canView(role,active,workspace))setActive('dashboard')},[workspace.modules,role,active,workspace]);
   const initials=actor.name.split(/\s+/).map(word=>word[0]).join('').slice(0,2).toUpperCase();
@@ -178,7 +194,9 @@ export function Workbench({initialWorkspace,actor,memberships}:Props){
     {modal==='receipt'&&<PaymentDialog open partyType="customer" workspace={view} busy={busy} onClose={()=>setModal(null)} command={command}/>}
     {modal==='payment'&&<PaymentDialog open partyType="supplier" workspace={view} busy={busy} onClose={()=>setModal(null)} command={command}/>}
     <StockTransferDialog open={stockTransferOpen} onClose={()=>setStockTransferOpen(false)} workspace={view} actor={viewActor} busy={busy} notice={stockTransferOpen?notice:''} command={command}/>
-    <SearchDialog open={searchOpen} close={()=>setSearchOpen(false)} workspace={view} role={role} go={go}/>
+    <SearchDialog open={searchOpen} close={()=>setSearchOpen(false)} workspace={view} role={role} choose={openSearchHit}/>
+    <DocumentDetails key={openDocumentId??'none'} workspace={view} actor={viewActor} documentId={openDocument?openDocument.id:null} editable={!!openDocument&&canEdit(role,documentModule(openDocument.kind))} busy={busy} command={command} onClose={()=>setOpenDocumentId(null)}/>
+    {openItemId&&<ItemDetails key={openItemId} workspace={view} actor={viewActor} itemId={openItemId} initialMode="view" onClose={()=>setOpenItemId(null)} command={command} busy={busy} notice={notice}/>}
     <Dialog open={resetOpen} onOpenChange={setResetOpen}><DialogContent className="confirm-dialog"><DialogTitle>Reset the demo company?</DialogTitle><DialogDescription>Every change made in {workspace.company.name} since the last reset — documents, payments, stock, payroll and journals — will be replaced with the original synthetic data. Your other workspaces are not affected. This cannot be undone.</DialogDescription><div className="form-actions"><Button variant="outline" onClick={()=>setResetOpen(false)}>Cancel</Button><Button variant="destructive" disabled={busy==='reset'} onClick={resetDemo}>{busy==='reset'?<Loader2 className="spin" size={16}/>:<RefreshCw size={16}/>}Reset demo data</Button></div></DialogContent></Dialog>
   </div></>;
 }

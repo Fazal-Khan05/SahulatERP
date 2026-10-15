@@ -152,4 +152,12 @@ describe('agent F shell fixes', () => {
     expect(wb).toContain("if(event.key!=='Escape'||document.querySelector('[role=menu],[role=dialog]'))return;setMobile(false);menuButton.current?.focus()");
     expect(wb).toContain('<button ref={menuButton} type="button" className="mobile-menu"');
   });
+  it('D-38 search: arrows move a highlight from the field, Enter opens it, and results open their record', () => {
+    const wb = readFileSync(resolve(root, 'src/components/workbench.tsx'), 'utf8');
+    expect(wb).toContain("aria-activedescendant={active>=0&&active<results.length?`${listId}-${active}`:undefined}");
+    expect(wb).toContain("else if(event.key==='Enter'&&results.length){event.preventDefault();pick(results[Math.max(active,0)])}");
+    expect(wb).toContain("data-highlighted={index===active?'':undefined} aria-current={index===active||undefined}");
+    // Documents open in the details dialog and products in the product dialog, over their module.
+    expect(wb).toContain('const openSearchHit=(hit:SearchHit)=>{go(hit.module);setOpenDocumentId(hit.open?.document??null);setOpenItemId(hit.open?.item??null)};');
+  });
 });

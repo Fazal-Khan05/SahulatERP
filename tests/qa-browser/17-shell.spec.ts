@@ -187,7 +187,7 @@ test('NAV-014 Ctrl+K and ⌘K open search instantly with no dialog animation', a
   }
 });
 
-test('NAV-015 Search "INV-2026" lists documents; Enter opens the first [defect]', async () => {
+test('NAV-015 Search "INV-2026" lists documents; Enter opens the first', async () => {
   const { page } = s;
   await home(page);
   await search(page, 'INV-2026');
@@ -322,7 +322,7 @@ test('NAV-025 Urdu search matches', async () => {
   await closeSearch(page);
 });
 
-test('NAV-026 Arrow keys move the selection; Escape closes [defect]', async () => {
+test('NAV-026 Arrow keys move the selection; Escape closes', async () => {
   const { page } = s;
   await home(page);
   await search(page, 'INV-2026');
@@ -345,7 +345,7 @@ test('NAV-026 Arrow keys move the selection; Escape closes [defect]', async () =
   await expect(searchDialog(page)).toHaveCount(0);
 });
 
-test('NAV-027 Clicking a result navigates to its module and opens the record [defect]', async () => {
+test('NAV-027 Clicking a result navigates to its module and opens the record', async () => {
   const { page, context } = s;
   await home(page);
   const w = await readWorkspaceApi(context.request);

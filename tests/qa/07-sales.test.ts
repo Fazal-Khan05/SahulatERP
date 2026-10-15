@@ -113,9 +113,10 @@ describe('07 Sales documents and the invoice editor (SAL)', () => {
     refused(w, 'create_document', { kind: 'sales_invoice', partyId: cust, warehouseId: firstWarehouse(w), date: today(), dueDate: today(), lines: [] }, /expected array to have >=1 items/);
   });
 
-  it('SAL-009 qty empty refused by engine [browser: editor message "Enter a quantity on line 1."] [documented: engine throws raw "[DecimalError] Invalid argument: "; editor blocks first]', () => {
+  it('SAL-009 qty empty refused by engine with a validation message, never a raw library error [browser: editor message "Enter a quantity on line 1."]', () => {
     const { w, item, cust } = base();
-    refused(w, 'create_document', { kind: 'sales_invoice', partyId: cust, warehouseId: firstWarehouse(w), date: today(), dueDate: today(), lines: [L(item, '')] }, /Invalid argument/);
+    const message = refused(w, 'create_document', { kind: 'sales_invoice', partyId: cust, warehouseId: firstWarehouse(w), date: today(), dueDate: today(), lines: [L(item, '')] }, /valid number|greater than zero/);
+    expect(message).not.toContain('DecimalError');
   });
 
   it('SAL-010 qty 0 refused "Amount must be greater than zero." [browser: editor "Enter a quantity on line 1."]', () => {
@@ -136,10 +137,9 @@ describe('07 Sales documents and the invoice editor (SAL)', () => {
     expect(docOf(w, id).net).toBe('0.0100');
   });
 
-  it('SAL-013 qty 0.00001 (below 4 dp) is refused [defect]', () => {
+  it('SAL-013 qty 0.00001 (below 4 dp) is refused', () => {
     const { w, item, cust } = base();
-    // Expected: quantity precision is 4 dp, so 0.00001 rounds to 0 and must be refused.
-    // Actual: accepted; the line keeps 0.00001 while the stock move rounds to 0.0000, so invoiced and moved quantities disagree.
+    // Quantity precision is 4 dp (half-up), so 0.00001 rounds to 0 and is refused.
     refused(w, 'create_document', { kind: 'sales_invoice', partyId: cust, warehouseId: firstWarehouse(w), date: today(), dueDate: today(), lines: [L(item, '0.00001')] }, /greater than zero|quantity/i);
   });
 

@@ -12,7 +12,8 @@ const id=()=>crypto.randomUUID();
 const today=()=>businessToday();
 const s=(p:Record<string,unknown>,k:string,def?:string)=>z.string().max(2000).parse(p[k]??def);
 const date=(v:unknown)=>z.iso.date().parse(v);
-const decimal=z.union([z.string(),z.number()]).transform(v=>String(v)).refine(v=>{try{return D(v).isFinite()&&D(v).abs().lt("1000000000000")}catch{return false}},"Enter a valid number below one trillion.");
+// Amounts, prices, quantities, rates and FX rates are held to 4 dp, rounded half-up at input, so later checks, document lines and stock moves all see the same value. Text already within 4 dp is kept as sent.
+const decimal=z.union([z.string(),z.number()]).transform(v=>String(v)).refine(v=>{try{const d=D(v).toDecimalPlaces(4);return d.isFinite()&&d.abs().lt("1000000000000")}catch{return false}},"Enter a valid number below one trillion.").transform(v=>D(v).decimalPlaces()>4?D(v).toDecimalPlaces(4).toString():v);
 const pos=decimal.refine(v=>D(v).gt(0),"Amount must be greater than zero.");
 const nonneg=decimal.refine(v=>D(v).gte(0),"Amount cannot be negative.");
 const pct=nonneg.refine(v=>D(v).lte(100),"Percentage cannot exceed 100.");

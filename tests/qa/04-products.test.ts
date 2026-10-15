@@ -113,7 +113,7 @@ describe('04 products (PRD)', () => {
     expect(formatMoney(w.items[0].price)).toBe('Rs 1,000');
   });
 
-  it('PRD-016 price with 6 decimals is stored at 4 dp, rounded half-up [defect]', () => {
+  it('PRD-016 price with 6 decimals is stored at 4 dp, rounded half-up', () => {
     const w = run(freshCompany(), 'save_item', product({ price: '12.345678' })).workspace;
     expect(w.items[0].price).toMatch(/^12\.3457(0*)$/);
   });
@@ -243,7 +243,7 @@ describe('04 products (PRD)', () => {
     expect(itemSpec.fields.find(f => f.key === 'openingQuantity')!.step).toBe('0.0001');
   });
 
-  it('PRD-035 opening qty 0.00001 is refused or books nothing; never a zero-quantity movement carrying value [defect]', () => {
+  it('PRD-035 opening qty 0.00001 is refused or books nothing; never a zero-quantity movement carrying value', () => {
     const saved = run(freshCompany(), 'save_item', product());
     let w = saved.workspace;
     try { w = opening(w, saved.recordId, '0.00001', '5').workspace; } catch { /* refusal is acceptable */ }

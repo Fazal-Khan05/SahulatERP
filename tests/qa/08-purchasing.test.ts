@@ -717,10 +717,9 @@ describe('08 Purchasing, foreign currency, supplier payments (PUR)', () => {
     expect(docOf(r.workspace, r.recordId).fxRate).toBe('280.1234');
   });
 
-  it('PUR-095 rate with 5 decimals is rounded to 4 [defect]', () => {
+  it('PUR-095 rate with 5 decimals is rounded to 4', () => {
     const { w: w0, item, sup } = base();
     const r = create(w0, 'purchase_order', sup, [L(item)], { currency: 'USD', fxRate: '280.12345' });
-    // Actual: stored as typed ("280.12345"); FX precision is not enforced.
     expect(docOf(r.workspace, r.recordId).fxRate).toBe('280.1235');
   });
 

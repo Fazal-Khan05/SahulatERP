@@ -447,12 +447,20 @@ test('NAV-030 Bell menu lists the attention queues with counts; clicking one ope
   }
 });
 
-test('NAV-076 "Draft sales documents to submit" opens Sales filtered to drafts [defect]', async () => {
+test('NAV-076 "Draft sales documents to submit" opens Sales filtered to drafts', async () => {
   const { page } = s;
   await home(page);
   await page.locator('.attention-row').filter({ hasText: 'Draft sales documents to submit' }).click();
   await expect(breadcrumb(page)).toHaveText('Sales');
   await expect(page.getByLabel('Document status'), 'status filter preset to Draft').toHaveValue('draft', { timeout: 3000 });
+  // The bell's entry does the same; opening Sales from the menu shows every status.
+  await home(page);
+  await bell(page).click();
+  await page.getByRole('menuitem').filter({ hasText: 'Draft sales documents to submit' }).click();
+  await expect(page.getByLabel('Document status')).toHaveValue('draft');
+  await home(page);
+  await openModule(page, 'Sales');
+  await expect(page.getByLabel('Document status')).toHaveValue('');
 });
 
 // ============================================================ branch picker, notices

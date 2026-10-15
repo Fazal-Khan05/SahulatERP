@@ -12,6 +12,7 @@ import { ImportsView, costClasses } from '../../src/components/imports-view';
 import { PayrollRuns, payrollDate } from '../../src/components/payroll-runs';
 import { CustomerReceipts } from '../../src/components/receipts-list';
 import { AuditHistory } from '../../src/components/audit-history';
+import { DocumentsList } from '../../src/components/documents-list';
 import { execute } from '../../src/modules/erp/engine';
 import { TableCard, statusTone } from '../../src/components/table-card';
 import { buildDemoWorkspace } from '../../src/modules/erp/demo';
@@ -133,5 +134,17 @@ describe('H workspace view fixes', () => {
     const actors = [...html.matchAll(/<tr><td>[^<]*<\/td><td>([^<]*)<\/td>/g)].map(m => m[1]);
     expect(actors).toEqual(['Ayesha Accounts', 'Old Name']);
     expect(html).not.toContain('0b6f1c2e-user-id');
+  });
+
+  it('D-60 the Sales document list can open with its status filter preset to drafts', () => {
+    const demo = buildDemoWorkspace();
+    const invoice = demo.documents.find(d => d.kind === 'sales_invoice')!;
+    const w = { ...demo, documents: [...demo.documents, { ...invoice, id: 'h-draft', number: 'SI-H-DRAFT', status: 'draft' as const }] };
+    const html = (initialStatus?: string) => renderToStaticMarkup(createElement(DocumentsList, { side: 'sales', workspace: w, actor: actor('Owner'), editable: true, busy: '', command, initialStatus }));
+    const drafts = w.documents.filter(d => ['quotation', 'sales_order', 'delivery', 'sales_invoice', 'credit_note'].includes(d.kind) && d.status === 'draft');
+    expect(drafts.length).toBeGreaterThan(0);
+    expect(html('draft')).toMatch(/aria-label="Document status"><option value="">All statuses<\/option><option value="draft" selected="">Draft<\/option>/);
+    expect(html('draft')).toContain(`<p>${drafts.length} of `);
+    expect(html()).not.toContain('<option value="draft" selected="">');
   });
 });

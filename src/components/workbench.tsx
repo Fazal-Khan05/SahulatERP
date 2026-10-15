@@ -32,6 +32,8 @@ import { accountNames, type Actor, type Module, type Role, type Workspace } from
 
 type WorkspaceMembership = {tenantId:string;role:Role;branchIds:string[];name:string;isDemo:boolean};
 type Props = { initialWorkspace: Workspace; actor: Actor; memberships: WorkspaceMembership[] };
+/** Filters a view opens with when it is reached from a shortcut, e.g. Sales filtered to drafts from "Draft sales documents to submit". */
+type ViewPreset={status?:string};
 type Modal = 'sale'|'purchase'|'receipt'|'payment'|'followup'|null;
 const nav:{key:Module;label:string;icon:typeof LayoutDashboard}[]=[
   {key:'dashboard',label:'Overview',icon:LayoutDashboard},{key:'sales',label:'Sales',icon:ShoppingBag},
@@ -66,6 +68,8 @@ function attentionItems(w:Workspace,role:Role){const now=today();return ([
   ['collections','Recovery follow-ups due',w.followUps.filter(f=>f.nextDate<=now).length],
   ['sales','Draft sales documents to submit',w.documents.filter(d=>d.status==='draft'&&['quotation','sales_order','delivery','sales_invoice'].includes(d.kind)).length],
 ] as [Module,string,number][]).filter(([module,,count])=>count>0&&canView(role,module,w))}
+/** Sales' only attention queue is its drafts, so opening it presets the status filter to Draft. */
+const attentionPreset=(module:Module):ViewPreset|undefined=>module==='sales'?{status:'draft'}:undefined;
 
 function WorkspaceSwitcher({workspace,memberships}:{workspace:Workspace;memberships:WorkspaceMembership[]}){
   return <DropdownMenu.Root>
@@ -107,12 +111,12 @@ function BranchPicker({workspace,branch,setBranch,allowed}:{workspace:Workspace;
     </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>;
 }
 
-function NotificationBell({items,go}:{items:[Module,string,number][];go:(module:Module)=>void}){
+function NotificationBell({items,go}:{items:[Module,string,number][];go:(module:Module,preset?:ViewPreset)=>void}){
   const total=items.reduce((n,[, ,count])=>n+count,0);
   return <DropdownMenu.Root><DropdownMenu.Trigger asChild><button type="button" className="icon-button" aria-label={total?`Notifications, ${total} items need attention`:'Notifications, nothing needs attention'}><Bell size={19}/>{total>0&&<span className="bell-count">{total>99?'99+':total}</span>}</button></DropdownMenu.Trigger>
     <DropdownMenu.Portal><DropdownMenu.Content className="workspace-menu light-menu notification-menu" align="end" sideOffset={8}>
       <div className="workspace-menu-label">NEEDS ATTENTION</div>
-      {items.length?items.map(([module,title,count])=><DropdownMenu.Item key={title} className="workspace-menu-item compact" onSelect={()=>go(module)}><span className="workspace-menu-name"><strong>{title}</strong><small>{count} · {labels[module]}</small></span><ChevronRight size={14}/></DropdownMenu.Item>):<div className="menu-empty">You’re all caught up.</div>}
+      {items.length?items.map(([module,title,count])=><DropdownMenu.Item key={title} className="workspace-menu-item compact" onSelect={()=>go(module,attentionPreset(module))}><span className="workspace-menu-name"><strong>{title}</strong><small>{count} · {labels[module]}</small></span><ChevronRight size={14}/></DropdownMenu.Item>):<div className="menu-empty">You’re all caught up.</div>}
     </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>;
 }
 
@@ -211,7 +215,8 @@ export function Workbench({initialWorkspace,actor,memberships}:Props){
   // The server renders the sign-in screen for this same address; after signing in the member lands back in this company.
   function signInAgain(){setNotice('Your session has ended. Taking you to sign in…');setNoticeError(false);window.location.assign(`/?tenant=${encodeURIComponent(workspace.tenantId)}`)}
   async function resetDemo(){setBusy('reset');setNotice('');try{const response=await fetch('/api/demo-reset',{method:'POST'});const result=await response.json();if(sessionEnded(response.status,result)){signInAgain();return}if(response.ok)setWorkspace(result.workspace);setNotice(response.ok?result.message:result.message||'The demo could not be reset.')}finally{setBusy('');setResetOpen(false)}}
-  const go=(module:Module)=>{setActive(module);setMobile(false)};
+  // A shortcut can open a module with a filter preset (Sales filtered to drafts); plain navigation clears it.
+  const [preset,setPreset]=useState<ViewPreset>();const go=(module:Module,next?:ViewPreset)=>{setActive(module);setMobile(false);setPreset(next)};
   const openSearchHit=(hit:SearchHit)=>{go(hit.module);setOpenDocumentId(hit.open?.document??null);setOpenItemId(hit.open?.item??null)};
   const openDocument=openDocumentId?view.documents.find(d=>d.id===openDocumentId):undefined;
   const changeRole=(next:Role)=>{setRole(next);if(!canView(next,active,workspace))setActive('dashboard')};
@@ -233,7 +238,7 @@ export function Workbench({initialWorkspace,actor,memberships}:Props){
         {branch&&canReadLedger(role)&&['dashboard','accounting','reports'].includes(active)&&<div className="simulation-note">Showing {workspace.branches.find(b=>b.id===branch)?.name} operations. General-ledger balances are company-wide and are not split by branch.</div>}
         {/* The notice sticks under the top bar, so it is in view after an action anywhere on a long page. */}
         {notice&&<div className={noticeError?'error-note':'form-note'} role={noticeError?'alert':'status'}>{notice}<button type="button" className="notice-dismiss" aria-label="Dismiss message" onClick={()=>setNotice('')}><X size={15}/></button></div>}
-        <div key={active} className="view-enter"><View active={active} workspace={view} ledgerView={ledgerView} actor={viewActor} busy={busy} notice={notice} command={command} open={setModal} openStockTransfer={openStockTransfer} go={go} reset={()=>setResetOpen(true)} role={role} realRole={actor.role} setRole={changeRole} onWorkspace={setWorkspace} fullWorkspace={workspace}/></div>
+        <div key={active} className="view-enter"><View active={active} preset={preset} workspace={view} ledgerView={ledgerView} actor={viewActor} busy={busy} notice={notice} command={command} open={setModal} openStockTransfer={openStockTransfer} go={go} reset={()=>setResetOpen(true)} role={role} realRole={actor.role} setRole={changeRole} onWorkspace={setWorkspace} fullWorkspace={workspace}/></div>
         <footer className="page-footer"><span>SAHULAT ERP <span>Made for the way you do business.</span></span><span>PKR · Asia/Karachi</span></footer></main></div>
     <TransactionDialog modal={modal==='followup'?modal:null} close={()=>setModal(null)} workspace={view} busy={busy} command={command}/>
     {modal==='sale'&&<DocumentEditor open kind="sales_invoice" workspace={view} actor={viewActor} busy={busy} onClose={()=>setModal(null)} command={command}/>}
@@ -249,7 +254,7 @@ export function Workbench({initialWorkspace,actor,memberships}:Props){
 }
 
 type CommandFn=(type:string,payload:Record<string,unknown>,options?:{confirmPassword?:string})=>Promise<{ok:boolean;message:string;passwordRequired?:boolean}>;
-type ViewProps={active:Module;workspace:Workspace;fullWorkspace:Workspace;ledgerView:boolean;actor:Actor;busy:string;notice:string;command:CommandFn;open:(modal:Modal)=>void;openStockTransfer:()=>void;go:(module:Module)=>void;reset:()=>void;role:Role;realRole:Role;setRole:(role:Role)=>void;onWorkspace:(next:Workspace)=>void};
+type ViewProps={active:Module;workspace:Workspace;fullWorkspace:Workspace;ledgerView:boolean;actor:Actor;busy:string;notice:string;command:CommandFn;open:(modal:Modal)=>void;openStockTransfer:()=>void;go:(module:Module,preset?:ViewPreset)=>void;preset?:ViewPreset;reset:()=>void;role:Role;realRole:Role;setRole:(role:Role)=>void;onWorkspace:(next:Workspace)=>void};
 import { Status, TableCard } from './table-card';
 import { ImportsView } from './imports-view';
 import { PayrollRuns } from './payroll-runs';
@@ -257,7 +262,7 @@ import { CustomerReceipts } from './receipts-list';
 import { AuditHistory } from './audit-history';
 function Tabbed({tabs}:{tabs:{key:string;label:string;content:ReactNode}[]}){const [tab,setTab]=useState(tabs[0].key);const current=tabs.find(t=>t.key===tab)??tabs[0];return <div className="stack"><div className="tabs" role="tablist">{tabs.map(t=><button key={t.key} role="tab" aria-selected={current.key===t.key} className={`tab ${current.key===t.key?'active':''}`} onClick={()=>setTab(t.key)}>{t.label}</button>)}</div>{current.content}</div>}
 function View(props:ViewProps){const {active,workspace,busy,command,open,ledgerView}=props;const editable=canEdit(props.actor.role,active);const data=(key:keyof typeof entitySpecs)=><MasterDataView spec={entitySpecs[key] as never} workspace={workspace} editable={editable} busy={busy} command={command}/>;if(active==='dashboard')return <Dashboard {...props}/>;
-  if(active==='sales')return <Tabbed key="sales" tabs={[{key:'documents',label:'Documents',content:<DocumentsList side="sales" workspace={workspace} actor={props.actor} editable={editable} busy={busy} command={command}/>},{key:'customers',label:'Customers',content:data('customers')}]}/>;
+  if(active==='sales')return <Tabbed key="sales" tabs={[{key:'documents',label:'Documents',content:<DocumentsList side="sales" workspace={workspace} actor={props.actor} editable={editable} busy={busy} command={command} initialStatus={props.preset?.status}/>},{key:'customers',label:'Customers',content:data('customers')}]}/>;
   if(active==='purchasing'){const payments=workspace.receipts.filter(r=>workspace.parties.find(p=>p.id===r.partyId)?.type==='supplier');return <Tabbed key="purchasing" tabs={[{key:'documents',label:'Documents',content:<DocumentsList side="purchasing" workspace={workspace} actor={props.actor} editable={editable} busy={busy} command={command}/>},{key:'payments',label:'Supplier payments',content:<TableCard title="Supplier payments" empty={editable&&canRun(props.actor.role,'create_receipt')?'No supplier payments yet. Record one against a submitted supplier bill.':'No supplier payments yet.'} action={editable&&canRun(props.actor.role,'create_receipt')?<Button onClick={()=>open('payment')}><Plus size={16}/>Record payment</Button>:undefined} heads={['Payment','Supplier','Date','Method / cheque','Status','Amount (PKR)','Action']} numeric={[5]} rows={payments.slice().reverse().map(r=>[r.number,nameOf(workspace,r.partyId),r.date,r.method==='cheque'?r.chequeNo:r.method,<Status key="s" value={r.status}/>,formatMoney(r.amount),<a key="p" className="button button-outline button-sm" href={`/print/receipt/${r.id}?tenant=${workspace.tenantId}`} target="_blank" rel="noopener" aria-label={`Print ${r.number}`}><Printer size={14}/>Print</a>])}/>},{key:'suppliers',label:'Suppliers',content:data('suppliers')}]}/>}
   if(active==='imports')return <ImportsView workspace={workspace} actor={props.actor} editable={editable} busy={busy} command={command}/>;
   if(active==='inventory')return <Tabbed key="inventory" tabs={[{key:'stock',label:'Stock',content:<InventoryView workspace={workspace} actor={props.actor} busy={busy} notice={props.notice} command={command} openStockTransfer={props.openStockTransfer}/>},{key:'products',label:'Products',content:data('items')},{key:'warehouses',label:'Warehouses',content:<BranchesAndWarehouses workspace={workspace} editable={editable} busy={busy} command={command}/>}]}/>;
@@ -287,7 +292,7 @@ function Dashboard(props:ViewProps){const {workspace,go,ledgerView,role}=props;c
   return <><div className="welcome-strip"><div className="welcome-icon"><Sparkles size={20}/></div><div><strong>A clear view of your day.</strong><span> {ledgerView?'Every figure comes from your posted records.':'Figures cover the records your role and branch can see.'}</span></div></div><Metrics values={metrics}/>
     <div className="dashboard-main"><section className="card"><div className="card-heading"><div><h2>Sales & collections</h2><p>{series.length?`Weekly totals, ${series[0].from} to ${series.at(-1)!.to}`:'No posted sales or cleared collections yet'}</p></div><div className="chart-legend"><span><i className="legend-sales"/>Invoiced</span><span><i className="legend-collections"/>Cleared</span></div></div>
       {series.length?<div className="preview-chart" role="img" aria-label={`Weekly sales and collections. ${series.map(x=>`${x.label}: sales ${formatMoney(x.sales.toString())}, collections ${formatMoney(x.collections.toString())}`).join('; ')}`}><div className="chart-y">{[1,.66,.33,0].map(f=><span key={f}>{formatMoney(scale.mul(f).toString(),true).replace('Rs ','')}</span>)}</div><div className="bars">{series.map(x=><div className="bar-group" key={x.from} title={`${x.from} – ${x.to}\nSales ${formatMoney(x.sales.toString())}\nCollections ${formatMoney(x.collections.toString())}`}><div className="bar sales" style={{height:`${x.sales.div(scale).mul(100).toNumber()}%`}}/><div className="bar collections" style={{height:`${x.collections.div(scale).mul(100).toNumber()}%`}}/><span>{x.label}</span></div>)}</div></div>:<div className="empty-state">Submit an invoice or clear a receipt to see activity here.</div>}</section>
-      <section className="card"><div className="card-heading"><div><h2>Needs your attention</h2><p>Open a queue to take action</p></div></div>{attention.length?attention.map(([module,title,count])=><button className="attention-row" key={title} onClick={()=>go(module)}><span className="attention-icon green"><HandCoins size={19}/></span><div><strong>{title}</strong><small>{count} records</small></div><ChevronRight size={16}/></button>):<div className="empty-state">Nothing needs attention.</div>}</section></div>
+      <section className="card"><div className="card-heading"><div><h2>Needs your attention</h2><p>Open a queue to take action</p></div></div>{attention.length?attention.map(([module,title,count])=><button className="attention-row" key={title} onClick={()=>go(module,attentionPreset(module))}><span className="attention-icon green"><HandCoins size={19}/></span><div><strong>{title}</strong><small>{count} records</small></div><ChevronRight size={16}/></button>):<div className="empty-state">Nothing needs attention.</div>}</section></div>
     <TableCard title="Recent sales" empty={canEdit(role,'sales')?<>No sales invoices yet. <button type="button" className="text-button" onClick={()=>props.open('sale')}>Create a sales invoice</button></>:'No sales invoices yet.'} heads={['Invoice','Customer','Date','Collection','Amount','Action']} numeric={[4]} rows={workspace.documents.filter(d=>d.kind==='sales_invoice').slice(-5).reverse().map(d=>{const balance=D(outstanding(d));return [<button key="invoice" className="text-button" onClick={()=>setSelectedInvoiceId(d.id)}>{d.number}</button>,documentPartyName(workspace,d),d.date,<Status key="s" value={d.status==='draft'?'draft':balance.lt(0)?'customer credit':balance.eq(0)?'paid':D(d.paid).gt(0)?'partially paid':'unpaid'}/>,formatMoney(d.total),<Button key="view" variant="outline" size="sm" aria-label={`View invoice ${d.number}`} onClick={()=>setSelectedInvoiceId(d.id)}>View</Button>]})}/><DocumentDetails workspace={workspace} actor={props.actor} documentId={selectedInvoiceId} editable={canEdit(role,'sales')} busy={props.busy} command={props.command} onClose={()=>setSelectedInvoiceId(null)}/></>}
 function BranchesAndWarehouses({workspace,editable,busy,command}:{workspace:Workspace;editable:boolean;busy:string;command:CommandFn}){const [branchName,setBranchName]=useState('');const [renaming,setRenaming]=useState<{id:string;name:string}|null>(null);
   return <div className="stack"><section className="card"><div className="card-heading"><div><h2>Branches</h2><p>Branches group warehouses and limit what branch-scoped users can see.</p></div></div><div className="card-body">

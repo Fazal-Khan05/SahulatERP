@@ -329,7 +329,7 @@ describe('17 shell', () => {
     ['NAV-073', '[browser] no hydration warnings'],
     ['NAV-074', '[browser] workspace menu animates from trigger origin'],
     ['NAV-075', '[manual] touch device: no stuck hover after tap'],
-    ['NAV-076', '[browser] "Draft sales documents to submit" opens Sales filtered to drafts (source navigates to Sales only)'],
+    ['NAV-076', '[browser] "Draft sales documents to submit" opens Sales filtered to drafts'],
     ['NAV-080', '[browser] search dialog on phone full-width with 16px input'],
     ['NAV-081', '[browser] bell menu fits on phone'],
     ['NAV-082', '[browser] long company name truncated with ellipsis in switcher'],

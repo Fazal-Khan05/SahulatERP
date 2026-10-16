@@ -40,7 +40,7 @@ A shipment is created from a submitted GRN or supplier bill. Costs are classifie
 | IMP-034 | P2 | F | Shipment status flow in_transit → customs → received → costed | Displayed; costed after allocation |
 | IMP-035 | P2 | F | Shipment list columns: shipment, supplier, container/GD, ETA, status, unallocated | Correct totals |
 | IMP-036 | P2 | F | Unallocated total = sum of unallocated costs | Yes |
-| IMP-037 | P2 | F | Customs lookup (simulated) shows GD lookup result | No "simulated" banner on the page any more; lookup still returns stub data |
+| IMP-037 | P2 | F | Customs/GD lookup | Withdrawn 15 Oct 2026: real customs lookups are out of scope and simulated lookups were removed; no lookup is offered and the GD number is typed by hand |
 | IMP-038 | P2 | D | Journal on allocate: Dr 1200 (inventory part) / Dr 1500 (tax) / Dr deposit asset / Dr expense / Cr 2000 or accrued charges | Balanced; one journal per allocation |
 | IMP-039 | P2 | D | Reconciliation after allocation | Inventory control = valuation |
 | IMP-040 | P2 | D | P&L after allocation | Expense cost in P&L; inventory cost not |

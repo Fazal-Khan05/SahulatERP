@@ -13,7 +13,9 @@ export async function GET(request: Request, context: { params: Promise<{ kind: s
     if (!brandingKinds.includes(kind as BrandingKind)) return new Response('Not found', { status: 404 });
     const { workspace } = await readWorkspace(tenantId!);
     const path = kind === 'logo' ? workspace.branding.logoPath : workspace.branding.letterheadPath;
-    if (!path) return new Response('Not found', { status: 404 });
+    // Sign only the exact objects the upload route writes (<tenant>/<kind>.<png|jpg|jpeg>): never another
+    // company's file or a path with "..", even if one was saved on the workspace earlier.
+    if (!path || !['png', 'jpg', 'jpeg'].some(ext => path === `${tenantId}/${kind}.${ext}`)) return new Response('Not found', { status: 404 });
     const signed = await signedBrandingUrl(path);
     if (!signed) return new Response('Not found', { status: 404 });
     return Response.redirect(signed, 302);

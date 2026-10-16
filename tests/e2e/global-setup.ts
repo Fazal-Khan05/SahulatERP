@@ -7,7 +7,7 @@ import type { FullConfig } from '@playwright/test';
  */
 export default async function globalSetup(config: FullConfig) {
   const base = config.projects[0]?.use.baseURL ?? 'http://127.0.0.1:3000';
-  for (const path of ['/', '/api/workspace', '/account/reset', '/print/sales_invoice/warm-up', '/api/branding/logo']) {
+  for (const path of ['/', '/api/workspace', '/account/reset', '/auth/password', '/auth/signin', '/auth/forgot', '/print/sales_invoice/warm-up', '/api/branding/logo']) {
     await fetch(`${base}${path}`).catch(() => undefined);
   }
 }

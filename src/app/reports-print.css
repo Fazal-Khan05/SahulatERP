@@ -1,0 +1,48 @@
+/*
+ * Reports: printed layout (imported by src/components/reports-view.tsx).
+ * Only the report card prints, edge to edge on white, under a printed company header. Every print rule is scoped to
+ * a page that is showing Reports (body:has(.reports-layout)), which also gives it the specificity to beat the
+ * responsive shell rules in globals.css (sidebar gutter, page padding, grey page background, card chrome).
+ */
+
+/* Print-only blocks stay out of the screen layout. */
+.report-print-header,.report-print-params{display:none}
+
+/* The report table scrolls sideways on narrow screens and is keyboard-focusable; show where focus is. */
+.report-card .table-scroll:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+
+@media print{
+  html:has(.reports-layout),body:has(.reports-layout){background:#fff}
+  body:has(.reports-layout) .sidebar,body:has(.reports-layout) .sidebar-scrim,body:has(.reports-layout) .topbar,body:has(.reports-layout) .page-heading,body:has(.reports-layout) .page-footer,body:has(.reports-layout) [data-sonner-toaster]{display:none!important}
+  body:has(.reports-layout) .app-shell{display:block;min-height:0;background:#fff}
+  body:has(.reports-layout) .main-shell{margin:0;min-width:0}
+  body:has(.reports-layout) .main-content{padding:0;margin:0;max-width:none}
+  body:has(.reports-layout) .reports-layout{display:block;margin:0}
+
+  body:has(.reports-layout) .report-card{border:0;border-radius:0;box-shadow:none;background:#fff;padding:0;overflow:visible;break-inside:auto}
+  body:has(.reports-layout) .report-card .card-heading{padding:0 0 3mm;border:0}
+  body:has(.reports-layout) .report-card .card-heading h2{font-size:15pt;color:#000}
+  body:has(.reports-layout) .report-card .card-heading p{margin-top:1mm;font-size:9.5pt;color:#333}
+
+  /* Company header: logo (or brand initial) with name, address and contact, and the print date. */
+  body:has(.reports-layout) .report-print-header{display:flex;align-items:flex-start;justify-content:space-between;gap:6mm;padding-bottom:3mm;margin-bottom:4mm;border-bottom:1px solid #999;color:#000;font-size:9pt;line-height:1.35}
+  body:has(.reports-layout) .report-print-identity{display:flex;align-items:flex-start;gap:3mm}
+  body:has(.reports-layout) .report-print-identity img{max-height:14mm;max-width:40mm;object-fit:contain}
+  body:has(.reports-layout) .report-print-identity .brand-mark{flex-shrink:0;width:10mm;height:10mm;font-size:14pt;box-shadow:none;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body:has(.reports-layout) .report-print-company{display:flex;flex-direction:column}
+  body:has(.reports-layout) .report-print-company strong{font-size:11pt}
+  body:has(.reports-layout) .report-print-date{white-space:nowrap;color:#333}
+  body:has(.reports-layout) .report-print-params{display:block;margin:0 0 3mm;font-size:9.5pt;color:#000}
+
+  /* The table uses the full width, never scrolls or clips, repeats its header row on each page and prints the totals once. */
+  body:has(.reports-layout) .report-card .table-scroll{overflow:visible;background:none;border:0}
+  body:has(.reports-layout) .report-table{width:100%}
+  body:has(.reports-layout) .report-table th,body:has(.reports-layout) .report-table td{padding:5px 6px;font-size:9.5pt;color:#000;position:static;box-shadow:none}
+  body:has(.reports-layout) .report-table th:first-child,body:has(.reports-layout) .report-table td:first-child{padding-left:0}
+  body:has(.reports-layout) .report-table th:last-child,body:has(.reports-layout) .report-table td:last-child{padding-right:0}
+  body:has(.reports-layout) .report-table thead{display:table-header-group}
+  body:has(.reports-layout) .report-table thead th{border-bottom:1px solid #666}
+  body:has(.reports-layout) .report-table tfoot{display:table-row-group}
+  body:has(.reports-layout) .report-table tfoot td{border-top:2px solid #333}
+  body:has(.reports-layout) .report-table tr{break-inside:avoid}
+}

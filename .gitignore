@@ -13,3 +13,13 @@ supabase/.temp/
 supabase/.branches/
 .vercel
 .claude/launch.json
+reports/qa-run/vitest.json
+reports/qa-run/playwright.json
+reports/qa-run/*.json
+reports/qa-run/*.log
+reports/qa-run/evidence/
+reports/qa-run/.toc-pages.json
+reports/qa-run/*.html
+# Raw first-run results; the summarised results-before-fixes.json the re-test PDF compares against is kept.
+reports/qa-run/archive-*/playwright*.json
+reports/qa-run/archive-*/confirm-*.json

@@ -80,10 +80,6 @@ test('owner can sign in and review every ERP module', async ({ page }) => {
   expect(page.url()).toBe(initialUrl);
   await page.getByRole('menuitem', { name: /Sahulat Trading Co/ }).click();
   expect(page.url()).toBe(initialUrl);
-  await page.getByRole('button', { name: /Switch company/ }).click();
-  await page.getByRole('menuitem', { name: /Design Partner/ }).click();
-  // Design Partner has not completed setup yet, so its owner lands in the wizard with a way back.
-  await expect(page.getByRole('heading', { name: 'Company', exact: true })).toBeVisible();
-  await expect(page.getByText('Setting up Design Partner')).toBeVisible();
-  await expect(page.getByRole('link', { name: /Switch to Sahulat Trading Co/ })).toBeVisible();
+  // Design Partner is reserved for the real partner, so the journey never opens it; the wizard's
+  // switch-company links are checked on the disposable QA company (ONB-071 and the onboarding browser suite).
 });

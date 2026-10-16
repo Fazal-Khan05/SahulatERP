@@ -114,6 +114,8 @@ export function PaymentDialog({ open, partyType, presetPartyId, workspace, busy,
   const fx = (d: Document) => d.currency === 'PKR' ? D(1) : D(d.fxRate);
   // Supplier bills can be in USD/CNY; the payment amount is PKR, allocations are in the bill's currency.
   const pkrAmount = sum(openInvoices.map(d => D(allocations[d.id] || 0).mul(fx(d))));
+  // Only a foreign-currency bill can be settled for a different PKR amount (the exchange difference); a PKR bill is paid exactly as allocated.
+  const foreignBills = partyType === 'supplier' && openInvoices.some(d => d.currency !== 'PKR');
   const [paidPkr, setPaidPkr] = useState('');
   function oldestFirst(total: string) {
     let left = D(total || 0); const next: Record<string, string> = {};
@@ -125,7 +127,7 @@ export function PaymentDialog({ open, partyType, presetPartyId, workspace, busy,
     const lines = openInvoices.map(d => ({ invoiceId: d.id, amount: allocations[d.id] || '0' })).filter(a => D(a.amount).gt(0));
     if (!lines.length) return setError('Allocate the payment to at least one invoice.');
     for (const a of lines) { const d = openInvoices.find(x => x.id === a.invoiceId)!; if (D(a.amount).gt(balance(d))) return setError(`${d.number}: allocation exceeds its balance of ${balance(d).toString()}.`); }
-    const amount = partyType === 'customer' ? money(allocated) : money(paidPkr || pkrAmount);
+    const amount = partyType === 'customer' ? money(allocated) : money((foreignBills && paidPkr) || pkrAmount);
     const result = await command('create_receipt', { partyId, date, amount, method, chequeNo, dueDate: method === 'cheque' ? dueDate : date, allocations: lines, employeeId: '', note: note || (partyType === 'customer' ? 'Customer collection' : 'Supplier payment'), ...(method !== 'cheque' && accountId ? { accountId } : {}) });
     if (result.ok) onClose(); else setError(result.message);
   }
@@ -134,7 +136,7 @@ export function PaymentDialog({ open, partyType, presetPartyId, workspace, busy,
       <DialogTitle>{partyType === 'customer' ? 'Record customer receipt' : 'Record supplier payment'}</DialogTitle>
       <DialogDescription>Allocate across open {partyType === 'customer' ? 'invoices' : 'bills'}. Cheques post only when cleared.</DialogDescription>
       <div className="field-grid" style={{ marginTop: 14 }}>
-        <label className="full-width">{partyType === 'customer' ? 'Customer' : 'Supplier'}<select aria-label={partyType === 'customer' ? 'Customer' : 'Supplier'} value={partyId} onChange={e => { setPartyId(e.target.value); setAllocations({}); }}><option value="">Select…</option>{parties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+        <label className="full-width">{partyType === 'customer' ? 'Customer' : 'Supplier'}<select aria-label={partyType === 'customer' ? 'Customer' : 'Supplier'} value={partyId} onChange={e => { setPartyId(e.target.value); setAllocations({}); setPaidPkr(''); }}><option value="">Select…</option>{parties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
       </div>
       {partyId && <div className="table-scroll editor-lines"><table>
         <thead><tr><th>{partyType === 'customer' ? 'Invoice' : 'Bill'}</th><th>Due</th><th className="num">Balance</th><th className="num">Allocate</th></tr></thead>
@@ -149,7 +151,7 @@ export function PaymentDialog({ open, partyType, presetPartyId, workspace, busy,
         <div className="payment-summary"><span>Allocated</span><strong>{partyType === 'customer' ? formatPkr(allocated) : `${allocated.toFixed(2)} (≈ ${formatPkr(pkrAmount)})`}</strong></div>
       </div>}
       <div className="field-grid" style={{ marginTop: 14 }}>
-        {partyType === 'supplier' && <label>PKR actually paid<input aria-label="PKR paid" type="number" min="0" step="0.01" value={paidPkr} placeholder={pkrAmount.toFixed(2)} onChange={e => setPaidPkr(e.target.value)}/><small className="field-hint">Difference from the booked rate posts as exchange gain or loss.</small></label>}
+        {foreignBills && <label>PKR actually paid<input aria-label="PKR paid" type="number" min="0" step="0.01" value={paidPkr} placeholder={pkrAmount.toFixed(2)} onChange={e => setPaidPkr(e.target.value)}/><small className="field-hint">Difference from the booked rate posts as exchange gain or loss.</small></label>}
         <label>Method<select aria-label="Payment method" value={method} onChange={e => { const m = e.target.value as typeof method; setMethod(m); const preferred = accounts.find(a => a.type === (m === 'cash' ? 'cash' : 'bank')); if (preferred) setAccountId(preferred.id); }}><option value="bank">Bank transfer</option><option value="cash">Cash</option><option value="cheque">Cheque / PDC</option></select></label>
         {method !== 'cheque' && accounts.length > 0 && <label>{partyType === 'customer' ? 'Into account' : 'From account'}<select aria-label={partyType === 'customer' ? 'Into account' : 'From account'} value={accountId} onChange={e => setAccountId(e.target.value)}>{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
         <label>Date<input aria-label="Payment date" type="date" value={date} onChange={e => setDate(e.target.value)}/></label>

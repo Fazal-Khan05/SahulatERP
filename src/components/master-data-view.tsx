@@ -75,7 +75,7 @@ export function MasterDataView({ spec, workspace, editable, busy, command }: {
       {canArchive && <label>Status<select aria-label="Record status" value={status} onChange={event => setStatus(event.target.value as typeof status)}><option value="active">{spec.key === 'employees' ? 'Active' : 'Active'}</option><option value="archived">{spec.key === 'employees' ? 'Inactive' : 'Archived'}</option><option value="all">All</option></select></label>}
       {(query || status !== 'active') && <button className="list-filter-clear" type="button" onClick={() => { setQuery(''); setStatus('active'); }}>Clear filters</button>}
     </div>
-    <div className="table-scroll"><table><thead><tr>{spec.columns.map(c => <th key={c.key}>{c.label}</th>)}<th>Actions</th></tr></thead><tbody>
+    <div className="table-scroll" tabIndex={0} role="region" aria-label={`${spec.label} table`}><table><thead><tr>{spec.columns.map(c => <th key={c.key}>{c.label}</th>)}<th>Actions</th></tr></thead><tbody>
       {visible.length ? visible.map(record => <tr key={record.id} className={isArchived(record) ? 'row-archived' : undefined}>
         {spec.columns.map((c, i) => <td key={c.key}>{i === 0 ? <strong>{cell(record, c)}</strong> : cell(record, c)}</td>)}
         <td><div className="inventory-row-actions">
@@ -85,7 +85,7 @@ export function MasterDataView({ spec, workspace, editable, busy, command }: {
             : <Button size="sm" variant="ghost" disabled={!!busy} aria-label={`Archive ${String(record.name)}`} onClick={() => archive(record, true)}><Archive size={14}/>{spec.key === 'employees' ? 'Deactivate' : 'Archive'}</Button>)}
           {!editable && <span>Read only</span>}
         </div></td>
-      </tr>) : <tr><td colSpan={spec.columns.length + 1}><div className="empty-state">{all.length ? `No ${spec.label.toLowerCase()} match these filters.` : `No ${spec.label.toLowerCase()} yet. ${editable ? `Add one or import a CSV.` : ''}`}</div></td></tr>}
+      </tr>) : <tr><td colSpan={spec.columns.length + 1}><div className="empty-state">{all.length ? <>No {spec.label.toLowerCase()} match these filters. <button className="text-button" type="button" onClick={() => { setQuery(''); setStatus('active'); }}>Reset filters</button></> : `No ${spec.label.toLowerCase()} yet. ${editable ? `Add one or import a CSV.` : ''}`}</div></td></tr>}
     </tbody></table></div>
     <p className="table-scroll-hint">Swipe sideways to see every column.</p>
     <RecordForm spec={spec} workspace={workspace} initial={editing === 'new' ? spec.blank(workspace) : editing} open={editing !== null} busy={busy === spec.saveCommand} onClose={() => setEditing(null)} onSave={save}/>

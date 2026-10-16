@@ -46,9 +46,16 @@ test('SQA findings are fixed in the owner workspace', async ({ page, request, br
   const search = page.getByRole('dialog', { name: 'Search' });
   await expect(search).toBeVisible();
   await search.getByLabel('Search the workspace').fill('INV-2026-0001');
-  await expect(search.getByRole('listitem').filter({ hasText: 'INV-2026-0001' })).toBeVisible();
-  await search.getByRole('listitem').filter({ hasText: 'INV-2026-0001' }).click();
+  // Search also lists the invoice's journals (D-39); open the invoice itself.
+  const invoiceResult = search.getByRole('listitem').filter({ hasText: 'INV-2026-0001' }).filter({ hasText: 'Al-Noor Electronics' });
+  await expect(invoiceResult).toBeVisible();
+  await invoiceResult.click();
   await expect(page.locator('h1')).toContainText('Sales');
+  // Choosing a result opens the record itself (D-38); close it before moving on.
+  const opened = page.getByRole('dialog', { name: 'Invoice INV-2026-0001' });
+  await expect(opened).toBeVisible();
+  await opened.getByRole('button', { name: 'Close dialog' }).click();
+  await expect(opened).toHaveCount(0);
 
   // SQA-17: notifications
   await page.getByRole('button', { name: /^Notifications/ }).click();

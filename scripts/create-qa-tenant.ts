@@ -9,7 +9,11 @@ loadEnvConfig(process.cwd());
  * owned by the bootstrap owner. It never touches the demo or partner tenants.
  *   npm run qa:tenant
  */
-export const QA_TENANT = '33333333-3333-4333-8333-333333333333';
+// Parallel browser runs each get their own disposable company via QA_TENANT_ID; only these ids are ever accepted.
+const QA_TENANTS = ['33333333-3333-4333-8333-333333333333', '33333333-3333-4333-8333-333333333334', '33333333-3333-4333-8333-333333333335', '33333333-3333-4333-8333-333333333336', '33333333-3333-4333-8333-333333333337', '33333333-3333-4333-8333-333333333338'];
+const requested = process.env.QA_TENANT_ID;
+if (requested && !QA_TENANTS.includes(requested)) throw new Error(`QA_TENANT_ID must be one of the disposable QA tenants, got ${requested}.`);
+export const QA_TENANT = requested || QA_TENANTS[0];
 
 export async function resetQaTenant() {
   const url = process.env.MIGRATION_DATABASE_URL || process.env.DATABASE_URL;

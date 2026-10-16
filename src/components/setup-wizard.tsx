@@ -55,6 +55,17 @@ export function SetupWizard({ workspace, actor, memberships, onWorkspace, comman
     return result;
   }
   function goTo(target: Step) { setDirection(target > step ? 'forward' : 'back'); setStep(target); }
+  // Another session finished setup while this card was open: load the finished workspace so the card closes.
+  async function openFinishedWorkspace(error: unknown) {
+    if (!(error instanceof Error) || error.message !== 'Setup is already complete.') return false;
+    try {
+      const response = await fetch(`/api/workspace?tenant=${encodeURIComponent(workspace.tenantId)}`, { cache: 'no-store' });
+      const result = await response.json() as { workspace?: Workspace };
+      if (!response.ok || !result.workspace?.setup.complete) return false;
+      onWorkspace(result.workspace);
+      return true;
+    } catch { return false; }
+  }
   async function next() {
     setBusy(true); setError('');
     try {
@@ -64,7 +75,7 @@ export function SetupWizard({ workspace, actor, memberships, onWorkspace, comman
       const target = Math.min(4, step + 1) as Step;
       await run('save_setup_step', { step: target });
       goTo(target);
-    } catch (e) { setError(e instanceof Error ? e.message : 'Could not save this step.'); }
+    } catch (e) { if (!await openFinishedWorkspace(e)) setError(e instanceof Error ? e.message : 'Could not save this step.'); }
     finally { setBusy(false); }
   }
   const [finishing, setFinishing] = useState(false);
@@ -73,7 +84,10 @@ export function SetupWizard({ workspace, actor, memberships, onWorkspace, comman
     // The provisioning screen stays up long enough to read even when the server answers instantly.
     const pause = new Promise(resolve => setTimeout(resolve, 2600));
     try { await Promise.all([run('complete_setup', {}), pause]); onProvisioning?.(false); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Could not finish setup.'); setBusy(false); setFinishing(false); onProvisioning?.(false); }
+    catch (e) {
+      if (await openFinishedWorkspace(e)) { onProvisioning?.(false); return; }
+      setError(e instanceof Error ? e.message : 'Could not finish setup.'); setBusy(false); setFinishing(false); onProvisioning?.(false);
+    }
   }
   const provisionLines = [...modules.map(key => `Setting up ${labelOf(key)}`), 'Opening your books', 'Preparing your workspace'];
   const others = memberships.filter(m => m.tenantId !== workspace.tenantId);

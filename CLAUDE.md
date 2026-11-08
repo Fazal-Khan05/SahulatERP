@@ -26,5 +26,6 @@ Read [docs/PLAN.md](docs/PLAN.md) and do only the step you are asked.
 - No new dependency without the founder's approval. No work from a later step; note it in docs/LATER.md.
 - Customer data, CNICs, salaries, tokens and keys never enter Git, fixtures or logs.
 - Nothing in reference/ is imported or run.
+- Never run destructive SQL, reset a password, disable a key, or change a Vercel production env var without showing the exact command and getting a yes. The Supabase MCP must be run read-only against any project holding real customer data.
 
 @AGENTS.md

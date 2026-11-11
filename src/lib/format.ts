@@ -13,3 +13,11 @@ export function formatDateTime(value: Date): string {
   const parts = Object.fromEntries(dateTime.formatToParts(value).map((p) => [p.type, p.value]));
   return `${parts.day}-${parts.month}-${parts.year} ${parts.hour}:${parts.minute}`;
 }
+
+const weekday = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Karachi", weekday: "long" });
+
+/** "Wednesday 11-11-2026". */
+export function formatDay(value: Date): string {
+  const parts = Object.fromEntries(dateTime.formatToParts(value).map((p) => [p.type, p.value]));
+  return `${weekday.format(value)} ${parts.day}-${parts.month}-${parts.year}`;
+}

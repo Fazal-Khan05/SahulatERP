@@ -6,6 +6,10 @@ export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+export function isUuid(value: unknown): value is string {
+  return typeof value === "string" && UUID.test(value);
+}
+
 /**
  * The only way to reach the database at request time. Runs `fn` in one transaction that first
  * tells Postgres who is asking and for which company; the row-level security policies read those
@@ -23,8 +27,11 @@ export async function withTenant<T>(
   if (!UUID.test(userId)) throw new Error("withTenant: userId is not a uuid");
   if (tenantId !== null && !UUID.test(tenantId)) throw new Error("withTenant: tenantId is not a uuid");
   return getConnection().db.transaction(async (tx) => {
+    // Both ids were checked above to be uuids and nothing else, so they are written into the
+    // statement. A statement without parameters is one network round trip; with parameters the
+    // driver needs two, and this runs at the start of every transaction.
     await tx.execute(
-      sql`select set_config('app.user_id', ${userId}, true), set_config('app.tenant_id', ${tenantId ?? ""}, true)`,
+      sql.raw(`select set_config('app.user_id', '${userId}', true), set_config('app.tenant_id', '${tenantId ?? ""}', true)`),
     );
     return fn(tx);
   });
@@ -37,7 +44,7 @@ export async function withTenant<T>(
  */
 export async function enterTenant(tx: Tx, tenantId: string): Promise<void> {
   if (!UUID.test(tenantId)) throw new Error("enterTenant: tenantId is not a uuid");
-  await tx.execute(sql`select set_config('app.tenant_id', ${tenantId}, true)`);
+  await tx.execute(sql.raw(`select set_config('app.tenant_id', '${tenantId}', true)`));
 }
 
 /** Closes the pool. For tests and scripts; the server keeps its pool for its lifetime. */

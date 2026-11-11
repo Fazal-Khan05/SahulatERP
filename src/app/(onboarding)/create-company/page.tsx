@@ -5,6 +5,7 @@ import { ActionForm } from "@/components/action-form";
 import { Field } from "@/components/field";
 import { signOutAction } from "@/lib/auth/actions";
 import { getTenantSession, requireUser } from "@/lib/auth/session";
+import { DEFAULT_PRODUCT_NAME } from "@/modules/tenant/rules";
 import { createCompanyAction } from "./actions";
 
 export const metadata: Metadata = { title: "Create your company — SahulatERP" };
@@ -12,8 +13,8 @@ export const metadata: Metadata = { title: "Create your company — SahulatERP" 
 export default function CreateCompanyPage() {
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-6 p-6">
-      <p className="text-lg font-medium">SahulatERP</p>
-      <div className="flex w-full max-w-sm flex-col gap-5 rounded-xl border bg-card p-6">
+      <p className="text-lg font-bold tracking-tight">{DEFAULT_PRODUCT_NAME}</p>
+      <div className="flex w-full max-w-sm flex-col gap-5 rounded-[10px] border bg-card p-6 shadow-xs">
         <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
           <CreateCompany />
         </Suspense>

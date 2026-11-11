@@ -3,7 +3,8 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { audit, closeDb, withTenant } from "@/db";
 import { adminSql, deleteTenants, hasAdminDb, type AdminSql } from "../../../tests/support/admin-db";
-import { auditLog, branches, invitations, memberships, tenants } from "./schema";
+import { getLogo, loadWorkspace } from "./queries";
+import { auditLog, branches, invitations, memberships, modulesEnabled, settings, tenants } from "./schema";
 
 // Row-level security, exercised through the real code path: the app_runtime role, the
 // transaction pooler and withTenant(). Rows are seeded and removed over the migration
@@ -68,6 +69,10 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
     await admin`insert into public.audit_log (tenant_id, actor_user_id, actor_role, action, entity) values
       (${tenantA}, ${ownerA}, 'owner', 'test.seed', 'tenant'),
       (${tenantB}, ${ownerB}, 'owner', 'test.seed', 'tenant')`;
+    await admin`insert into public.settings (tenant_id, product_name, created_by, updated_by) values
+      (${tenantB}, 'Beta Books', ${ownerB}, ${ownerB})`;
+    await admin`insert into public.modules_enabled (tenant_id, module, enabled, created_by, updated_by) values
+      (${tenantB}, 'payroll', true, ${ownerB}, ${ownerB})`;
   });
 
   afterAll(async () => {
@@ -293,6 +298,144 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
     expect(seen.memberships.map((m) => [m.userId, m.role, m.email, m.branchIds, m.active])).toEqual([
       [outsider, "owner", "outsider@policy.test", null, true],
     ]);
+  });
+
+  it("lets an owner save the company's settings and module switches, and every member read them", async () => {
+    await withTenant(ownerA, tenantA, async (tx) => {
+      await tx.insert(settings).values({ tenantId: tenantA, productName: "Alpha Desk", createdBy: ownerA, updatedBy: ownerA });
+      await tx
+        .insert(modulesEnabled)
+        .values({ tenantId: tenantA, module: "commissions", enabled: false, createdBy: ownerA, updatedBy: ownerA });
+    });
+    await withTenant(ownerA, tenantA, (tx) =>
+      tx.update(settings).set({ productName: "Alpha Desk 2", updatedAt: new Date(), updatedBy: ownerA }).where(eq(settings.tenantId, tenantA)),
+    );
+    const seen = await withTenant(salesA, tenantA, async (tx) => ({
+      settings: await tx.select({ tenantId: settings.tenantId, productName: settings.productName }).from(settings),
+      modules: await tx.select({ tenantId: modulesEnabled.tenantId, module: modulesEnabled.module, enabled: modulesEnabled.enabled }).from(modulesEnabled),
+    }));
+    expect(seen.settings).toEqual([{ tenantId: tenantA, productName: "Alpha Desk 2" }]);
+    expect(seen.modules).toEqual([{ tenantId: tenantA, module: "commissions", enabled: false }]);
+  });
+
+  it("keeps settings and module switches from other roles and from other companies", async () => {
+    // A member who is not the owner cannot write either table.
+    expect(
+      await codeOf(() =>
+        withTenant(salesA, tenantA, (tx) =>
+          tx.update(settings).set({ productName: "Hijacked", updatedAt: new Date(), updatedBy: salesA }).where(eq(settings.tenantId, tenantA)),
+        ),
+      ),
+    ).toBeUndefined(); // no error: the row is simply not updatable for them, so nothing changes
+    expect(
+      await codeOf(() =>
+        withTenant(auditorA, tenantA, (tx) =>
+          tx.insert(modulesEnabled).values({ tenantId: tenantA, module: "payroll", enabled: true, createdBy: auditorA, updatedBy: auditorA }),
+        ),
+      ),
+    ).toBe(DENIED);
+    // An owner cannot write as somebody else, into another company, or touch another company's rows.
+    expect(
+      await codeOf(() =>
+        withTenant(ownerA, tenantA, (tx) =>
+          tx.insert(modulesEnabled).values({ tenantId: tenantA, module: "payroll", enabled: true, createdBy: ownerB, updatedBy: ownerB }),
+        ),
+      ),
+    ).toBe(DENIED);
+    for (const context of [tenantA, tenantB]) {
+      expect(
+        await codeOf(() =>
+          withTenant(ownerA, context, (tx) =>
+            tx.insert(modulesEnabled).values({ tenantId: tenantB, module: "fbr", enabled: true, createdBy: ownerA, updatedBy: ownerA }),
+          ),
+        ),
+      ).toBe(DENIED);
+      await withTenant(ownerA, context, async (tx) => {
+        await tx.update(settings).set({ productName: "Hijacked", updatedAt: new Date(), updatedBy: ownerA }).where(eq(settings.tenantId, tenantB));
+        await tx.update(modulesEnabled).set({ enabled: false, updatedAt: new Date(), updatedBy: ownerA }).where(eq(modulesEnabled.tenantId, tenantB));
+      });
+    }
+    // A non-owner cannot create the settings row, and an owner cannot sign a change as somebody else.
+    expect(
+      await codeOf(() =>
+        withTenant(salesA, tenantA, (tx) =>
+          tx.insert(settings).values({ tenantId: tenantA, productName: "By sales", createdBy: salesA, updatedBy: salesA }),
+        ),
+      ),
+    ).toBe(DENIED);
+    expect(
+      await codeOf(() =>
+        withTenant(ownerA, tenantA, (tx) =>
+          tx.update(settings).set({ productName: "Signed by B", updatedBy: ownerB }).where(eq(settings.tenantId, tenantA)),
+        ),
+      ),
+    ).toBe(DENIED);
+    expect(
+      await codeOf(() =>
+        withTenant(ownerA, tenantA, (tx) =>
+          tx.update(modulesEnabled).set({ enabled: true, updatedBy: ownerB }).where(eq(modulesEnabled.tenantId, tenantA)),
+        ),
+      ),
+    ).toBe(DENIED);
+    for (const forged of [{ tenantId: tenantB }, { createdBy: ownerB }]) {
+      expect(
+        await codeOf(() =>
+          withTenant(ownerA, tenantA, (tx) => tx.update(modulesEnabled).set(forged).where(eq(modulesEnabled.tenantId, tenantA))),
+        ),
+      ).toBe(DENIED);
+    }
+    // Nothing is deletable, and the columns that say who created a row cannot be rewritten.
+    expect(await codeOf(() => withTenant(ownerA, tenantA, (tx) => tx.delete(settings)))).toBe(DENIED);
+    expect(await codeOf(() => withTenant(ownerA, tenantA, (tx) => tx.delete(modulesEnabled)))).toBe(DENIED);
+    expect(
+      await codeOf(() => withTenant(ownerA, tenantA, (tx) => tx.update(settings).set({ createdBy: ownerB }).where(eq(settings.tenantId, tenantA)))),
+    ).toBe(DENIED);
+    expect(
+      await codeOf(() => withTenant(ownerA, tenantA, (tx) => tx.update(settings).set({ tenantId: tenantB }).where(eq(settings.tenantId, tenantA)))),
+    ).toBe(DENIED);
+
+    const stored = await admin`
+      select s.tenant_id, s.product_name,
+        (select enabled from public.modules_enabled m where m.tenant_id = s.tenant_id and m.module = 'payroll') as payroll,
+        (select count(*)::int from public.modules_enabled m where m.tenant_id = s.tenant_id) as switches
+      from public.settings s where s.tenant_id in (${tenantA}, ${tenantB}) order by s.product_name`;
+    expect(stored.map((r) => [r.tenant_id, r.product_name, r.payroll, r.switches])).toEqual([
+      [tenantA, "Alpha Desk 2", null, 1],
+      [tenantB, "Beta Books", true, 1],
+    ]);
+    // And from inside company A, company B's settings and switches are not visible at all.
+    const seen = await withTenant(ownerA, tenantB, async (tx) => ({
+      settings: await tx.select({ tenantId: settings.tenantId }).from(settings),
+      modules: await tx.select({ tenantId: modulesEnabled.tenantId }).from(modulesEnabled),
+    }));
+    expect(seen).toEqual({ settings: [], modules: [] });
+  });
+
+  it("builds the page frame from the user's own company, whatever company the cookie names", async () => {
+    const own = { productName: "Alpha Desk 2", logoUrl: null };
+    for (const cookie of [tenantA, tenantB, tenantB.toUpperCase(), "not-a-uuid", null]) {
+      const { memberships: mine, active } = await loadWorkspace(ownerA, cookie);
+      expect(mine.map((m) => m.tenantId), String(cookie)).toEqual([tenantA]);
+      expect(active?.tenantId, String(cookie)).toBe(tenantA);
+      expect(active?.branding, String(cookie)).toEqual(own);
+      // Company A switched commissions off; company B switched payroll on. Only A's choice shows.
+      expect(active?.modules, String(cookie)).toMatchObject({ commissions: false, payroll: false, sales: true });
+    }
+    // Someone with no company, and a deactivated member, get no company at all.
+    expect((await loadWorkspace(randomUUID(), tenantA)).active).toBeNull();
+    expect((await loadWorkspace(inactiveA, tenantA)).active).toBeNull();
+    // By now `outsider` owns the company created above; asking for A still gives them their own.
+    expect((await loadWorkspace(outsider, tenantA)).active?.tenantId).toBe(createdTenants[2]);
+  });
+
+  it("serves a logo only to a member of the company it belongs to", async () => {
+    const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+    await admin`update public.settings set logo = ${png}, logo_content_type = 'image/png' where tenant_id = ${tenantB}`;
+    const forB = await getLogo(ownerB, tenantB);
+    expect(forB && [Buffer.from(forB.bytes).equals(Buffer.from(png)), forB.contentType]).toEqual([true, "image/png"]);
+    expect(await getLogo(ownerA, tenantB)).toBeNull();
+    expect(await getLogo(outsider, tenantB)).toBeNull();
+    expect(await getLogo(ownerA, tenantA)).toBeNull(); // company A has no logo
   });
 
   it("keeps the catalogue rules: tenant_id, forced row-level security and a policy on every table", async () => {

@@ -8,6 +8,13 @@
       "when": 1794390488307,
       "tag": "0000_tenancy",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794413137113,
+      "tag": "0001_shell",
+      "breakpoints": true
     }
   ]
 }

@@ -9,8 +9,9 @@ export default defineConfig({
   // The tenancy spec builds two companies step by step; one worker, in order.
   workers: 1,
   fullyParallel: false,
-  timeout: 90_000,
-  expect: { timeout: 15_000 },
+  // Generous: every action crosses the network to the hosted database several times.
+  timeout: 240_000,
+  expect: { timeout: 30_000 },
   globalSetup: "./e2e/global-setup.ts",
   globalTeardown: "./e2e/global-teardown.ts",
   use: { baseURL: "http://localhost:3000" },

@@ -1,7 +1,8 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { sendPendingInvitations } from "../scripts/lib/invitations.mjs";
 import { adminSql, type AdminSql } from "../tests/support/admin-db";
 import { createUser, emailFor, emailLink, hasE2EEnv, randomPassword, type TestUser } from "./support/admin";
+import { isServerAction, signIn, test } from "./support/ui";
 
 // Step 2 acceptance: two companies with one owner each cannot see each other's rows through the
 // screens or through any server action, and signing in writes an audit row. The tests run in
@@ -31,16 +32,8 @@ test.afterAll(async () => {
   await sql.end();
 });
 
-async function signIn(page: Page, user: Pick<TestUser, "email" | "password">) {
-  await page.goto("/sign-in");
-  await page.getByLabel("Email").fill(user.email);
-  await page.getByLabel("Password").fill(user.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).not.toHaveURL(/\/sign-in$/);
-}
-
 async function addBranch(page: Page, name: string) {
-  await page.goto("/tenant/branches");
+  await page.goto("/settings/branches");
   await page.getByLabel("Branch name").fill(name);
   await page.getByRole("button", { name: "Add branch" }).click();
   await expect(page.getByRole("list", { name: "Branches" }).getByText(name, { exact: true })).toBeVisible();
@@ -73,8 +66,8 @@ test("owner A signs in for the first time, creates a company and adds branches",
   await expect(page).toHaveURL(/\/create-company$/);
   await page.getByLabel("Company name").fill(ALPHA);
   await page.getByRole("button", { name: "Create company" }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(ALPHA);
-  await expect(page.getByText(`Signed in as ${ownerA.email}, Owner.`)).toBeVisible();
+  await expect(page.getByTestId("company-name")).toHaveText(ALPHA);
+  await expect(page.getByText(`Signed in as ${ownerA.email}, Owner at ${ALPHA}.`)).toBeVisible();
 
   await addBranch(page, "Alpha Karachi");
   await addBranch(page, "Alpha Lahore");
@@ -94,7 +87,7 @@ test("owner B signs in for the first time, creates a company and adds a branch",
   await expect(page).toHaveURL(/\/create-company$/);
   await page.getByLabel("Company name").fill(BETA);
   await page.getByRole("button", { name: "Create company" }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(BETA);
+  await expect(page.getByTestId("company-name")).toHaveText(BETA);
   await addBranch(page, "Beta Lahore");
 
   tenantB = await tenantIdOf(BETA, ownerB);
@@ -112,15 +105,15 @@ test("neither owner sees the other company's rows on any screen", async ({ brows
     const page = await context.newPage();
     await signIn(page, me);
 
-    await page.goto("/tenant/branches");
+    await page.goto("/settings/branches");
     await expect(page.getByRole("list", { name: "Branches" }).getByText(mine.branch, { exact: true })).toBeVisible();
     await expect(page.getByText(theirs.branch)).toHaveCount(0);
 
-    await page.goto("/tenant/members");
+    await page.goto("/settings/members");
     await expect(page.getByRole("table", { name: "Members" }).getByText(me.email)).toBeVisible();
     await expect(page.getByText(other.email)).toHaveCount(0);
 
-    await page.goto("/tenant/activity");
+    await page.goto("/settings/activity");
     await expect(page.getByRole("table", { name: "Activity" }).getByText("Created the company")).toBeVisible();
     await expect(page.getByText(other.email)).toHaveCount(0);
     await expect(page.getByText(theirs.branch)).toHaveCount(0);
@@ -133,6 +126,7 @@ test("neither owner sees the other company's rows on any screen", async ({ brows
 test("a second person signing in on the same tab sees nothing of the first", async ({ page }) => {
   await signIn(page, ownerA);
   // Move around inside the app first, so the browser has the first owner's screens in memory.
+  await page.getByRole("link", { name: "Settings" }).click();
   await page.getByRole("link", { name: "Branches" }).click();
   await expect(page.getByRole("list", { name: "Branches" }).getByText("Alpha Karachi", { exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Members" }).click();
@@ -145,8 +139,9 @@ test("a second person signing in on the same tab sees nothing of the first", asy
   await page.getByLabel("Email").fill(ownerB.email);
   await page.getByLabel("Password").fill(ownerB.password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(BETA);
+  await expect(page.getByTestId("company-name")).toHaveText(BETA);
 
+  await page.getByRole("link", { name: "Settings" }).click();
   await page.getByRole("link", { name: "Branches" }).click();
   await expect(page.getByRole("list", { name: "Branches" }).getByRole("listitem")).toHaveText(["Beta Lahore"]);
   await expect(page.getByText("Alpha Karachi")).toHaveCount(0);
@@ -155,7 +150,7 @@ test("a second person signing in on the same tab sees nothing of the first", asy
   await expect(page.getByText(ownerA.email)).toHaveCount(0);
   // Going back lands on the branches page again; it must still be the second person's.
   await page.goBack();
-  await expect(page).toHaveURL(/\/tenant\/branches$/);
+  await expect(page).toHaveURL(/\/settings\/branches$/);
   await expect(page.getByRole("list", { name: "Branches" }).getByRole("listitem")).toHaveText(["Beta Lahore"]);
   await expect(page.getByText("Alpha Karachi")).toHaveCount(0);
 });
@@ -165,11 +160,11 @@ test("a forged company cookie is ignored", async ({ page, context, baseURL }) =>
   await context.addCookies([{ name: "active_tenant", value: tenantB, url: baseURL! }]);
 
   await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(ALPHA);
-  await page.goto("/tenant/branches");
+  await expect(page.getByTestId("company-name")).toHaveText(ALPHA);
+  await page.goto("/settings/branches");
   await expect(page.getByRole("list", { name: "Branches" }).getByText("Alpha Karachi", { exact: true })).toBeVisible();
   await expect(page.getByText("Beta Lahore")).toHaveCount(0);
-  await page.goto("/tenant/members");
+  await page.goto("/settings/members");
   await expect(page.getByText(ownerB.email)).toHaveCount(0);
 });
 
@@ -178,16 +173,18 @@ test("the switcher moves between the user's own companies and ignores a forged c
   await page.getByRole("link", { name: "New company" }).click();
   await page.getByLabel("Company name").fill(ALPHA_TWO);
   await page.getByRole("button", { name: "Create company" }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(ALPHA_TWO);
+  await expect(page.getByTestId("company-name")).toHaveText(ALPHA_TWO);
 
   // A real switch.
   const switcher = page.getByLabel("Company");
   await expect(switcher.locator("option")).toHaveText([ALPHA, ALPHA_TWO]);
   await switcher.selectOption({ label: ALPHA });
   await page.getByRole("button", { name: "Switch" }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(ALPHA);
+  await expect(page.getByTestId("company-name")).toHaveText(ALPHA);
 
-  // The same server action, handed the other owner's company id.
+  // The same server action, handed the other owner's company id. Wait until the form is live,
+  // so the change is made to the page React is running, not to markup it is about to take over.
+  await expect(page.getByRole("button", { name: "Switch" })).toBeEnabled();
   await switcher.evaluate((select: HTMLSelectElement, forged) => {
     const option = document.createElement("option");
     option.value = forged;
@@ -195,7 +192,7 @@ test("the switcher moves between the user's own companies and ignores a forged c
     select.append(option);
     select.value = forged;
   }, tenantB);
-  const forgedSwitch = page.waitForRequest((request) => request.method() === "POST");
+  const forgedSwitch = page.waitForRequest(isServerAction);
   const reloaded = page.waitForEvent("load");
   await page.getByRole("button", { name: "Switch" }).click();
   expect((await forgedSwitch).postData()).toContain(tenantB);
@@ -203,19 +200,20 @@ test("the switcher moves between the user's own companies and ignores a forged c
   // The action did not store the forged company: the cookie still names the user's own.
   const stored = (await context.cookies()).find((cookie) => cookie.name === "active_tenant");
   expect(stored?.value).toBe(tenantA);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(ALPHA);
+  await expect(page.getByTestId("company-name")).toHaveText(ALPHA);
   await expect(page.getByText(BETA)).toHaveCount(0);
-  await page.goto("/tenant/branches");
+  await page.goto("/settings/branches");
   await expect(page.getByText("Beta Lahore")).toHaveCount(0);
 });
 
 test("the invite action refuses a branch that belongs to another company", async ({ page }) => {
   const email = emailFor("forged-invite");
   await signIn(page, ownerA);
-  await page.goto("/tenant/members");
+  await page.goto("/settings/members");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Role").selectOption({ label: "Auditor" });
   await page.getByLabel("Only these").check();
+  await expect(page.getByRole("button", { name: "Invite" })).toBeEnabled();
   // A branch id from the other company, added to the form the way a tampered request would.
   await page.getByLabel("Role").evaluate((field, forged) => {
     const input = document.createElement("input");
@@ -224,7 +222,7 @@ test("the invite action refuses a branch that belongs to another company", async
     input.value = forged;
     (field as HTMLSelectElement).form!.append(input);
   }, betaBranchId);
-  const forgedInvite = page.waitForRequest((request) => request.method() === "POST");
+  const forgedInvite = page.waitForRequest(isServerAction);
   await page.getByRole("button", { name: "Invite" }).click();
   expect((await forgedInvite).postData()).toContain(betaBranchId);
 
@@ -240,14 +238,14 @@ test("signing in and out writes audit rows the owner can read", async ({ page })
 
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/sign-in$/);
-  await page.goto("/tenant/branches");
+  await page.goto("/settings/branches");
   await expect(page).toHaveURL(/\/sign-in$/);
   expect(await auditCount(tenantA, "auth.sign_out", ownerA.id)).toBeGreaterThan(0);
 
   await signIn(page, ownerA);
   expect(await auditCount(tenantA, "auth.sign_in", ownerA.id)).toBe(before + 1);
 
-  await page.goto("/tenant/activity");
+  await page.goto("/settings/activity");
   const signIns = page.getByRole("table", { name: "Activity" }).getByRole("row").filter({ hasText: "Signed in" });
   await expect(signIns.first()).toContainText(ownerA.email);
   await expect(signIns.first()).toContainText("Owner");
@@ -256,7 +254,7 @@ test("signing in and out writes audit rows the owner can read", async ({ page })
 test("an invited member chooses a password and sees only the branch they were given", async ({ page, browser, baseURL }) => {
   const email = emailFor("member-a");
   await signIn(page, ownerA);
-  await page.goto("/tenant/members");
+  await page.goto("/settings/members");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Role").selectOption({ label: "Salesperson" });
   await page.getByLabel("Only these").check();
@@ -294,25 +292,24 @@ test("an invited member chooses a password and sees only the branch they were gi
   await member.getByLabel("Type it again").fill(password);
   await member.getByRole("button", { name: "Save password" }).click();
 
-  await expect(member.getByRole("heading", { level: 1 })).toHaveText(ALPHA);
-  await expect(member.getByText(`Signed in as ${email}, Salesperson.`)).toBeVisible();
-  await expect(member.getByRole("link", { name: "Members" })).toHaveCount(0);
-  await expect(member.getByRole("link", { name: "Activity" })).toHaveCount(0);
+  await expect(member.getByTestId("company-name")).toHaveText(ALPHA);
+  await expect(member.getByText(`Signed in as ${email}, Salesperson at ${ALPHA}.`)).toBeVisible();
+  await expect(member.getByRole("link", { name: "Settings" })).toHaveCount(0);
   await expect(member.getByRole("link", { name: "New company" })).toHaveCount(0);
 
-  await member.goto("/tenant/branches");
+  await member.goto("/settings/branches");
   await expect(member.getByRole("list", { name: "Branches" }).getByRole("listitem")).toHaveText(["Alpha Karachi"]);
   await expect(member.getByRole("button", { name: "Add branch" })).toHaveCount(0);
-  await member.goto("/tenant/members");
-  await expect(member.getByText("Only an owner can see the members.")).toBeVisible();
-  await member.goto("/tenant/activity");
+  await member.goto("/settings/members");
+  await expect(member.getByText("Only an owner or an auditor can see the members.")).toBeVisible();
+  await member.goto("/settings/activity");
   await expect(member.getByText("Only an owner or an auditor can see the activity log.")).toBeVisible();
   await member.goto("/create-company");
   await expect(member.getByText("Your account cannot create a company.")).toBeVisible();
   await memberContext.close();
 
   // The owner now sees the member, and the invitation is no longer waiting.
-  await page.goto("/tenant/members");
+  await page.goto("/settings/members");
   const row = page.getByRole("table", { name: "Members" }).getByRole("row").filter({ hasText: email });
   await expect(row).toContainText("Salesperson");
   await expect(row).toContainText("Alpha Karachi");
@@ -321,7 +318,7 @@ test("an invited member chooses a password and sees only the branch they were gi
 
 test("someone who already has an account is not added to a company behind their back", async ({ page }) => {
   await signIn(page, ownerA);
-  await page.goto("/tenant/members");
+  await page.goto("/settings/members");
   await page.getByLabel("Email").fill(ownerB.email);
   await page.getByLabel("Role").selectOption({ label: "Accountant" });
   await page.getByRole("button", { name: "Invite" }).click();
@@ -361,7 +358,7 @@ test("a reset link sets a new password, works once, and the old password stops w
 
   await page.getByLabel("Type it again").fill(newPassword);
   await page.getByRole("button", { name: "Save password" }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(BETA);
+  await expect(page.getByTestId("company-name")).toHaveText(BETA);
   expect(await auditCount(tenantB, "auth.password_set", ownerB.id)).toBe(1);
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/sign-in$/);
@@ -380,5 +377,5 @@ test("a reset link sets a new password, works once, and the old password stops w
   await expect(page.getByTestId("form-error")).toHaveText("The email or password is not right.");
 
   await signIn(page, { email: ownerB.email, password: newPassword });
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(BETA);
+  await expect(page.getByTestId("company-name")).toHaveText(BETA);
 });

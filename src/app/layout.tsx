@@ -1,30 +1,17 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import { EmailLinkCatcher } from "@/components/email-link-catcher";
+import { DEFAULT_PRODUCT_NAME } from "@/modules/tenant/rules";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
 export const metadata: Metadata = {
-  title: "SahulatERP",
+  title: DEFAULT_PRODUCT_NAME,
   description: "Accounts, stock and sales for trading and distribution companies.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col">
+    <html lang="en" dir="ltr" className="h-full antialiased">
+      <body className="flex min-h-full flex-col">
         <EmailLinkCatcher />
         {children}
       </body>

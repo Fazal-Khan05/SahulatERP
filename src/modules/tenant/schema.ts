@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  customType,
   index,
   jsonb,
   pgEnum,
@@ -13,7 +14,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { MEMBER_ROLES } from "./rules";
+import { LOGO_MAX_BYTES, MEMBER_ROLES, MODULES } from "./rules";
 
 // Tables only. Row-level security, grants and the app.* helper functions are written by hand in
 // the migration that creates these tables (drizzle/0000_*.sql); Drizzle does not manage them.
@@ -128,5 +129,62 @@ export const auditLog = pgTable(
     unique("audit_log_tenant_id_id_key").on(t.tenantId, t.id),
     index("audit_log_tenant_id_at_idx").on(t.tenantId, t.at.desc()),
     check("audit_log_actor_is_whole", sql`(${t.actorUserId} is null) = (${t.actorRole} is null)`),
+  ],
+);
+
+const bytea = customType<{ data: Uint8Array; driverData: Uint8Array }>({ dataType: () => "bytea" });
+
+// One row per company, created the first time an owner saves the settings; until then the
+// defaults in rules.ts apply. The logo is small and lives here until the files table exists.
+export const settings = pgTable(
+  "settings",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    // What this company calls the product, shown in the header and on printed documents.
+    productName: text("product_name").notNull(),
+    logo: bytea(),
+    logoContentType: text("logo_content_type"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid("created_by").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedBy: uuid("updated_by").notNull(),
+  },
+  (t) => [
+    unique("settings_tenant_id_key").on(t.tenantId),
+    unique("settings_tenant_id_id_key").on(t.tenantId, t.id),
+    check("settings_product_name_length", sql`char_length(btrim(${t.productName})) between 1 and 60`),
+    check("settings_logo_is_whole", sql`(${t.logo} is null) = (${t.logoContentType} is null)`),
+    check(
+      "settings_logo_type",
+      sql`${t.logoContentType} is null or ${t.logoContentType} in ('image/png', 'image/jpeg', 'image/webp')`,
+    ),
+    check("settings_logo_size", sql.raw(`"logo" is null or octet_length("logo") <= ${LOGO_MAX_BYTES}`)),
+  ],
+);
+
+export const moduleKey = pgEnum("module_key", MODULES);
+
+// A row exists only for a module the company has switched; the rest follow the defaults in
+// rules.ts. The dependency rules are checked by the command that writes here.
+export const modulesEnabled = pgTable(
+  "modules_enabled",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    module: moduleKey().notNull(),
+    enabled: boolean().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid("created_by").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedBy: uuid("updated_by").notNull(),
+  },
+  (t) => [
+    unique("modules_enabled_tenant_id_module_key").on(t.tenantId, t.module),
+    unique("modules_enabled_tenant_id_id_key").on(t.tenantId, t.id),
   ],
 );

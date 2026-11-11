@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useActionState, useEffect, useRef, useSyncExternalStore } from "react";
+import { startTransition, useActionState, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import type { FormState } from "@/lib/form-state";
 import { cn } from "@/lib/utils";
@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 export type FormAction<S extends FormState = FormState> = (state: S, formData: FormData) => Promise<S>;
 
 const noSubscription = () => () => {};
+const MAX_UPLOAD_BYTES = 900 * 1024;
 
 /**
  * Runs a server action for a form. Follows the action's `location` with a full page load, and
@@ -50,6 +51,8 @@ type Props = {
 export function ActionForm({ action, submitLabel, children, className, compact = false }: Props) {
   const { state, ready, busy, run } = useFormAction(action);
   const form = useRef<HTMLFormElement>(null);
+  const [tooLarge, setTooLarge] = useState(false);
+  const error = tooLarge ? "That file is too large to upload." : state.error;
 
   useEffect(() => {
     if (state.ok) form.current?.reset();
@@ -61,14 +64,22 @@ export function ActionForm({ action, submitLabel, children, className, compact =
       // Submitting by hand stops React from clearing the fields when the action returns an error.
       onSubmit={(event) => {
         event.preventDefault();
-        run(new FormData(event.currentTarget));
+        const data = new FormData(event.currentTarget);
+        // A request body over the server's limit never reaches the action; refuse it here.
+        const oversized = [...data.values()].some((value) => value instanceof File && value.size > MAX_UPLOAD_BYTES);
+        setTooLarge(oversized);
+        if (!oversized) run(data);
       }}
-      className={cn(compact ? "flex items-center gap-2" : "flex flex-col gap-4", className)}
+      className={cn(compact ? "flex flex-wrap items-center gap-2" : "flex flex-col gap-4", className)}
     >
       {children}
-      {state.error ? (
-        <p role="alert" data-testid="form-error" className="text-sm text-destructive">
-          {state.error}
+      {error ? (
+        <p
+          role="alert"
+          data-testid="form-error"
+          className={cn("text-sm text-destructive", compact && "order-last basis-full")}
+        >
+          {error}
         </p>
       ) : null}
       {state.message ? (

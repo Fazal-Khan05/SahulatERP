@@ -29,10 +29,12 @@ Things noticed while building a step that belong to a later one, or to nobody ye
   the database URLs are absent, and CI does not run `npm run test:e2e`. Both need a database CI
   can use; today they run locally against the dev project.
 - **Preview deployments use the dev database**, the same one as production while building.
-- **Every database transaction is four network round trips** (begin, set the request context,
-  the query, commit). The database is in Mumbai (ap-south-1) and Vercel runs the functions in
-  Washington (iad1), so every page waits on that distance several times over. Move the function
-  region to Mumbai (bom1), and look at sending the context and the first query together in the
+- **Pages are slow because of distance to the database, not because of the queries.** The
+  database is in Mumbai (ap-south-1); Vercel runs the functions in Washington (iad1), and from the
+  founder's Mac one round trip measured 200 to 450 ms. A transaction costs a round trip each for
+  begin, the request context and commit, and every query with parameters costs two (the pooler
+  needs `prepare: false`). Step 3 cut the frame of every page to about five round trips, but a
+  page still makes ten or more. Move the function region to Mumbai (bom1); the rest belongs to the
   Step 50 performance pass.
 - **`memberships.user_id` has no foreign key to `auth.users`.** Deliberate: it keeps the app's
   tables independent of Supabase's schema for exports and restores. Revisit with Step 48.
@@ -45,3 +47,24 @@ Things noticed while building a step that belong to a later one, or to nobody ye
   Also for Step 47.
 - **The forgot-password form has no limit of its own.** Supabase limits reset emails per address
   and per project; on the free sender a few requests use up the hour's quota for everyone.
+
+## From Step 3
+
+- **The shell was built from the mock-ups as they stand.** `docs/UI-NOTES.md` has no reviewer
+  comments yet; the founder asked for Step 3 to start anyway. What the reviews change will have to
+  be changed in the shell (`src/app/(app)/layout.tsx`, `navFor` in `src/modules/tenant/rules.ts`).
+- **Three roles have no mock-up.** The menus for Sales Manager, Payroll Administrator and Auditor,
+  the module list, which modules start on (payroll and FBR start off) and the dependency rules
+  between modules are a first proposal in `rules.ts`; the founder should check them.
+- **Menu entries for screens that are not built are shown greyed, not as links.** The step that
+  builds a screen gives its entry an address in `roleNav` (`rules.ts`).
+- **Every role's home is the same placeholder** (who you are, an empty "Needs attention"). Each
+  role's own figures arrive with the modules that produce them.
+- **The logo is stored in the `settings` row** (PNG, JPEG or WebP, 256 KB at most). Move it to the
+  `files` table when Step 4 builds it; `/branding/logo` can keep its address.
+- **`settings.fbr_enabled` from the data-model table is the `fbr` module switch**, a row in
+  `modules_enabled`, not a column. Step 43 should read that.
+- **The dependency rules are checked by the command, not by the database.** Two owners switching
+  modules in the same instant could leave a module on without one it needs.
+- **The inbox has no rows and no table yet.** The first step that produces something to act on
+  decides how items are stored or derived.

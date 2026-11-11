@@ -29,8 +29,11 @@ export const ROLE_LABELS: Record<MemberRole, string> = {
 // Who may do what. The database policies enforce the same split; this table decides what the
 // screens offer and gives a clear refusal before a query is attempted.
 const PERMISSIONS = {
+  "settings.read": ["owner", "auditor"],
+  "branding.update": ["owner"],
+  "module.update": ["owner"],
   "branch.create": ["owner"],
-  "member.read": ["owner"],
+  "member.read": ["owner", "auditor"],
   "member.invite": ["owner"],
   "audit.read": ["owner", "auditor"],
 } as const satisfies Record<string, readonly MemberRole[]>;
@@ -132,4 +135,251 @@ export type InviteInput = z.infer<typeof inviteSchema>;
 
 export function firstIssue(error: z.ZodError): string {
   return error.issues[0]?.message ?? "Check the form and try again.";
+}
+
+// ── Modules ─────────────────────────────────────────────────────────────────────────────────────
+// A company switches whole areas of the product on or off. A module that is off is invisible:
+// no menu entry, no column, no report section.
+
+export const MODULES = [
+  "sales",
+  "collections",
+  "purchasing",
+  "imports",
+  "inventory",
+  "cash_bank",
+  "commissions",
+  "payroll",
+  "fbr",
+] as const;
+
+export type ModuleKey = (typeof MODULES)[number];
+export type ModuleState = Record<ModuleKey, boolean>;
+
+type ModuleInfo = {
+  label: string;
+  about: string;
+  /** Modules that must be on for this one to work. */
+  requires: readonly ModuleKey[];
+  /** The state of a company that has never touched the switch. */
+  onByDefault: boolean;
+};
+
+export const MODULE_INFO: Record<ModuleKey, ModuleInfo> = {
+  sales: {
+    label: "Sales",
+    about: "Quotations, orders, deliveries, invoices and returns.",
+    requires: ["inventory"],
+    onByDefault: true,
+  },
+  collections: {
+    label: "Collections",
+    about: "Receipts, cheques, follow-ups and customer statements.",
+    requires: ["sales", "cash_bank"],
+    onByDefault: true,
+  },
+  purchasing: {
+    label: "Purchases",
+    about: "Purchase orders, goods received, supplier bills and payments.",
+    requires: ["inventory"],
+    onByDefault: true,
+  },
+  imports: {
+    label: "Imports",
+    about: "Shipments, customs charges and landed cost.",
+    requires: ["purchasing"],
+    onByDefault: true,
+  },
+  inventory: {
+    label: "Stock",
+    about: "Stock in each warehouse, transfers, counts and valuation.",
+    requires: [],
+    onByDefault: true,
+  },
+  cash_bank: {
+    label: "Cash and bank",
+    about: "Bank and cash accounts, expenses, transfers and reconciliation.",
+    requires: [],
+    onByDefault: true,
+  },
+  commissions: {
+    label: "Commissions",
+    about: "Commission plans, accruals, releases on collection and statements.",
+    requires: ["sales", "collections"],
+    onByDefault: true,
+  },
+  payroll: {
+    label: "Payroll",
+    about: "Employees, payroll runs, payslips and statutory deductions.",
+    requires: [],
+    onByDefault: false,
+  },
+  fbr: {
+    label: "FBR digital invoicing",
+    about: "Sends sales invoices to FBR and prints the FBR number and QR code.",
+    requires: ["sales"],
+    onByDefault: false,
+  },
+};
+
+/** The state of every module: the company's own choice where it made one, the default otherwise. */
+export function resolveModules(choices: Partial<Record<ModuleKey, boolean>>): ModuleState {
+  return Object.fromEntries(MODULES.map((key) => [key, choices[key] ?? MODULE_INFO[key].onByDefault])) as ModuleState;
+}
+
+function listLabels(keys: readonly ModuleKey[]): string {
+  const labels = keys.map((key) => MODULE_INFO[key].label);
+  return labels.length <= 1 ? labels.join("") : `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
+}
+
+/**
+ * The dependency rules. A module cannot be turned on while something it needs is off, and cannot
+ * be turned off while something that needs it is on. Nothing is switched for the owner behind
+ * their back; the refusal says what to change first.
+ */
+export function checkModuleChange(
+  state: ModuleState,
+  key: ModuleKey,
+  enabled: boolean,
+): { ok: true } | { ok: false; reason: string } {
+  if (enabled) {
+    const missing = MODULE_INFO[key].requires.filter((needed) => !state[needed]);
+    if (missing.length > 0) {
+      return { ok: false, reason: `Turn on ${listLabels(missing)} first. ${MODULE_INFO[key].label} needs it.` };
+    }
+  } else {
+    const dependants = MODULES.filter((other) => state[other] && MODULE_INFO[other].requires.includes(key));
+    if (dependants.length > 0) {
+      return { ok: false, reason: `Turn off ${listLabels(dependants)} first. It needs ${MODULE_INFO[key].label}.` };
+    }
+  }
+  return { ok: true };
+}
+
+// ── Navigation ──────────────────────────────────────────────────────────────────────────────────
+// Each role gets its own short menu, written in that role's words. An entry appears only while
+// its module is on. `href` is null until the screen behind the entry is built.
+
+export type NavEntry = { label: string; href: string | null };
+
+type NavSpec = readonly [label: string, module: ModuleKey | null, href?: string];
+
+function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
+  const purchases = on.imports ? "Purchases and imports" : "Purchases";
+  switch (role) {
+    case "owner":
+      return [
+        ["Sales", "sales"],
+        ["Collections", "collections"],
+        [purchases, "purchasing"],
+        ["Stock", "inventory"],
+        ["Cash and bank", "cash_bank"],
+        ["Commissions", "commissions"],
+        ["Payroll", "payroll"],
+        ["Reports", null],
+        ["Settings", null, "/settings"],
+      ];
+    case "auditor":
+      return [
+        ["Sales", "sales"],
+        ["Collections", "collections"],
+        [purchases, "purchasing"],
+        ["Stock", "inventory"],
+        ["Cash and bank", "cash_bank"],
+        ["Commissions", "commissions"],
+        ["Payroll", "payroll"],
+        ["Reports", null],
+        ["Settings", null, "/settings"],
+      ];
+    case "accountant":
+      return [
+        ["Sales invoices", "sales"],
+        ["Bills and payments", "purchasing"],
+        ["Bank and cash", "cash_bank"],
+        ["Journals", null],
+        ["Period close", null],
+        ["Payroll", "payroll"],
+        ["Reports", null],
+      ];
+    case "sales_manager":
+      return [
+        ["Sales", "sales"],
+        ["Collections", "collections"],
+        ["Stock", "inventory"],
+        ["Commissions", "commissions"],
+        ["Reports", null],
+      ];
+    case "salesperson":
+      return [
+        ["My customers", "sales"],
+        ["Orders", "sales"],
+        ["My commission", "commissions"],
+      ];
+    case "recovery_officer":
+      return [
+        ["Cheques", "collections"],
+        ["Overdue customers", "collections"],
+        ["Follow-ups", "collections"],
+        ["Receipts", "collections"],
+        ["Customer statements", "collections"],
+      ];
+    case "warehouse_manager":
+      return [
+        ["Receive goods", "purchasing"],
+        ["Deliveries", "sales"],
+        ["Transfers", "inventory"],
+        ["Stock", "inventory"],
+        ["Stock count", "inventory"],
+      ];
+    case "payroll_administrator":
+      return [
+        ["Employees", "payroll"],
+        ["Payroll runs", "payroll"],
+        ["Payslips", "payroll"],
+      ];
+  }
+}
+
+export function navFor(role: MemberRole, on: ModuleState): NavEntry[] {
+  return [
+    { label: "Home", href: "/" },
+    { label: "Needs attention", href: "/inbox" },
+    ...roleNav(role, on)
+      .filter(([, module]) => module === null || on[module])
+      .map(([label, , href]) => ({ label, href: href ?? null })),
+  ];
+}
+
+// ── Branding ────────────────────────────────────────────────────────────────────────────────────
+
+/** Shown wherever a company has not chosen its own name for the product, and before sign-in. */
+export const DEFAULT_PRODUCT_NAME = "SahulatERP";
+
+export const productNameSchema = z
+  .string()
+  .trim()
+  .min(1, "Enter the product name.")
+  .max(60, "Use at most 60 characters.");
+
+export const LOGO_MAX_BYTES = 256 * 1024;
+export const LOGO_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
+export type LogoType = (typeof LOGO_TYPES)[number];
+
+function startsWith(bytes: Uint8Array, signature: readonly number[], offset = 0): boolean {
+  return signature.every((byte, i) => bytes[offset + i] === byte);
+}
+
+/**
+ * Accepts a logo by what the file actually is, not by its name or the type the browser claims.
+ * SVG is refused on purpose: it can carry script.
+ */
+export function checkLogo(bytes: Uint8Array): { ok: true; contentType: LogoType } | { ok: false; reason: string } {
+  if (bytes.length === 0) return { ok: false, reason: "Choose an image file." };
+  if (bytes.length > LOGO_MAX_BYTES) return { ok: false, reason: "The logo must be 256 KB or smaller." };
+  if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return { ok: true, contentType: "image/png" };
+  if (startsWith(bytes, [0xff, 0xd8, 0xff])) return { ok: true, contentType: "image/jpeg" };
+  if (startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) && startsWith(bytes, [0x57, 0x45, 0x42, 0x50], 8)) {
+    return { ok: true, contentType: "image/webp" };
+  }
+  return { ok: false, reason: "Use a PNG, JPEG or WebP image." };
 }

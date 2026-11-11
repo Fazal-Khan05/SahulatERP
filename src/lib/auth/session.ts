@@ -3,8 +3,8 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { listMyMemberships } from "@/modules/tenant/queries";
-import { resolveActiveMembership, type MembershipSummary, type TenantContext } from "@/modules/tenant/rules";
+import { loadWorkspace, type Branding } from "@/modules/tenant/queries";
+import type { MembershipSummary, ModuleState, TenantContext } from "@/modules/tenant/rules";
 
 export const ACTIVE_TENANT_COOKIE = "active_tenant";
 
@@ -50,6 +50,10 @@ export type TenantSession = TenantContext & {
   /** Every company the user is an active member of, for the switcher. */
   memberships: MembershipSummary[];
   canCreateCompany: boolean;
+  /** What this company calls the product, and its logo. */
+  branding: Branding;
+  /** Which modules this company has switched on. */
+  modules: ModuleState;
 };
 
 /**
@@ -59,9 +63,8 @@ export type TenantSession = TenantContext & {
  */
 export const getTenantSession = cache(async (): Promise<TenantSession | null> => {
   const user = await requireUser();
-  const memberships = await listMyMemberships(user.id);
   const preferred = (await cookies()).get(ACTIVE_TENANT_COOKIE)?.value;
-  const active = resolveActiveMembership(memberships, preferred);
+  const { memberships, active } = await loadWorkspace(user.id, preferred);
   if (!active) return null;
   return {
     userId: user.id,
@@ -72,6 +75,8 @@ export const getTenantSession = cache(async (): Promise<TenantSession | null> =>
     branchIds: active.branchIds,
     memberships,
     canCreateCompany: user.canCreateCompany,
+    branding: active.branding,
+    modules: active.modules,
   };
 });
 

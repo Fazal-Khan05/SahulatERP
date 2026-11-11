@@ -82,6 +82,16 @@ Show the migration SQL before applying. When finished: mark Step 2 done with the
 
 Before Step 3 (app shell and role home screens), docs/UI-NOTES.md must contain reviewer comments. If it is empty, stop and tell the founder to do the reviews first.
 
+## Step 23 note
+
+When Step 23 is finished, remind the founder to create their owner account and click through everything built since Step 2 on the deployment. On 2026-11-11 the founder put this off until after Step 23:
+
+```
+npm run owner:create -- <founder's email> --url=https://sahulaterp.vercel.app
+```
+
+Until then, definition-of-done item 5 (the founder clicks through on the dev deployment) is outstanding for Step 2 onwards. Each session proves its step with the automated tests and sends screenshots of the new screens instead.
+
 ## Accountant checkpoints
 
 Steps 13, 20, 25, 28, 32 and 41: the session must end by producing a one-page worked example (docs/examples/step-N.md) showing the input document and the exact journal lines, for the founder to take to the accountant. The step is not marked done until the founder says the accountant agreed.

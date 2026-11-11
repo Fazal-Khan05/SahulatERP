@@ -4,15 +4,21 @@ import { audit, enterTenant, withTenant } from "@/db";
 import { UserError, pgCode } from "@/lib/errors";
 import { selectMyMemberships } from "./queries";
 import {
+  MODULES,
   branchNameSchema,
   can,
+  checkLogo,
+  checkModuleChange,
   companyNameSchema,
   firstIssue,
   inviteSchema,
+  productNameSchema,
+  resolveModules,
   type MembershipSummary,
+  type ModuleKey,
   type TenantContext,
 } from "./rules";
-import { branches, invitations, memberships } from "./schema";
+import { branches, invitations, memberships, modulesEnabled, settings } from "./schema";
 
 // The transactional handlers. Each one checks the role, makes its change and writes its audit
 // row in a single transaction, so neither is ever stored without the other.
@@ -96,6 +102,104 @@ export async function inviteMember(ctx: TenantContext, raw: unknown): Promise<{ 
     if (pgCode(error) === UNIQUE_VIOLATION) throw new UserError("This person already has a pending invitation.");
     throw error;
   }
+}
+
+/**
+ * Saves what the company calls the product and, optionally, its logo.
+ * `logo`: bytes to set a new one, null to remove it, undefined to leave it alone.
+ */
+export async function updateBranding(
+  ctx: TenantContext,
+  input: { productName: unknown; logo?: Uint8Array | null },
+): Promise<void> {
+  if (!can(ctx.role, "branding.update")) throw new UserError("Only an owner can change these settings.");
+  const name = productNameSchema.safeParse(input.productName);
+  if (!name.success) throw new UserError(firstIssue(name.error));
+
+  let logo: { logo: Uint8Array | null; logoContentType: string | null } | undefined;
+  if (input.logo === null) logo = { logo: null, logoContentType: null };
+  if (input.logo instanceof Uint8Array) {
+    const checked = checkLogo(input.logo);
+    if (!checked.ok) throw new UserError(checked.reason);
+    logo = { logo: input.logo, logoContentType: checked.contentType };
+  }
+
+  await withTenant(ctx.userId, ctx.tenantId, async (tx) => {
+    const [existing] = await tx
+      .select({ id: settings.id, productName: settings.productName, hasLogo: sql<boolean>`${settings.logo} is not null` })
+      .from(settings)
+      .where(eq(settings.tenantId, ctx.tenantId));
+
+    let id: string;
+    if (existing) {
+      id = existing.id;
+      await tx
+        .update(settings)
+        .set({ productName: name.data, ...logo, updatedAt: sql`now()`, updatedBy: ctx.userId })
+        .where(eq(settings.tenantId, ctx.tenantId));
+    } else {
+      const [row] = await tx
+        .insert(settings)
+        .values({ tenantId: ctx.tenantId, productName: name.data, ...logo, createdBy: ctx.userId, updatedBy: ctx.userId })
+        .returning({ id: settings.id });
+      id = row.id;
+    }
+    const hadLogo = existing?.hasLogo ?? false;
+    // The audit row says whether there is a logo, never the image itself.
+    await audit(tx, ctx, {
+      action: "settings.update",
+      entity: "settings",
+      entityId: id,
+      before: existing ? { productName: existing.productName, logo: hadLogo } : null,
+      after: { productName: name.data, logo: logo ? logo.logo !== null : hadLogo },
+    });
+  });
+}
+
+/** Switches a module on or off for the company, within the dependency rules. */
+export async function setModuleEnabled(ctx: TenantContext, rawModule: unknown, enabled: boolean): Promise<void> {
+  if (!can(ctx.role, "module.update")) throw new UserError("Only an owner can switch modules.");
+  if (typeof rawModule !== "string" || !(MODULES as readonly string[]).includes(rawModule)) {
+    throw new UserError("That module does not exist.");
+  }
+  const key = rawModule as ModuleKey;
+
+  await withTenant(ctx.userId, ctx.tenantId, async (tx) => {
+    const rows = await tx
+      .select({ id: modulesEnabled.id, module: modulesEnabled.module, enabled: modulesEnabled.enabled })
+      .from(modulesEnabled)
+      .where(eq(modulesEnabled.tenantId, ctx.tenantId));
+    const choices: Partial<Record<ModuleKey, boolean>> = {};
+    for (const row of rows) choices[row.module] = row.enabled;
+    const state = resolveModules(choices);
+
+    if (state[key] === enabled) return; // Already so; nothing to change or record.
+    const verdict = checkModuleChange(state, key, enabled);
+    if (!verdict.ok) throw new UserError(verdict.reason);
+
+    const existing = rows.find((row) => row.module === key);
+    let id: string;
+    if (existing) {
+      id = existing.id;
+      await tx
+        .update(modulesEnabled)
+        .set({ enabled, updatedAt: sql`now()`, updatedBy: ctx.userId })
+        .where(and(eq(modulesEnabled.tenantId, ctx.tenantId), eq(modulesEnabled.module, key)));
+    } else {
+      const [row] = await tx
+        .insert(modulesEnabled)
+        .values({ tenantId: ctx.tenantId, module: key, enabled, createdBy: ctx.userId, updatedBy: ctx.userId })
+        .returning({ id: modulesEnabled.id });
+      id = row.id;
+    }
+    await audit(tx, ctx, {
+      action: "module.update",
+      entity: "module",
+      entityId: id,
+      before: { module: key, enabled: !enabled },
+      after: { module: key, enabled },
+    });
+  });
 }
 
 export type AuthEvent = "auth.sign_in" | "auth.sign_out" | "auth.password_set";

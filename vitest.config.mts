@@ -18,6 +18,9 @@ export default defineConfig({
     // Unit tests live beside the code; reference/ and e2e/ are never collected.
     include: ["src/**/*.test.{ts,tsx}"],
     passWithNoTests: true,
+    // One file at a time: the database tests share one hosted database and its small connection
+    // pool, and stall each other when they run side by side.
+    fileParallelism: false,
     // The policy tests talk to the hosted database; each round trip crosses the network.
     testTimeout: 30_000,
     hookTimeout: 60_000,

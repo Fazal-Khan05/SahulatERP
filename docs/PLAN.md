@@ -107,7 +107,7 @@ Fifty-two steps in nine phases. Phases finish in order; steps inside a phase mos
 | 1 | Paper or Figma mock-ups of the five role home screens, the inbox and the invoice screen (no code), reviewed by at least two of the people who called the old UI complicated | Two reviewers say they would use it; objections written into `docs/UI-NOTES.md` | Done 2026-11-11 |
 | 2 | Tenant, membership, auth: sign-in, forgot/reset, sign-out, tenant switcher, eight roles (Owner, Accountant, Sales Manager, Salesperson, Recovery Officer, Warehouse Manager, Payroll Administrator, Auditor), branch scoping, `audit_log` table and a helper every command calls. RLS on every table created so far | Playwright: two tenants, a user in each, neither sees the other's rows via the API; audit row written on sign-in | Done 2026-11-11 |
 | 3 | App shell: role-aware navigation, inbox page (empty), settings skeleton, `settings.product_name` and logo used in header and print header, module on/off table with dependency rules | Switching a module off removes its menu entry; renaming the product needs no deploy | Done 2026-11-11 |
-| 4 | `jobs` table + worker loop (poll, lock, run, retry with backoff, dead-letter) and a `files` table backed by Supabase Storage now, R2 later behind one interface | A test job runs, fails twice, succeeds on the third try; a file uploads and downloads via signed link | |
+| 4 | `jobs` table + worker loop (poll, lock, run, retry with backoff, dead-letter) and a `files` table backed by Supabase Storage now, R2 later behind one interface | A test job runs, fails twice, succeeds on the third try; a file uploads and downloads via signed link | Done 2026-11-11 |
 
 ### Phase 1: Master data and settings
 

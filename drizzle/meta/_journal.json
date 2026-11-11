@@ -15,6 +15,13 @@
       "when": 1794413137113,
       "tag": "0001_shell",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794418038025,
+      "tag": "0002_jobs_files",
+      "breakpoints": true
     }
   ]
 }

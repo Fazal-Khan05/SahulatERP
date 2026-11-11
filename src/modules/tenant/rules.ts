@@ -36,6 +36,8 @@ const PERMISSIONS = {
   "member.read": ["owner", "auditor"],
   "member.invite": ["owner"],
   "audit.read": ["owner", "auditor"],
+  "file.read": ["owner", "auditor"],
+  "file.upload": ["owner"],
 } as const satisfies Record<string, readonly MemberRole[]>;
 
 export type Permission = keyof typeof PERMISSIONS;

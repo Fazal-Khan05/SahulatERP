@@ -458,6 +458,20 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
     }
   });
 
+  it("lets the Data API roles call nothing in the app schema but the one function storage needs", async () => {
+    // `authenticated` can reach the app schema (Supabase Storage's policies call app.storage_role).
+    // Every other function there must stay closed to it, including ones later steps add.
+    const callable = await admin<{ role: string; name: string }[]>`
+      select r.rolname as role, p.proname as name
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      cross join (select rolname from pg_roles where rolname in ('anon', 'authenticated')) r
+      where n.nspname = 'app' and has_function_privilege(r.rolname, p.oid, 'execute')
+        and has_schema_privilege(r.rolname, n.oid, 'usage')
+      order by 1, 2`;
+    expect(callable.map((f) => `${f.role}:${f.name}`)).toEqual(["authenticated:storage_role"]);
+  });
+
   it("gives anon and authenticated nothing, and app_runtime no way to rewrite the audit log", async () => {
     const dataApi = await admin`
       select grantee, table_name, privilege_type from information_schema.role_table_grants

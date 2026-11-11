@@ -69,11 +69,15 @@ export async function removeE2EData(): Promise<void> {
     const userIds = users.map((u) => u.id);
     if (userIds.length === 0) return;
     const tenants = await sql<{ id: string }[]>`select id from public.tenants where created_by = any(${userIds})`;
-    await deleteTenants(
-      sql,
-      tenants.map((t) => t.id),
-    );
+    const tenantIds = tenants.map((t) => t.id);
     const supabase = supabaseAdmin();
+    // The bytes of any files those companies stored, then the rows.
+    const stored = await sql<{ storage_key: string }[]>`select storage_key from public.files where tenant_id = any(${tenantIds})`;
+    if (stored.length > 0) {
+      const { error } = await supabase.storage.from("files").remove(stored.map((f) => f.storage_key));
+      if (error) throw new Error(`could not remove synthetic files: ${error.message}`);
+    }
+    await deleteTenants(sql, tenantIds);
     for (const id of userIds) {
       const { error } = await supabase.auth.admin.deleteUser(id);
       if (error) throw new Error(`could not delete a synthetic account: ${error.message}`);
@@ -81,4 +85,18 @@ export async function removeE2EData(): Promise<void> {
   } finally {
     await sql.end();
   }
+}
+
+/**
+ * A Supabase client signed in as a test user, talking to Supabase directly rather than through
+ * the app. Used to check that Supabase Storage itself refuses what the app would never ask for.
+ */
+export async function directClient(user: Pick<TestUser, "email" | "password">) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  if (!url || !key) throw new Error("Supabase URL or publishable key is not set; see .env.example");
+  const client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  const { error } = await client.auth.signInWithPassword({ email: user.email, password: user.password });
+  if (error) throw new Error(`could not sign in directly as ${user.email}: ${error.message}`);
+  return client;
 }

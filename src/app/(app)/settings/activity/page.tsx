@@ -19,6 +19,8 @@ const ACTION_LABELS: Record<string, string> = {
   "member.add": "Was added as a member",
   "settings.update": "Changed the product name or logo",
   "module.update": "Switched a module",
+  "file.upload": "Added a file",
+  "job.enqueue": "Queued background work",
 };
 
 function details(after: unknown): string {

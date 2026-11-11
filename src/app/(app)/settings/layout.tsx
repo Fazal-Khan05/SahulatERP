@@ -33,6 +33,7 @@ async function Tabs() {
       ) : null}
       <TabLink href="/settings/branches">Branches</TabLink>
       {can(role, "member.read") ? <TabLink href="/settings/members">Members</TabLink> : null}
+      {can(role, "file.read") ? <TabLink href="/settings/files">Files</TabLink> : null}
       {can(role, "audit.read") ? <TabLink href="/settings/activity">Activity</TabLink> : null}
     </>
   );

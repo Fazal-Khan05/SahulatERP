@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 export type FormAction<S extends FormState = FormState> = (state: S, formData: FormData) => Promise<S>;
 
 const noSubscription = () => () => {};
-const MAX_UPLOAD_BYTES = 900 * 1024;
+const DEFAULT_MAX_UPLOAD_BYTES = 900 * 1024;
 
 /**
  * Runs a server action for a form. Follows the action's `location` with a full page load, and
@@ -42,13 +42,22 @@ type Props = {
   className?: string;
   /** For a button that sits in a row, such as Sign out. */
   compact?: boolean;
+  /** The largest file this form may send. Larger ones are refused before anything is sent. */
+  maxUploadBytes?: number;
 };
 
 /**
  * A form bound to a server action. Shows the action's error or note, keeps what was typed when
  * the action refuses, and clears the fields when it succeeds.
  */
-export function ActionForm({ action, submitLabel, children, className, compact = false }: Props) {
+export function ActionForm({
+  action,
+  submitLabel,
+  children,
+  className,
+  compact = false,
+  maxUploadBytes = DEFAULT_MAX_UPLOAD_BYTES,
+}: Props) {
   const { state, ready, busy, run } = useFormAction(action);
   const form = useRef<HTMLFormElement>(null);
   const [tooLarge, setTooLarge] = useState(false);
@@ -66,7 +75,7 @@ export function ActionForm({ action, submitLabel, children, className, compact =
         event.preventDefault();
         const data = new FormData(event.currentTarget);
         // A request body over the server's limit never reaches the action; refuse it here.
-        const oversized = [...data.values()].some((value) => value instanceof File && value.size > MAX_UPLOAD_BYTES);
+        const oversized = [...data.values()].some((value) => value instanceof File && value.size > maxUploadBytes);
         setTooLarge(oversized);
         if (!oversized) run(data);
       }}

@@ -4,6 +4,9 @@ import { refresh } from "next/cache";
 import { requireTenant } from "@/lib/auth/session";
 import { UserError, logFailure } from "@/lib/errors";
 import type { FormState } from "@/lib/form-state";
+import { objectStore } from "@/lib/storage";
+import { uploadFile } from "@/modules/files/commands";
+import { FILE_MAX_BYTES } from "@/modules/files/rules";
 import { createBranch, inviteMember, setModuleEnabled, updateBranding } from "@/modules/tenant/commands";
 import { LOGO_MAX_BYTES } from "@/modules/tenant/rules";
 
@@ -69,4 +72,18 @@ export async function setModuleAction(_: FormState, formData: FormData): Promise
   }
   refresh();
   return {};
+}
+
+export async function uploadFileAction(_: FormState, formData: FormData): Promise<FormState> {
+  const session = await requireTenant();
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { error: "Choose a file." };
+  if (file.size > FILE_MAX_BYTES) return { error: "The file must be 4 MB or smaller." };
+  try {
+    await uploadFile(session, await objectStore(), { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) });
+  } catch (error) {
+    return refusal("upload file", error);
+  }
+  refresh();
+  return { ok: true, message: "Added." };
 }

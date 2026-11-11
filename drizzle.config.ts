@@ -10,7 +10,7 @@ if (!url) throw new Error("MIGRATION_DATABASE_URL is not set; see .env.local");
 
 export default defineConfig({
   dialect: "postgresql",
-  schema: "./src/db/schema.ts",
+  schema: "./src/modules/*/schema.ts",
   out: "./drizzle",
   dbCredentials: { url },
 });

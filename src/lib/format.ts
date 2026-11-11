@@ -1,0 +1,15 @@
+// Dates are shown as DD-MM-YYYY, in Pakistan time until a tenant can choose its own time zone.
+const dateTime = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Asia/Karachi",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+export function formatDateTime(value: Date): string {
+  const parts = Object.fromEntries(dateTime.formatToParts(value).map((p) => [p.type, p.value]));
+  return `${parts.day}-${parts.month}-${parts.year} ${parts.hour}:${parts.minute}`;
+}

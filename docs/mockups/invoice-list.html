@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sales invoices · SahulatERP mock-up</title>
+<link rel="stylesheet" href="mockups.css">
+</head>
+<body>
+
+<div class="mock-strip">
+  <span><strong>Mock-up</strong>Made-up data. Nothing saves.</span>
+  <span><a href="index.html">All screens</a> · 8 of 8 · <a href="owner.html">Back to first: Owner</a></span>
+</div>
+
+<header class="topbar">
+  <a class="brand" href="accountant.html"><span class="brand-mark" aria-hidden="true">S</span><span class="brand-name">SahulatERP</span></a>
+  <span class="brand-co">Sahil Bike Parts · Karachi</span>
+  <label class="search"><span class="vh">Search</span><input type="search" placeholder="Search accounts, documents, parties"><kbd>/</kbd></label>
+  <div class="top-right">
+    <a class="inbox-link" href="inbox.html"><span class="lbl">Needs attention</span><span class="count">7</span></a>
+    <div class="user"><span class="avatar" aria-hidden="true">SM</span><span class="who">Sana Malik<small>Accountant</small></span></div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="rail" aria-label="Accountant menu">
+    <a href="accountant.html">Home</a>
+    <a href="inbox.html">Needs attention <span class="count">7</span></a>
+    <a class="is-here" href="invoice-list.html" aria-current="page">Sales invoices</a>
+    <a>Bills and payments</a>
+    <a>Bank and cash</a>
+    <a>Journals</a>
+    <a>Period close</a>
+    <a>Reports</a>
+  </nav>
+
+  <main class="main">
+    <!-- The radio inputs make the saved-filter chips work. No JavaScript. -->
+    <input class="sw" type="radio" name="fl" id="fl-all" checked>
+    <input class="sw" type="radio" name="fl" id="fl-unpaid">
+    <input class="sw" type="radio" name="fl" id="fl-overdue">
+    <input class="sw" type="radio" name="fl" id="fl-drafts">
+    <input class="sw" type="radio" name="fl" id="fl-today">
+
+    <div class="page-head">
+      <div>
+        <h1>Sales invoices</h1>
+        <p class="sub">Financial year <span class="nb">2026-27</span></p>
+      </div>
+      <div class="actions">
+        <a class="btn primary big" href="invoice.html">New invoice <kbd>N</kbd></a>
+      </div>
+    </div>
+
+    <div class="chips" role="group" aria-label="Saved filters">
+      <label for="fl-all">All</label>
+      <label for="fl-unpaid">Unpaid</label>
+      <label for="fl-overdue">Overdue</label>
+      <label for="fl-drafts">Drafts</label>
+      <label for="fl-today">Today</label>
+      <button class="btn small quiet" type="button">+ Save this view</button>
+    </div>
+
+    <section class="card" aria-label="Invoices">
+      <div class="toolbar">
+        <label class="find"><span class="vh">Find</span><input type="search" placeholder="Find by number or customer"></label>
+        <button class="btn" type="button">Filter</button>
+        <details class="menu push">
+          <summary class="btn">Columns</summary>
+          <div class="menu-panel">
+            <p class="hint">Untick to hide a column</p>
+            <label><input type="checkbox" checked disabled> Number</label>
+            <label><input type="checkbox" id="col-date" checked> Date</label>
+            <label><input type="checkbox" checked disabled> Customer</label>
+            <label><input type="checkbox" id="col-city" checked> City</label>
+            <label><input type="checkbox" id="col-sp" checked> Salesperson</label>
+            <label><input type="checkbox" checked disabled> Total</label>
+            <label><input type="checkbox" id="col-unpaid" checked> Unpaid</label>
+            <label><input type="checkbox" id="col-due" checked> Due</label>
+            <label><input type="checkbox" id="col-status" checked> Status</label>
+          </div>
+        </details>
+        <details class="menu">
+          <summary class="btn">Export</summary>
+          <div class="menu-panel">
+            <p class="hint">Exports the rows that match the filter</p>
+            <a class="item">Excel (.xlsx)</a>
+            <a class="item">CSV</a>
+          </div>
+        </details>
+      </div>
+
+      <div class="tbl-wrap">
+        <table class="tbl stack">
+          <thead>
+            <tr>
+              <th><button class="th-btn" type="button">Number <span class="dir" aria-hidden="true">↕</span></button></th>
+              <th class="c-date" aria-sort="descending"><button class="th-btn" type="button">Date <span class="dir" aria-hidden="true">▼</span></button></th>
+              <th><button class="th-btn" type="button">Customer <span class="dir" aria-hidden="true">↕</span></button></th>
+              <th class="c-city"><button class="th-btn" type="button">City <span class="dir" aria-hidden="true">↕</span></button></th>
+              <th class="c-sp"><button class="th-btn" type="button">Salesperson <span class="dir" aria-hidden="true">↕</span></button></th>
+              <th class="num"><button class="th-btn" type="button">Total (Rs) <span class="dir" aria-hidden="true">↕</span></button></th>
+              <th class="num c-unpaid"><button class="th-btn" type="button">Unpaid (Rs) <span class="dir" aria-hidden="true">↕</span></button></th>
+              <th class="c-due"><button class="th-btn" type="button">Due <span class="dir" aria-hidden="true">↕</span></button></th>
+              <th class="c-status">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="r-today r-draft">
+              <td><a href="invoice.html">Draft</a></td>
+              <td class="c-date"><span class="nb">11-11-2026</span></td>
+              <td class="s-title">New Kashmir Autos</td>
+              <td class="c-city s-hide">Karachi</td>
+              <td class="c-sp s-hide">Usman Tariq</td>
+              <td class="num s-amt">1,36,260</td>
+              <td class="num c-unpaid s-hide"></td>
+              <td class="c-due s-hide"></td>
+              <td class="c-status"><span class="chip">Draft</span></td>
+            </tr>
+            <tr class="r-today r-unpaid">
+              <td><a href="invoice.html"><span class="nb">SI-2627-00417</span></a></td>
+              <td class="c-date"><span class="nb">11-11-2026</span></td>
+              <td class="s-title">Yousaf Brothers Autos</td>
+              <td class="c-city s-hide">Karachi</td>
+              <td class="c-sp s-hide">Usman Tariq</td>
+              <td class="num s-amt">58,400</td>
+              <td class="num c-unpaid" data-label="Unpaid">58,400</td>
+              <td class="c-due s-hide"><span class="nb">11-12-2026</span></td>
+              <td class="c-status"><span class="chip amber">Unpaid</span></td>
+            </tr>
+            <tr class="r-today r-unpaid">
+              <td><a href="invoice.html"><span class="nb">SI-2627-00416</span></a></td>
+              <td class="c-date"><span class="nb">11-11-2026</span></td>
+              <td class="s-title">Saddar Auto Parts</td>
+              <td class="c-city s-hide">Karachi</td>
+              <td class="c-sp s-hide">Usman Tariq</td>
+              <td class="num s-amt">1,76,400</td>
+              <td class="num c-unpaid" data-label="Unpaid">1,76,400</td>
+              <td class="c-due s-hide"><span class="nb">11-12-2026</span></td>
+              <td class="c-status"><span class="chip amber">Unpaid</span></td>
+            </tr>
+            <tr class="r-today">
+              <td><a href="invoice.html"><span class="nb">SI-2627-00415</span></a></td>
+              <td class="c-date"><span class="nb">11-11-2026</span></td>
+              <td class="s-title">Walk-in customer</td>
+              <td class="c-city s-hide">Karachi</td>
+              <td class="c-sp s-hide">Kashif Raza</td>
+              <td class="num s-amt">4,350</td>
+              <td class="num c-unpaid" data-label="Unpaid">0</td>
+              <td class="c-due s-hide">Cash</td>
+              <td class="c-status"><span class="chip green">Paid</span></td>
+            </tr>
+            <tr class="r-draft">
+              <td><a href="invoice.html">Draft</a></td>
+              <td class="c-date"><span class="nb">10-11-2026</span></td>
+              <td class="s-title">Gulshan Autos</td>
+              <td class="c-city s-hide">Karachi</td>
+              <td class="c-sp s-hide">Kashif Raza</td>
+              <td class="num s-amt">1,05,250</td>
+              <td class="num c-unpaid s-hide"></td>
+              <td class="c-due s-hide"></td>
+              <td class="c-status"><span class="chip">Draft</span></td>
+            </tr>
+            <tr class="r-unpaid">
+              <td><a href="invoice.html"><span class="nb">SI-2627-00414</span></a></td>
+              <td class="c-date"><span class="nb">10-11-2026</span></td>
+              <td class="s-title">Madni Spare Parts</td>
+              <td class="c-city s-hide">Karachi</td>
+              <td class="c-sp s-hide">Usman Tariq</td>
+              <td class="num s-amt">92,750</td>
+              <td class="num c-unpaid" data-label="Unpaid">92,750</td>
+              <td class="c-due s-hide"><span class="nb">10-12-2026</span></td>
+              <td class="c-status"><span class="chip amber">Unpaid</span></td>
+            </tr>
+            <tr class="r-unpaid">
+              <td><a href="invoice.html"><span class="nb">SI-2627-00413</span></a></td>
+              <td class="c-date"><span class="nb">10-11-2026</span></td>
+              <td class="s-title">Al-Madad Autos</td>
+              <td class="c-city s-hide">Lahore</td>
+              <td class="c-sp s-hide">Bilal Ahmed</td>
+              <td class="num s-amt">1,28,700</td>
+              <td class="num c-unpaid" data-label="Unpaid">1,28,700</td>
+              <td class="c-due s-hide"><span class="nb">10-12-2026</span></td>
+              <td class="c-status"><span class="chip amber">Unpaid</span></td>
+            </tr>
+            <tr class="r-unpaid">
+              <td><a href="invoice.html"><span class="nb">SI-2627-00412</span></a></td>
+              <td class="c-date"><span class="nb">10-11-2026</span></td>
+              <td class="s-title">Liaquatabad Motorcycle Store</td>
+              <td class="c-city s-hide">Karachi</td>
+              <td class="c-sp s-hide">Usman Tariq</td>
+              <td class="num s-amt">1,12,500</td>
+              <td class="num c-unpaid" data-label="Unpaid">1,12,500</td>
+              <td class="c-due s-hide"><span class="nb">10-12-2026</span></td>
+              <td class="c-status"><span class="chip amber">Unpaid</span></td>
+            </tr>
+            <tr>
+              <td><a href="invoice.html"><span class="nb">SI-2627-00411</span></a></td>
+              <td class="c-date"><span class="nb">10-11-2026</span></td>
+              <td class="s-title">Walk-in customer</td>
+              <td class="c-city s-hide">Karachi</td>
+              <td class="c-sp s-hide">Kashif Raza</td>
+              <td class="num s-amt">2,150</td>
+              <td class="num c-unpaid" data-label="Unpaid">0</td>
+              <td class="c-due s-hide">Cash</td>
+              <td class="c-status"><span class="chip green">Paid</span></td>
+            </tr>
+            <tr>
+              <td><a href="invoice.html"><span class="nb">SI-2627-00410</span></a></td>
+              <td class="c-date"><span class="nb">10-11-2026</span></td>
+              <td class="s-title">Yousaf Brothers Autos</td>
+              <td class="c-city s-hide">Karachi</td>
+              <td class="c-sp s-hide">Usman Tariq</td>
+              <td class="num s-amt">76,300</td>
+              <td class="num c-unpaid" data-label="Unpaid">0</td>
+              <td class="c-due s-hide"><span class="nb">10-12-2026</span></td>
+              <td class="c-status"><span class="chip green">Paid</span></td>
+            </tr>
+            <tr class="r-unpaid">
+              <td><a href="invoice.html"><span class="nb">SI-2627-00409</span></a></td>
+              <td class="c-date"><span class="nb">09-11-2026</span></td>
+              <td class="s-title">Karachi Bike House</td>
+              <td class="c-city s-hide">Karachi</td>
+              <td class="c-sp s-hide">Usman Tariq</td>
+              <td class="num s-amt">2,10,000</td>
+              <td class="num c-unpaid" data-label="Unpaid">1,25,000</td>
+              <td class="c-due s-hide"><span class="nb">09-12-2026</span></td>
+              <td class="c-status"><span class="chip blue">Part paid</span></td>
+            </tr>
+            <tr>
+              <td><a href="invoice.html"><span class="nb">SI-2627-00408</span></a></td>
+              <td class="c-date"><span class="nb">09-11-2026</span></td>
+              <td class="s-title">Gulshan Autos</td>
+              <td class="c-city s-hide">Karachi</td>
+              <td class="c-sp s-hide">Kashif Raza</td>
+              <td class="num s-amt">45,900</td>
+              <td class="num c-unpaid" data-label="Unpaid">0</td>
+              <td class="c-due s-hide"><span class="nb">09-12-2026</span></td>
+              <td class="c-status"><span class="chip green">Paid</span></td>
+            </tr>
+            <tr>
+              <td><a href="invoice.html"><span class="nb">SI-2627-00407</span></a></td>
+              <td class="c-date"><span class="nb">09-11-2026</span></td>
+              <td class="s-title">Walk-in customer</td>
+              <td class="c-city s-hide">Karachi</td>
+              <td class="c-sp s-hide">Kashif Raza</td>
+              <td class="num s-amt">6,800</td>
+              <td class="num c-unpaid" data-label="Unpaid">0</td>
+              <td class="c-due s-hide">Cash</td>
+              <td class="c-status"><span class="chip green">Paid</span></td>
+            </tr>
+            <tr class="r-unpaid">
+              <td><a href="invoice.html"><span class="nb">SI-2627-00406</span></a></td>
+              <td class="c-date"><span class="nb">09-11-2026</span></td>
+              <td class="s-title">Sitara Bike Point</td>
+              <td class="c-city s-hide">Faisalabad</td>
+              <td class="c-sp s-hide">Bilal Ahmed</td>
+              <td class="num s-amt">3,02,650</td>
+              <td class="num c-unpaid" data-label="Unpaid">1,92,650</td>
+              <td class="c-due s-hide"><span class="nb">09-12-2026</span></td>
+              <td class="c-status"><span class="chip blue">Part paid</span></td>
+            </tr>
+
+            <!-- older rows: only the Unpaid and Overdue filters reach back this far -->
+            <tr class="r-old r-unpaid">
+              <td><a href="invoice.html"><span class="nb">SI-2627-00356</span></a></td>
+              <td class="c-date"><span class="nb">24-10-2026</span></td>
+              <td class="s-title">New Kashmir Autos</td>
+              <td class="c-city s-hide">Karachi</td>
+              <td class="c-sp s-hide">Usman Tariq</td>
+              <td class="num s-amt">2,07,400</td>
+              <td class="num c-unpaid" data-label="Unpaid">2,07,400</td>
+              <td class="c-due s-hide"><span class="nb">23-11-2026</span></td>
+              <td class="c-status"><span class="chip amber">Unpaid</span></td>
+            </tr>
+            <tr class="r-old r-unpaid r-overdue">
+              <td><a href="invoice.html"><span class="nb">SI-2627-00283</span></a></td>
+              <td class="c-date"><span class="nb">30-09-2026</span></td>
+              <td class="s-title">Pak Punjab Autos</td>
+              <td class="c-city s-hide">Gujranwala</td>
+              <td class="c-sp s-hide">Bilal Ahmed</td>
+              <td class="num s-amt">1,74,000</td>
+              <td class="num c-unpaid" data-label="Unpaid">74,000</td>
+              <td class="c-due s-hide"><span class="nb">30-10-2026</span></td>
+              <td class="c-status"><span class="chip red">12 days late</span></td>
+            </tr>
+            <tr class="r-old r-unpaid r-overdue">
+              <td><a href="invoice.html"><span class="nb">SI-2627-00262</span></a></td>
+              <td class="c-date"><span class="nb">21-09-2026</span></td>
+              <td class="s-title">New Kashmir Autos</td>
+              <td class="c-city s-hide">Karachi</td>
+              <td class="c-sp s-hide">Usman Tariq</td>
+              <td class="num s-amt">4,05,000</td>
+              <td class="num c-unpaid" data-label="Unpaid">4,05,000</td>
+              <td class="c-due s-hide"><span class="nb">21-10-2026</span></td>
+              <td class="c-status"><span class="chip red">21 days late</span></td>
+            </tr>
+            <tr class="r-old r-unpaid r-overdue">
+              <td><a href="invoice.html"><span class="nb">SI-2627-00241</span></a></td>
+              <td class="c-date"><span class="nb">10-09-2026</span></td>
+              <td class="s-title">Al-Madad Autos</td>
+              <td class="c-city s-hide">Lahore</td>
+              <td class="c-sp s-hide">Bilal Ahmed</td>
+              <td class="num s-amt">2,60,000</td>
+              <td class="num c-unpaid" data-label="Unpaid">1,85,000</td>
+              <td class="c-due s-hide"><span class="nb">10-10-2026</span></td>
+              <td class="c-status"><span class="chip red">32 days late</span></td>
+            </tr>
+            <tr class="r-old r-unpaid r-overdue">
+              <td><a href="invoice.html"><span class="nb">SI-2627-00149</span></a></td>
+              <td class="c-date"><span class="nb">12-08-2026</span></td>
+              <td class="s-title">Rehman Auto Centre</td>
+              <td class="c-city s-hide">Lahore</td>
+              <td class="c-sp s-hide">Bilal Ahmed</td>
+              <td class="num s-amt">2,15,750</td>
+              <td class="num c-unpaid" data-label="Unpaid">2,15,750</td>
+              <td class="c-due s-hide"><span class="nb">11-09-2026</span></td>
+              <td class="c-status"><span class="chip red">61 days late</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card-foot">
+        <div>
+          <span class="f f-all">Rows 1 to 14 of 431. This page: total Rs&nbsp;14,58,410, unpaid Rs&nbsp;8,86,400.</span>
+          <span class="f f-unpaid">Rows 1 to 12 of 96. This page: total Rs&nbsp;23,43,550, unpaid Rs&nbsp;19,73,550.</span>
+          <span class="f f-overdue">Rows 1 to 4 of 37. This page: total Rs&nbsp;10,54,750, unpaid Rs&nbsp;8,79,750.</span>
+          <span class="f f-drafts">2 drafts. Total Rs&nbsp;2,41,510.</span>
+          <span class="f f-today">4 rows. Total Rs&nbsp;3,75,410, unpaid Rs&nbsp;2,34,800.</span>
+        </div>
+        <div class="actions">
+          <button class="btn small" type="button" disabled>Previous</button>
+          <button class="btn small" type="button">Next</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="reviewer">
+      <h2>What to ask the reviewer</h2>
+      <p class="hint">For the person running the review. Not part of the product. The chips and the Columns menu work; try them.</p>
+      <ol>
+        <li>Which of these saved filters would you press every day? Name one you would add.</li>
+        <li>Look across the columns. Which would you remove, and what is missing that you look for in your current software?</li>
+        <li>When you export a list today, who is it for and what do they do with it?</li>
+      </ol>
+    </aside>
+  </main>
+</div>
+
+</body>
+</html>

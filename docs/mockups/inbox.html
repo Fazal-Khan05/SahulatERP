@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Needs attention · SahulatERP mock-up</title>
+<link rel="stylesheet" href="mockups.css">
+</head>
+<body>
+
+<div class="mock-strip">
+  <span><strong>Mock-up</strong>Made-up data. Nothing saves.</span>
+  <span><a href="index.html">All screens</a> · 6 of 8 · <a href="invoice.html">Next: Sales invoice</a></span>
+</div>
+
+<header class="topbar">
+  <a class="brand" href="owner.html"><span class="brand-mark" aria-hidden="true">S</span><span class="brand-name">SahulatERP</span></a>
+  <span class="brand-co">Sahil Bike Parts · Karachi</span>
+  <label class="search"><span class="vh">Search</span><input type="search" placeholder="Search customers, items, documents"><kbd>/</kbd></label>
+  <div class="top-right">
+    <a class="inbox-link" href="inbox.html"><span class="lbl">Needs attention</span><span class="count">24</span></a>
+    <div class="user"><span class="avatar" aria-hidden="true">IQ</span><span class="who">Imran Qureshi<small>Owner</small></span></div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="rail" aria-label="Owner menu">
+    <a href="owner.html">Home</a>
+    <a class="is-here" href="inbox.html" aria-current="page">Needs attention <span class="count">24</span></a>
+    <a href="invoice-list.html">Sales</a>
+    <a>Collections</a>
+    <a>Purchases and imports</a>
+    <a>Stock</a>
+    <a>Cash and bank</a>
+    <a>Commissions</a>
+    <a>Reports</a>
+    <a>Settings</a>
+  </nav>
+
+  <main class="main">
+    <input class="sw" type="radio" name="ib" id="ib-all" checked>
+    <input class="sw" type="radio" name="ib" id="ib-appr">
+    <input class="sw" type="radio" name="ib" id="ib-chq">
+    <input class="sw" type="radio" name="ib" id="ib-fup">
+    <input class="sw" type="radio" name="ib" id="ib-draft">
+    <input class="sw" type="radio" name="ib" id="ib-bill">
+    <input class="sw" type="radio" name="ib" id="ib-stock">
+
+    <div class="page-head">
+      <div>
+        <h1>Needs attention</h1>
+        <p class="sub">24 open. Everything that is waiting on someone, in one list. The owner sees it all; everyone else sees their own.</p>
+      </div>
+    </div>
+
+    <div class="chips" role="group" aria-label="Show">
+      <label for="ib-all">All <span class="n">24</span></label>
+      <label for="ib-appr">Approvals <span class="n">3</span></label>
+      <label for="ib-chq">Cheques to deposit <span class="n">4</span></label>
+      <label for="ib-fup">Follow-ups <span class="n">4</span></label>
+      <label for="ib-draft">Drafts to submit <span class="n">6</span></label>
+      <label for="ib-bill">Bills due <span class="n">3</span></label>
+      <label for="ib-stock">Stock below reorder <span class="n">4</span></label>
+    </div>
+
+    <section class="card" aria-label="Needs attention list">
+      <div class="tbl-wrap">
+        <table class="tbl stack">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>What</th>
+              <th>Who</th>
+              <th>Due</th>
+              <th><span class="vh">Action</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="group"><td colspan="5">Late</td></tr>
+            <tr class="k-chq">
+              <td><span class="chip">Cheque to deposit</span></td>
+              <td class="s-title"><span class="strong">Bilal &amp; Sons Auto Store · Rs&nbsp;85,000</span><small>Cheque 0391877, dated <span class="nb">10-11-2026</span></small></td>
+              <td class="who" data-label="With">Adnan Sheikh</td>
+              <td><span class="chip red">1 day late</span></td>
+              <td class="act"><button class="btn small" type="button">Mark deposited</button></td>
+            </tr>
+            <tr class="k-draft">
+              <td><span class="chip">Draft to submit</span></td>
+              <td class="s-title"><span class="strong">Clearing charges, shipment <span class="nb">SHP-2627-014</span> · Rs&nbsp;2,84,600</span><small>Supplier bill, last edited <span class="nb">10-11-2026</span></small></td>
+              <td class="who" data-label="With">Sana Malik</td>
+              <td><span class="chip red">1 day late</span></td>
+              <td class="act"><button class="btn small" type="button">Open draft</button></td>
+            </tr>
+            <tr class="k-draft">
+              <td><span class="chip">Draft to submit</span></td>
+              <td class="s-title"><span class="strong">Gulshan Autos · Rs&nbsp;1,05,250</span><small>Sales invoice, last edited <span class="nb">10-11-2026</span></small></td>
+              <td class="who" data-label="With">Kashif Raza</td>
+              <td><span class="chip red">1 day late</span></td>
+              <td class="act"><button class="btn small" type="button">Open draft</button></td>
+            </tr>
+            <tr class="k-draft">
+              <td><span class="chip">Draft to submit</span></td>
+              <td class="s-title"><span class="strong">Hamza Traders · Rs&nbsp;84,500</span><small>Sales order, last edited <span class="nb">10-11-2026</span></small></td>
+              <td class="who" data-label="With">Bilal Ahmed</td>
+              <td><span class="chip red">1 day late</span></td>
+              <td class="act"><button class="btn small" type="button">Open draft</button></td>
+            </tr>
+            <tr class="k-fup">
+              <td><span class="chip">Follow-up</span></td>
+              <td class="s-title"><span class="strong">Rehman Auto Centre · promise of Rs&nbsp;1,00,000 not kept</span><small>Overdue Rs&nbsp;2,15,750, 61 days. Promised by <span class="nb">10-11-2026</span>.</small></td>
+              <td class="who" data-label="With">Adnan Sheikh</td>
+              <td><span class="chip red">1 day late</span></td>
+              <td class="act"><button class="btn small" type="button">Log follow-up</button></td>
+            </tr>
+
+            <tr class="group"><td colspan="5">Today</td></tr>
+            <tr class="k-appr">
+              <td><span class="chip blue">Approval</span></td>
+              <td class="s-title"><span class="strong">Sale over credit limit · Chenab Motorcycle Parts</span><small>Order <span class="nb">SO-2627-00231</span> for Rs&nbsp;4,85,000 takes the balance to Rs&nbsp;13,35,000. Limit Rs&nbsp;12,00,000. Asked by Bilal Ahmed.</small></td>
+              <td class="who" data-label="With">Imran Qureshi</td>
+              <td><span class="chip amber">Today</span></td>
+              <td class="act"><button class="btn primary small" type="button">Review</button></td>
+            </tr>
+            <tr class="k-chq">
+              <td><span class="chip">Cheque to deposit</span></td>
+              <td class="s-title"><span class="strong">Saddar Auto Parts · Rs&nbsp;2,40,000</span><small>Cheque 7711204, dated <span class="nb">11-11-2026</span></small></td>
+              <td class="who" data-label="With">Adnan Sheikh</td>
+              <td><span class="chip amber">Today</span></td>
+              <td class="act"><button class="btn small" type="button">Mark deposited</button></td>
+            </tr>
+            <tr class="k-chq">
+              <td><span class="chip">Cheque to deposit</span></td>
+              <td class="s-title"><span class="strong">Chenab Motorcycle Parts · Rs&nbsp;1,50,000</span><small>Cheque 0048213, dated <span class="nb">11-11-2026</span></small></td>
+              <td class="who" data-label="With">Adnan Sheikh</td>
+              <td><span class="chip amber">Today</span></td>
+              <td class="act"><button class="btn small" type="button">Mark deposited</button></td>
+            </tr>
+            <tr class="k-chq">
+              <td><span class="chip">Cheque to deposit</span></td>
+              <td class="s-title"><span class="strong">Sitara Bike Point · Rs&nbsp;1,10,000</span><small>Cheque 5520316, dated <span class="nb">11-11-2026</span></small></td>
+              <td class="who" data-label="With">Adnan Sheikh</td>
+              <td><span class="chip amber">Today</span></td>
+              <td class="act"><button class="btn small" type="button">Mark deposited</button></td>
+            </tr>
+            <tr class="k-fup">
+              <td><span class="chip">Follow-up</span></td>
+              <td class="s-title"><span class="strong">Indus Two-Wheeler Parts · overdue Rs&nbsp;3,10,000</span><small>78 days. Promised Rs&nbsp;1,50,000 by <span class="nb">15-11-2026</span>.</small></td>
+              <td class="who" data-label="With">Adnan Sheikh</td>
+              <td><span class="chip amber">Today</span></td>
+              <td class="act"><button class="btn small" type="button">Log follow-up</button></td>
+            </tr>
+            <tr class="k-fup">
+              <td><span class="chip">Follow-up</span></td>
+              <td class="s-title"><span class="strong">Madni Spare Parts · overdue Rs&nbsp;1,62,400</span><small>44 days. No promise yet.</small></td>
+              <td class="who" data-label="With">Adnan Sheikh</td>
+              <td><span class="chip amber">Today</span></td>
+              <td class="act"><button class="btn small" type="button">Log follow-up</button></td>
+            </tr>
+            <tr class="k-fup">
+              <td><span class="chip">Follow-up</span></td>
+              <td class="s-title"><span class="strong">Lucky Star Autos · overdue Rs&nbsp;54,600</span><small>95 days. Phone off twice; visit the shop.</small></td>
+              <td class="who" data-label="With">Adnan Sheikh</td>
+              <td><span class="chip amber">Today</span></td>
+              <td class="act"><button class="btn small" type="button">Log follow-up</button></td>
+            </tr>
+            <tr class="k-draft">
+              <td><span class="chip">Draft to submit</span></td>
+              <td class="s-title"><span class="strong">New Kashmir Autos · Rs&nbsp;1,36,260</span><small>Sales invoice, last edited today 10:47</small></td>
+              <td class="who" data-label="With">Usman Tariq</td>
+              <td><span class="chip amber">Today</span></td>
+              <td class="act"><a class="btn small" href="invoice.html">Open draft</a></td>
+            </tr>
+            <tr class="k-draft">
+              <td><span class="chip">Draft to submit</span></td>
+              <td class="s-title"><span class="strong">Hamza Traders · Rs&nbsp;28,000</span><small>Receipt, cash. Last edited today 09:55.</small></td>
+              <td class="who" data-label="With">Adnan Sheikh</td>
+              <td><span class="chip amber">Today</span></td>
+              <td class="act"><button class="btn small" type="button">Open draft</button></td>
+            </tr>
+            <tr class="k-draft">
+              <td><span class="chip">Draft to submit</span></td>
+              <td class="s-title"><span class="strong">Data Autos · Rs&nbsp;61,800</span><small>Sales order, last edited today 10:42</small></td>
+              <td class="who" data-label="With">Bilal Ahmed</td>
+              <td><span class="chip amber">Today</span></td>
+              <td class="act"><button class="btn small" type="button">Open draft</button></td>
+            </tr>
+
+            <tr class="group"><td colspan="5">Coming up</td></tr>
+            <tr class="k-appr">
+              <td><span class="chip blue">Approval</span></td>
+              <td class="s-title"><span class="strong">Commission statement, October · Rs&nbsp;1,92,400</span><small>4 salespeople. Prepared by Sana Malik.</small></td>
+              <td class="who" data-label="With">Imran Qureshi</td>
+              <td data-label="Due"><span class="nb">12-11-2026</span></td>
+              <td class="act"><button class="btn primary small" type="button">Review</button></td>
+            </tr>
+            <tr class="k-bill">
+              <td><span class="chip">Bill due</span></td>
+              <td class="s-title"><span class="strong">Port Link Clearing Services · Rs&nbsp;3,42,500</span><small>Clearing, shipment <span class="nb">SHP-2627-013</span></small></td>
+              <td class="who" data-label="With">Sana Malik</td>
+              <td data-label="Due"><span class="nb">12-11-2026</span></td>
+              <td class="act"><button class="btn small" type="button">Pay</button></td>
+            </tr>
+            <tr class="k-appr">
+              <td><span class="chip blue">Approval</span></td>
+              <td class="s-title"><span class="strong">Stock write-off · Rs&nbsp;3,360</span><small>24 pcs Headlight bulb 12V 35W, damaged in transit. Asked by Naveed Akhtar.</small></td>
+              <td class="who" data-label="With">Imran Qureshi</td>
+              <td data-label="Due"><span class="nb">13-11-2026</span></td>
+              <td class="act"><button class="btn primary small" type="button">Review</button></td>
+            </tr>
+            <tr class="k-bill">
+              <td><span class="chip">Bill due</span></td>
+              <td class="s-title"><span class="strong">Seaways Freight Forwarders · Rs&nbsp;5,18,000</span><small>Sea freight, shipment <span class="nb">SHP-2627-014</span></small></td>
+              <td class="who" data-label="With">Sana Malik</td>
+              <td data-label="Due"><span class="nb">13-11-2026</span></td>
+              <td class="act"><button class="btn small" type="button">Pay</button></td>
+            </tr>
+            <tr class="k-bill">
+              <td><span class="chip">Bill due</span></td>
+              <td class="s-title"><span class="strong">Eastwind Parts (Ningbo) · USD&nbsp;6,200.00</span><small>Goods, shipment <span class="nb">SHP-2627-014</span>. About Rs&nbsp;17,45,300.</small></td>
+              <td class="who" data-label="With">Sana Malik</td>
+              <td data-label="Due"><span class="nb">14-11-2026</span></td>
+              <td class="act"><button class="btn small" type="button">Pay</button></td>
+            </tr>
+
+            <tr class="group"><td colspan="5">No date</td></tr>
+            <tr class="k-stock">
+              <td><span class="chip">Stock below reorder</span></td>
+              <td class="s-title"><span class="strong">Clutch cable 70cc · out of stock</span><small>Reorder level 200. 1,000 arriving <span class="nb">14-11-2026</span>.</small></td>
+              <td class="who" data-label="With">Naveed Akhtar</td>
+              <td class="s-hide"><span class="muted">None</span></td>
+              <td class="act"><button class="btn small" type="button">Open item</button></td>
+            </tr>
+            <tr class="k-stock">
+              <td><span class="chip">Stock below reorder</span></td>
+              <td class="s-title"><span class="strong">Tube <span class="nb">2.50-17</span> · 80 left</span><small>Reorder level 300. None on order.</small></td>
+              <td class="who" data-label="With">Naveed Akhtar</td>
+              <td class="s-hide"><span class="muted">None</span></td>
+              <td class="act"><button class="btn small" type="button">Open item</button></td>
+            </tr>
+            <tr class="k-stock">
+              <td><span class="chip">Stock below reorder</span></td>
+              <td class="s-title"><span class="strong">Brake shoe set 125cc · 35 left</span><small>Reorder level 150. 600 arriving <span class="nb">14-11-2026</span>.</small></td>
+              <td class="who" data-label="With">Naveed Akhtar</td>
+              <td class="s-hide"><span class="muted">None</span></td>
+              <td class="act"><button class="btn small" type="button">Open item</button></td>
+            </tr>
+            <tr class="k-stock">
+              <td><span class="chip">Stock below reorder</span></td>
+              <td class="s-title"><span class="strong">Spark plug C7 · 120 left</span><small>Reorder level 500. 2,000 arriving today.</small></td>
+              <td class="who" data-label="With">Naveed Akhtar</td>
+              <td class="s-hide"><span class="muted">None</span></td>
+              <td class="act"><button class="btn small" type="button">Open item</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card-foot"><span>Late first, then by due date. A row leaves the list when the thing is done.</span></div>
+    </section>
+
+    <aside class="reviewer">
+      <h2>What to ask the reviewer</h2>
+      <p class="hint">For the person running the review. Not part of the product.</p>
+      <ol>
+        <li>Would you work from one list like this, or do you want a separate list for each kind of job? Why?</li>
+        <li>Each row has one button. Point to a row where one button is not enough, and tell me what else you would need.</li>
+        <li>The list is ordered by how late things are. Would you order it differently: by person, by type, by amount?</li>
+      </ol>
+    </aside>
+  </main>
+</div>
+
+</body>
+</html>

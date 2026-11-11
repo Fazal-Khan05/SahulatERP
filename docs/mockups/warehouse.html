@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Warehouse home · SahulatERP mock-up</title>
+<link rel="stylesheet" href="mockups.css">
+</head>
+<body>
+
+<div class="mock-strip">
+  <span><strong>Mock-up</strong>Made-up data. Nothing saves.</span>
+  <span><a href="index.html">All screens</a> · 4 of 8 · <a href="accountant.html">Next: Accountant</a></span>
+</div>
+
+<header class="topbar">
+  <a class="brand" href="warehouse.html"><span class="brand-mark" aria-hidden="true">S</span><span class="brand-name">SahulatERP</span></a>
+  <span class="brand-co">Sahil Bike Parts · Main godown</span>
+  <label class="search"><span class="vh">Search</span><input type="search" placeholder="Search items, deliveries, shipments"><kbd>/</kbd></label>
+  <div class="top-right">
+    <a class="inbox-link" href="inbox.html"><span class="lbl">Needs attention</span><span class="count">4</span></a>
+    <div class="user"><span class="avatar" aria-hidden="true">NA</span><span class="who">Naveed Akhtar<small>Warehouse manager</small></span></div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="rail" aria-label="Warehouse menu">
+    <a class="is-here" href="warehouse.html" aria-current="page">Home</a>
+    <a href="inbox.html">Needs attention <span class="count">4</span></a>
+    <a>Receive goods</a>
+    <a>Deliveries</a>
+    <a>Transfers</a>
+    <a>Stock</a>
+    <a>Stock count</a>
+  </nav>
+
+  <main class="main">
+    <div class="page-head">
+      <div>
+        <h1>Home</h1>
+        <p class="sub">Wednesday <span class="nb">11-11-2026</span> · 2 arrivals today, 5 deliveries to pick</p>
+      </div>
+    </div>
+
+    <div class="grid two">
+      <div class="col">
+        <section class="card" aria-labelledby="h-receive">
+          <div class="card-head">
+            <h2 id="h-receive">Goods to receive <span class="n">4</span></h2>
+            <span class="sum">2 today</span>
+          </div>
+          <ul class="rows">
+            <li class="row">
+              <div class="row-main">
+                <div class="row-title">Eastwind Parts (Ningbo) · 186 cartons</div>
+                <div class="row-meta"><span class="nb">SHP-2627-014</span> · container TGHU 482917 · 23 items</div>
+                <div class="row-meta"><span class="chip amber">Arriving today</span> customs cleared, truck on the way</div>
+              </div>
+              <div class="row-act"><button class="btn primary small" type="button">Receive</button></div>
+            </li>
+            <li class="row">
+              <div class="row-main">
+                <div class="row-title">Noor Rubber Works (local) · 40 cartons</div>
+                <div class="row-meta"><span class="nb">PO-2627-0088</span> · 2 items</div>
+                <div class="row-meta"><span class="chip amber">Arriving today</span> supplier's own van</div>
+              </div>
+              <div class="row-act"><button class="btn small" type="button">Receive</button></div>
+            </li>
+            <li class="row">
+              <div class="row-main">
+                <div class="row-title">Pearl River Moto Supplies (Guangzhou) · 240 cartons</div>
+                <div class="row-meta"><span class="nb">SHP-2627-015</span> · container MSKU 730164 · 31 items</div>
+                <div class="row-meta"><span class="chip">Expected <span class="nb">14-11-2026</span></span> at Karachi port, customs in progress</div>
+              </div>
+            </li>
+            <li class="row">
+              <div class="row-main">
+                <div class="row-title">Eastwind Parts (Ningbo) · 310 cartons</div>
+                <div class="row-meta"><span class="nb">SHP-2627-016</span> · 38 items</div>
+                <div class="row-meta"><span class="chip">Expected <span class="nb">27-11-2026</span></span> at sea</div>
+              </div>
+            </li>
+          </ul>
+        </section>
+
+        <section class="card" aria-labelledby="h-transfers">
+          <div class="card-head">
+            <h2 id="h-transfers">Pending transfers <span class="n">2</span></h2>
+          </div>
+          <ul class="rows">
+            <li class="row">
+              <div class="row-main">
+                <div class="row-title">Main godown → Shop counter</div>
+                <div class="row-meta"><span class="nb">TR-2627-0041</span> · 12 items · 340 pcs</div>
+                <div class="row-meta"><span class="chip blue">To send</span> asked by Usman Tariq, <span class="nb">10-11-2026</span></div>
+              </div>
+              <div class="row-act"><button class="btn small" type="button">Send</button></div>
+            </li>
+            <li class="row">
+              <div class="row-main">
+                <div class="row-title">Shop counter → Main godown</div>
+                <div class="row-meta"><span class="nb">TR-2627-0042</span> · 3 items · 45 pcs · damaged returns</div>
+                <div class="row-meta"><span class="chip blue">On the way</span> sent <span class="nb">10-11-2026</span></div>
+              </div>
+              <div class="row-act"><button class="btn small" type="button">Receive</button></div>
+            </li>
+          </ul>
+        </section>
+      </div>
+
+      <div class="col">
+        <section class="card" aria-labelledby="h-pick">
+          <div class="card-head">
+            <h2 id="h-pick">Deliveries to pick today <span class="n">5</span></h2>
+            <span class="sum">Earliest departure first</span>
+          </div>
+          <ul class="rows">
+            <li class="row">
+              <div class="row-main">
+                <div class="row-title">New Kashmir Autos, Karachi</div>
+                <div class="row-meta"><span class="nb">SO-2627-00226</span> · 4 lines · 308 pcs · own van, 2:00&nbsp;pm</div>
+                <div class="row-meta"><span class="chip green">Packed</span> waiting for the van</div>
+              </div>
+              <div class="row-act"><button class="btn primary small" type="button">Hand over</button></div>
+            </li>
+            <li class="row">
+              <div class="row-main">
+                <div class="row-title">Yousaf Brothers Autos, Karachi</div>
+                <div class="row-meta"><span class="nb">SO-2627-00227</span> · 5 lines · 95 pcs · customer collects, 3:00&nbsp;pm</div>
+                <div class="row-meta"><span class="chip">To pick</span></div>
+              </div>
+              <div class="row-act"><button class="btn small" type="button">Start picking</button></div>
+            </li>
+            <li class="row">
+              <div class="row-main">
+                <div class="row-title">Al-Madad Autos, Lahore</div>
+                <div class="row-meta"><span class="nb">SO-2627-00224</span> · 6 lines · 40 pcs · cargo, 4:00&nbsp;pm</div>
+                <div class="row-meta"><span class="chip amber">Picking</span> 4 of 6 lines done</div>
+              </div>
+              <div class="row-act"><button class="btn small" type="button">Continue</button></div>
+            </li>
+            <li class="row">
+              <div class="row-main">
+                <div class="row-title">Sitara Bike Point, Faisalabad</div>
+                <div class="row-meta"><span class="nb">SO-2627-00229</span> · 14 lines · 420 pcs · cargo, 4:00&nbsp;pm</div>
+                <div class="row-meta"><span class="chip">To pick</span></div>
+              </div>
+              <div class="row-act"><button class="btn small" type="button">Start picking</button></div>
+            </li>
+            <li class="row">
+              <div class="row-main">
+                <div class="row-title">Pak Punjab Autos, Gujranwala</div>
+                <div class="row-meta"><span class="nb">SO-2627-00218</span> · 8 lines · 180 pcs · cargo, 4:00&nbsp;pm</div>
+                <div class="row-meta"><span class="chip">To pick</span></div>
+              </div>
+              <div class="row-act"><button class="btn small" type="button">Start picking</button></div>
+            </li>
+          </ul>
+        </section>
+
+        <section class="card" aria-labelledby="h-low">
+          <div class="card-head">
+            <h2 id="h-low">Stock below reorder level <span class="n">4</span></h2>
+            <span class="sum">Main godown</span>
+          </div>
+          <ul class="rows">
+            <li class="row">
+              <div class="row-main">
+                <div class="row-title">Clutch cable 70cc</div>
+                <div class="row-meta"><span class="nb">CBL-CL-70</span> · reorder level 200</div>
+                <div class="row-meta">1,000 arriving <span class="nb">14-11-2026</span></div>
+              </div>
+              <div class="row-amt"><span class="bad">0 pcs</span><small>Out of stock</small></div>
+            </li>
+            <li class="row">
+              <div class="row-main">
+                <div class="row-title">Brake shoe set 125cc</div>
+                <div class="row-meta"><span class="nb">BRS-125</span> · reorder level 150</div>
+                <div class="row-meta">600 arriving <span class="nb">14-11-2026</span></div>
+              </div>
+              <div class="row-amt">35 sets<small>In stock</small></div>
+            </li>
+            <li class="row">
+              <div class="row-main">
+                <div class="row-title">Tube <span class="nb">2.50-17</span></div>
+                <div class="row-meta"><span class="nb">TUB-2.50-17</span> · reorder level 300</div>
+                <div class="row-meta"><span class="chip amber">None on order</span></div>
+              </div>
+              <div class="row-amt">80 pcs<small>In stock</small></div>
+            </li>
+            <li class="row">
+              <div class="row-main">
+                <div class="row-title">Spark plug C7</div>
+                <div class="row-meta"><span class="nb">SPK-C7</span> · reorder level 500</div>
+                <div class="row-meta">2,000 arriving today</div>
+              </div>
+              <div class="row-amt">120 pcs<small>In stock</small></div>
+            </li>
+          </ul>
+        </section>
+      </div>
+    </div>
+
+    <aside class="reviewer">
+      <h2>What to ask the reviewer</h2>
+      <p class="hint">For the person running the review. Not part of the product.</p>
+      <ol>
+        <li>The Eastwind truck has just pulled up at the gate. What do you press, and what do you expect to see next?</li>
+        <li>Deliveries are listed by departure time. Is that the order you would actually pick in? If not, what decides the order?</li>
+        <li>The low-stock list only tells you. Do you need to do something about it from here, or is telling enough?</li>
+      </ol>
+    </aside>
+  </main>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Accountant home · SahulatERP mock-up</title>
+<link rel="stylesheet" href="mockups.css">
+</head>
+<body>
+
+<div class="mock-strip">
+  <span><strong>Mock-up</strong>Made-up data. Nothing saves.</span>
+  <span><a href="index.html">All screens</a> · 5 of 8 · <a href="inbox.html">Next: Needs attention</a></span>
+</div>
+
+<header class="topbar">
+  <a class="brand" href="accountant.html"><span class="brand-mark" aria-hidden="true">S</span><span class="brand-name">SahulatERP</span></a>
+  <span class="brand-co">Sahil Bike Parts · Karachi</span>
+  <label class="search"><span class="vh">Search</span><input type="search" placeholder="Search accounts, documents, parties"><kbd>/</kbd></label>
+  <div class="top-right">
+    <a class="inbox-link" href="inbox.html"><span class="lbl">Needs attention</span><span class="count">7</span></a>
+    <div class="user"><span class="avatar" aria-hidden="true">SM</span><span class="who">Sana Malik<small>Accountant</small></span></div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="rail" aria-label="Accountant menu">
+    <a class="is-here" href="accountant.html" aria-current="page">Home</a>
+    <a href="inbox.html">Needs attention <span class="count">7</span></a>
+    <a href="invoice-list.html">Sales invoices</a>
+    <a>Bills and payments</a>
+    <a>Bank and cash</a>
+    <a>Journals</a>
+    <a>Period close</a>
+    <a>Reports</a>
+  </nav>
+
+  <main class="main">
+    <div class="page-head">
+      <div>
+        <h1>Home</h1>
+        <p class="sub">Wednesday <span class="nb">11-11-2026</span> · October is still open</p>
+      </div>
+    </div>
+
+    <div class="grid wide-left">
+      <div class="col">
+        <section class="card" aria-labelledby="h-drafts">
+          <div class="card-head">
+            <h2 id="h-drafts">Unposted drafts <span class="n">4</span></h2>
+            <span class="sum">Rs&nbsp;5,54,110 not in the books yet</span>
+          </div>
+          <ul class="rows">
+            <li class="row">
+              <div class="row-main">
+                <div class="row-title">New Kashmir Autos</div>
+                <div class="row-meta">Sales invoice · Usman Tariq · <span class="nb">11-11-2026</span></div>
+              </div>
+              <div class="row-amt">Rs&nbsp;1,36,260</div>
+              <div class="row-act"><a class="btn primary small" href="invoice.html">Open</a></div>
+            </li>
+            <li class="row">
+              <div class="row-main">
+                <div class="row-title">Hamza Traders</div>
+                <div class="row-meta">Receipt, cash · Adnan Sheikh · <span class="nb">11-11-2026</span></div>
+              </div>
+              <div class="row-amt">Rs&nbsp;28,000</div>
+              <div class="row-act"><button class="btn small" type="button">Open</button></div>
+            </li>
+            <li class="row">
+              <div class="row-main">
+                <div class="row-title">Gulshan Autos</div>
+                <div class="row-meta"><span class="chip red">1 day late</span> Sales invoice · Kashif Raza · <span class="nb">10-11-2026</span></div>
+              </div>
+              <div class="row-amt">Rs&nbsp;1,05,250</div>
+              <div class="row-act"><button class="btn small" type="button">Open</button></div>
+            </li>
+            <li class="row">
+              <div class="row-main">
+                <div class="row-title">Clearing charges, shipment <span class="nb">SHP-2627-014</span></div>
+                <div class="row-meta"><span class="chip red">1 day late</span> Supplier bill · Sana Malik · <span class="nb">10-11-2026</span></div>
+              </div>
+              <div class="row-amt">Rs&nbsp;2,84,600</div>
+              <div class="row-act"><button class="btn small" type="button">Open</button></div>
+            </li>
+          </ul>
+        </section>
+
+        <section class="card" aria-labelledby="h-bills">
+          <div class="card-head">
+            <h2 id="h-bills">Bills due this week <span class="n">3</span></h2>
+            <span class="sum">About Rs&nbsp;26,05,800</span>
+          </div>
+          <ul class="rows">
+            <li class="row">
+              <div class="row-main">
+                <div class="row-title">Port Link Clearing Services</div>
+                <div class="row-meta"><span class="chip amber">Tomorrow</span> Clearing, shipment <span class="nb">SHP-2627-013</span> · due <span class="nb">12-11-2026</span></div>
+              </div>
+              <div class="row-amt">Rs&nbsp;3,42,500</div>
+              <div class="row-act"><button class="btn small" type="button">Pay</button></div>
+            </li>
+            <li class="row">
+              <div class="row-main">
+                <div class="row-title">Seaways Freight Forwarders</div>
+                <div class="row-meta">Sea freight, shipment <span class="nb">SHP-2627-014</span> · due <span class="nb">13-11-2026</span></div>
+              </div>
+              <div class="row-amt">Rs&nbsp;5,18,000</div>
+              <div class="row-act"><button class="btn small" type="button">Pay</button></div>
+            </li>
+            <li class="row">
+              <div class="row-main">
+                <div class="row-title">Eastwind Parts (Ningbo)</div>
+                <div class="row-meta">Goods, shipment <span class="nb">SHP-2627-014</span> · due <span class="nb">14-11-2026</span></div>
+              </div>
+              <div class="row-amt">USD&nbsp;6,200.00<small>about Rs&nbsp;17,45,300</small></div>
+              <div class="row-act"><button class="btn small" type="button">Pay</button></div>
+            </li>
+          </ul>
+        </section>
+
+        <section class="card" aria-labelledby="h-close">
+          <div class="card-head">
+            <h2 id="h-close">Period close: October 2026</h2>
+            <span class="sum"><span class="chip amber">Open</span> 4 of 6 done</span>
+          </div>
+          <div class="meter" role="img" aria-label="4 of 6 steps done"><span style="inline-size: 66.6%"></span></div>
+          <ul class="checks">
+            <li class="done"><span class="tick" aria-hidden="true">✓</span><span>All October sales invoices posted</span></li>
+            <li class="done"><span class="tick" aria-hidden="true">✓</span><span>All October supplier bills posted</span></li>
+            <li class="done"><span class="tick" aria-hidden="true">✓</span><span>Stock count differences posted</span></li>
+            <li class="done"><span class="tick" aria-hidden="true">✓</span><span>October payroll posted</span></li>
+            <li class="todo"><span class="tick" aria-hidden="true">!</span><span>Bank accounts reconciled to <span class="nb">31-10-2026</span><small>11 October lines still open across 2 accounts</small></span></li>
+            <li class="todo"><span class="tick" aria-hidden="true">!</span><span>October commission approved<small>Waiting for Imran Qureshi since <span class="nb">09-11-2026</span></small></span></li>
+          </ul>
+          <div class="card-foot">
+            <span>September 2026 was locked on <span class="nb">08-10-2026</span> by Imran Qureshi. Only the owner can lock a month.</span>
+            <button class="btn small" type="button" disabled>Ask owner to lock October</button>
+          </div>
+        </section>
+      </div>
+
+      <div class="col">
+        <section class="card" aria-labelledby="h-bank">
+          <div class="card-head">
+            <h2 id="h-bank">Bank lines to reconcile</h2>
+            <a class="more">Reconcile</a>
+          </div>
+          <p class="bigcount">29</p>
+          <ul class="rows">
+            <li class="row">
+              <div class="row-main">
+                <div class="row-title">Main current account ••4471</div>
+                <div class="row-meta">Statement loaded up to <span class="nb">10-11-2026</span></div>
+              </div>
+              <div class="row-amt">23<small>lines</small></div>
+            </li>
+            <li class="row">
+              <div class="row-main">
+                <div class="row-title">Islamic current account ••0923</div>
+                <div class="row-meta">Statement loaded up to <span class="nb">07-11-2026</span></div>
+              </div>
+              <div class="row-amt">6<small>lines</small></div>
+            </li>
+          </ul>
+        </section>
+
+        <section class="card" aria-labelledby="h-tb">
+          <div class="card-head">
+            <h2 id="h-tb">Trial balance snapshot</h2>
+            <span class="sum"><span class="chip green">Balanced</span></span>
+          </div>
+          <p class="card-note"><span class="nb">01-07-2026</span> to <span class="nb">11-11-2026</span>, posted entries only. Amounts in Rs.</p>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr><th>Account</th><th class="num">Debit</th><th class="num">Credit</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Cash and bank</td><td class="num">38,72,450</td><td class="num"></td></tr>
+                <tr><td>Cheques in hand</td><td class="num">10,85,500</td><td class="num"></td></tr>
+                <tr><td>Receivables</td><td class="num">1,46,35,800</td><td class="num"></td></tr>
+                <tr><td>Stock</td><td class="num">2,18,40,600</td><td class="num"></td></tr>
+                <tr><td>Advances to suppliers</td><td class="num">20,64,500</td><td class="num"></td></tr>
+                <tr><td>Vehicles and equipment</td><td class="num">24,60,000</td><td class="num"></td></tr>
+                <tr><td>Payables</td><td class="num"></td><td class="num">92,14,300</td></tr>
+                <tr><td>Commission payable</td><td class="num"></td><td class="num">1,92,400</td></tr>
+                <tr><td>Salaries and other payables</td><td class="num"></td><td class="num">6,48,500</td></tr>
+                <tr><td>Capital and retained profit</td><td class="num"></td><td class="num">3,12,00,000</td></tr>
+                <tr><td>Sales</td><td class="num"></td><td class="num">3,98,49,400</td></tr>
+                <tr><td>Cost of goods sold</td><td class="num">3,05,18,400</td><td class="num"></td></tr>
+                <tr><td>Expenses</td><td class="num">46,27,350</td><td class="num"></td></tr>
+              </tbody>
+              <tfoot>
+                <tr><td>Total</td><td class="num">8,11,04,600</td><td class="num">8,11,04,600</td></tr>
+              </tfoot>
+            </table>
+          </div>
+          <div class="card-foot"><span>4 drafts are not included.</span><a>Open full trial balance</a></div>
+        </section>
+      </div>
+    </div>
+
+    <aside class="reviewer">
+      <h2>What to ask the reviewer</h2>
+      <p class="hint">For the person running the review. Not part of the product.</p>
+      <ol>
+        <li>What is the first thing you check each morning in your current software? Is it on this screen, and where?</li>
+        <li>Read the period close list out loud. Is that how you close a month today? What step is missing?</li>
+        <li>Is a trial balance snapshot useful on the home screen, or would you rather open the full report when you need it?</li>
+      </ol>
+    </aside>
+  </main>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recovery home · SahulatERP mock-up</title>
+<link rel="stylesheet" href="mockups.css">
+</head>
+<body>
+
+<div class="mock-strip">
+  <span><strong>Mock-up</strong>Made-up data. Nothing saves.</span>
+  <span><a href="index.html">All screens</a> · 3 of 8 · <a href="warehouse.html">Next: Warehouse</a></span>
+</div>
+
+<header class="topbar">
+  <a class="brand" href="recovery.html"><span class="brand-mark" aria-hidden="true">S</span><span class="brand-name">SahulatERP</span></a>
+  <span class="brand-co">Sahil Bike Parts · Karachi</span>
+  <label class="search"><span class="vh">Search</span><input type="search" placeholder="Search customers, cheques, receipts"><kbd>/</kbd></label>
+  <div class="top-right">
+    <a class="inbox-link" href="inbox.html"><span class="lbl">Needs attention</span><span class="count">9</span></a>
+    <div class="user"><span class="avatar" aria-hidden="true">AS</span><span class="who">Adnan Sheikh<small>Recovery officer</small></span></div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="rail" aria-label="Recovery officer menu">
+    <a class="is-here" href="recovery.html" aria-current="page">Home</a>
+    <a href="inbox.html">Needs attention <span class="count">9</span></a>
+    <a>Cheques</a>
+    <a>Overdue customers</a>
+    <a>Follow-ups</a>
+    <a>Receipts</a>
+    <a>Customer statements</a>
+  </nav>
+
+  <main class="main">
+    <div class="page-head">
+      <div>
+        <h1>Home</h1>
+        <p class="sub">Wednesday <span class="nb">11-11-2026</span> · 4 cheques to deposit, 3 to clear, 4 follow-ups</p>
+      </div>
+      <div class="actions">
+        <button class="btn primary big" type="button">New receipt <kbd>N</kbd></button>
+      </div>
+    </div>
+
+    <div class="grid two">
+      <section class="card" aria-labelledby="h-deposit">
+        <div class="card-head">
+          <h2 id="h-deposit">Cheques to deposit today <span class="n">4</span></h2>
+          <span class="sum">Rs&nbsp;5,85,000</span>
+        </div>
+        <ul class="rows">
+          <li class="row">
+            <div class="row-main">
+              <div class="row-title">Bilal &amp; Sons Auto Store</div>
+              <div class="row-meta"><span class="chip red">1 day late</span> Cheque 0391877 · dated <span class="nb">10-11-2026</span></div>
+            </div>
+            <div class="row-amt">Rs&nbsp;85,000</div>
+            <div class="row-act"><button class="btn primary small" type="button">Mark deposited</button></div>
+          </li>
+          <li class="row">
+            <div class="row-main">
+              <div class="row-title">Saddar Auto Parts</div>
+              <div class="row-meta">Cheque 7711204 · dated <span class="nb">11-11-2026</span></div>
+            </div>
+            <div class="row-amt">Rs&nbsp;2,40,000</div>
+            <div class="row-act"><button class="btn small" type="button">Mark deposited</button></div>
+          </li>
+          <li class="row">
+            <div class="row-main">
+              <div class="row-title">Chenab Motorcycle Parts</div>
+              <div class="row-meta">Cheque 0048213 · dated <span class="nb">11-11-2026</span></div>
+            </div>
+            <div class="row-amt">Rs&nbsp;1,50,000</div>
+            <div class="row-act"><button class="btn small" type="button">Mark deposited</button></div>
+          </li>
+          <li class="row">
+            <div class="row-main">
+              <div class="row-title">Sitara Bike Point</div>
+              <div class="row-meta">Cheque 5520316 · dated <span class="nb">11-11-2026</span></div>
+            </div>
+            <div class="row-amt">Rs&nbsp;1,10,000</div>
+            <div class="row-act"><button class="btn small" type="button">Mark deposited</button></div>
+          </li>
+        </ul>
+      </section>
+
+      <section class="card" aria-labelledby="h-clear">
+        <div class="card-head">
+          <h2 id="h-clear">Cheques due to clear <span class="n">3</span></h2>
+          <span class="sum">Rs&nbsp;5,00,500</span>
+        </div>
+        <ul class="rows">
+          <li class="row">
+            <div class="row-main">
+              <div class="row-title">Yousaf Brothers Autos</div>
+              <div class="row-meta">Cheque 0048177 · deposited <span class="nb">09-11-2026</span></div>
+            </div>
+            <div class="row-amt">Rs&nbsp;3,20,000</div>
+            <div class="row-act">
+              <button class="btn small" type="button">Cleared</button>
+              <button class="btn small danger" type="button">Bounced</button>
+            </div>
+          </li>
+          <li class="row">
+            <div class="row-main">
+              <div class="row-title">Liaquatabad Motorcycle Store</div>
+              <div class="row-meta">Cheque 2290461 · deposited <span class="nb">09-11-2026</span></div>
+            </div>
+            <div class="row-amt">Rs&nbsp;95,500</div>
+            <div class="row-act">
+              <button class="btn small" type="button">Cleared</button>
+              <button class="btn small danger" type="button">Bounced</button>
+            </div>
+          </li>
+          <li class="row">
+            <div class="row-main">
+              <div class="row-title">Karachi Bike House</div>
+              <div class="row-meta">Cheque 6604120 · deposited <span class="nb">10-11-2026</span></div>
+            </div>
+            <div class="row-amt">Rs&nbsp;85,000</div>
+            <div class="row-act">
+              <button class="btn small" type="button">Cleared</button>
+              <button class="btn small danger" type="button">Bounced</button>
+            </div>
+          </li>
+        </ul>
+        <div class="card-foot"><span>A bounced cheque puts the amount back on the customer's invoice.</span></div>
+      </section>
+    </div>
+
+    <section class="card block" aria-labelledby="h-followups">
+      <div class="card-head">
+        <h2 id="h-followups">Today's follow-ups <span class="n">4</span></h2>
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl stack">
+          <thead>
+            <tr>
+              <th>Customer</th>
+              <th class="num">Overdue</th>
+              <th>Promised</th>
+              <th>Last note</th>
+              <th><span class="vh">Action</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="s-title"><span class="strong">Rehman Auto Centre</span><small>Lahore</small></td>
+              <td class="num s-amt">2,15,750</td>
+              <td class="s-full" data-label="Promised"><span class="chip red">Not kept</span> Rs&nbsp;1,00,000 by <span class="nb">10-11-2026</span></td>
+              <td class="s-full" data-label="Last note"><span class="nb">04-11-2026</span>: "Will pay after Friday."</td>
+              <td class="act"><button class="btn primary small" type="button">Log follow-up</button></td>
+            </tr>
+            <tr>
+              <td class="s-title"><span class="strong">Indus Two-Wheeler Parts</span><small>Hyderabad</small></td>
+              <td class="num s-amt">3,10,000</td>
+              <td class="s-full" data-label="Promised">Rs&nbsp;1,50,000 by <span class="nb">15-11-2026</span></td>
+              <td class="s-full" data-label="Last note"><span class="nb">06-11-2026</span>: "Cheque will come with the driver."</td>
+              <td class="act"><button class="btn small" type="button">Log follow-up</button></td>
+            </tr>
+            <tr>
+              <td class="s-title"><span class="strong">Madni Spare Parts</span><small>Karachi</small></td>
+              <td class="num s-amt">1,62,400</td>
+              <td class="s-full" data-label="Promised"><span class="muted">No promise yet</span></td>
+              <td class="s-full" data-label="Last note"><span class="nb">05-11-2026</span>: "Owner out of the city, call on Wednesday."</td>
+              <td class="act"><button class="btn small" type="button">Log follow-up</button></td>
+            </tr>
+            <tr>
+              <td class="s-title"><span class="strong">Lucky Star Autos</span><small>Sialkot</small></td>
+              <td class="num s-amt">54,600</td>
+              <td class="s-full" data-label="Promised"><span class="muted">No promise yet</span></td>
+              <td class="s-full" data-label="Last note"><span class="nb">03-11-2026</span>: "Phone off twice. Visit the shop."</td>
+              <td class="act"><button class="btn small" type="button">Log follow-up</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card block" aria-labelledby="h-overdue">
+      <div class="card-head">
+        <h2 id="h-overdue">Overdue customers <span class="n">19</span></h2>
+        <span class="sum">Rs&nbsp;41,20,500 overdue · oldest first</span>
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl stack">
+          <thead>
+            <tr>
+              <th>Customer</th>
+              <th>Days overdue</th>
+              <th class="num">Overdue</th>
+              <th>Last contact</th>
+              <th>Next follow-up</th>
+              <th><span class="vh">Action</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="s-title"><span class="strong">Lucky Star Autos</span><small>Sialkot · Bilal Ahmed</small></td>
+              <td><span class="chip red">95 days</span></td>
+              <td class="num s-amt">54,600</td>
+              <td data-label="Last contact"><span class="nb">03-11-2026</span></td>
+              <td data-label="Next">Today</td>
+              <td class="act"><button class="btn small" type="button">Statement</button></td>
+            </tr>
+            <tr>
+              <td class="s-title"><span class="strong">Indus Two-Wheeler Parts</span><small>Hyderabad · Usman Tariq</small></td>
+              <td><span class="chip red">78 days</span></td>
+              <td class="num s-amt">3,10,000</td>
+              <td data-label="Last contact"><span class="nb">06-11-2026</span></td>
+              <td data-label="Next">Today</td>
+              <td class="act"><button class="btn small" type="button">Statement</button></td>
+            </tr>
+            <tr>
+              <td class="s-title"><span class="strong">Rehman Auto Centre</span><small>Lahore · Bilal Ahmed</small></td>
+              <td><span class="chip red">61 days</span></td>
+              <td class="num s-amt">2,15,750</td>
+              <td data-label="Last contact"><span class="nb">04-11-2026</span></td>
+              <td data-label="Next">Today</td>
+              <td class="act"><button class="btn small" type="button">Statement</button></td>
+            </tr>
+            <tr>
+              <td class="s-title"><span class="strong">Madni Spare Parts</span><small>Karachi · Usman Tariq</small></td>
+              <td><span class="chip amber">44 days</span></td>
+              <td class="num s-amt">1,62,400</td>
+              <td data-label="Last contact"><span class="nb">05-11-2026</span></td>
+              <td data-label="Next">Today</td>
+              <td class="act"><button class="btn small" type="button">Statement</button></td>
+            </tr>
+            <tr>
+              <td class="s-title"><span class="strong">Al-Madad Autos</span><small>Lahore · Bilal Ahmed</small></td>
+              <td><span class="chip amber">32 days</span></td>
+              <td class="num s-amt">1,85,000</td>
+              <td data-label="Last contact"><span class="nb">07-11-2026</span></td>
+              <td data-label="Next"><span class="nb">12-11-2026</span></td>
+              <td class="act"><button class="btn small" type="button">Statement</button></td>
+            </tr>
+            <tr>
+              <td class="s-title"><span class="strong">New Kashmir Autos</span><small>Karachi · Usman Tariq</small></td>
+              <td><span class="chip">21 days</span></td>
+              <td class="num s-amt">4,05,000</td>
+              <td data-label="Last contact"><span class="nb">02-11-2026</span></td>
+              <td data-label="Next"><span class="nb">13-11-2026</span></td>
+              <td class="act"><button class="btn small" type="button">Statement</button></td>
+            </tr>
+            <tr>
+              <td class="s-title"><span class="strong">Pak Punjab Autos</span><small>Gujranwala · Bilal Ahmed</small></td>
+              <td><span class="chip">12 days</span></td>
+              <td class="num s-amt">74,000</td>
+              <td data-label="Last contact"><span class="muted">Not yet</span></td>
+              <td data-label="Next"><span class="muted">Not set</span></td>
+              <td class="act"><button class="btn small" type="button">Statement</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card-foot"><span>Showing 7 of 19</span><a>See all overdue customers</a></div>
+    </section>
+
+    <aside class="reviewer">
+      <h2>What to ask the reviewer</h2>
+      <p class="hint">For the person running the review. Not part of the product.</p>
+      <ol>
+        <li>Which of these four lists do you start your day with? Is it at the top?</li>
+        <li>The bank calls: the Yousaf Brothers cheque has bounced. Show me what you would press, and tell me what you expect to happen.</li>
+        <li>Look at the "Promised" column. Is that how you keep track of promises today? What is missing?</li>
+      </ol>
+    </aside>
+  </main>
+</div>
+
+</body>
+</html>

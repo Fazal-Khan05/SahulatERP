@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sales invoice · SahulatERP mock-up</title>
+<link rel="stylesheet" href="mockups.css">
+</head>
+<body>
+
+<div class="mock-strip">
+  <span><strong>Mock-up</strong>Made-up data. Nothing saves.</span>
+  <span><a href="index.html">All screens</a> · 7 of 8 · <a href="invoice-list.html">Next: Invoice list</a></span>
+</div>
+
+<header class="topbar">
+  <a class="brand" href="accountant.html"><span class="brand-mark" aria-hidden="true">S</span><span class="brand-name">SahulatERP</span></a>
+  <span class="brand-co">Sahil Bike Parts · Karachi</span>
+  <label class="search"><span class="vh">Search</span><input type="search" placeholder="Search accounts, documents, parties"><kbd>/</kbd></label>
+  <div class="top-right">
+    <a class="inbox-link" href="inbox.html"><span class="lbl">Needs attention</span><span class="count">7</span></a>
+    <div class="user"><span class="avatar" aria-hidden="true">SM</span><span class="who">Sana Malik<small>Accountant</small></span></div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="rail" aria-label="Accountant menu">
+    <a href="accountant.html">Home</a>
+    <a href="inbox.html">Needs attention <span class="count">7</span></a>
+    <a class="is-here" href="invoice-list.html" aria-current="page">Sales invoices</a>
+    <a>Bills and payments</a>
+    <a>Bank and cash</a>
+    <a>Journals</a>
+    <a>Period close</a>
+    <a>Reports</a>
+  </nav>
+
+  <main class="main">
+    <!-- The two radio inputs switch the mock-up between its two states. No JavaScript. -->
+    <input class="sw" type="radio" name="st" id="st-draft" checked>
+    <input class="sw" type="radio" name="st" id="st-sub">
+
+    <div class="page-head">
+      <div>
+        <a class="crumb" href="invoice-list.html">‹ Sales invoices</a>
+        <h1><span class="only-draft">New sales invoice</span><span class="only-sub">Sales invoice <span class="nb">SI-2627-00418</span></span></h1>
+        <p class="sub">New Kashmir Autos, Karachi</p>
+      </div>
+      <div class="seg" role="group" aria-label="Mock-up control: show this invoice as">
+        <span class="seg-label">Mock-up: show as</span>
+        <label for="st-draft">Draft</label>
+        <label for="st-sub">Submitted</label>
+      </div>
+    </div>
+
+    <!-- ================= STATE 1: DRAFT (editable) ================= -->
+    <div class="doc-layout only-draft">
+      <section class="card" aria-label="Invoice, draft">
+        <div class="doc-top">
+          <div class="field wide">
+            <label for="d-cust">Customer</label>
+            <input id="d-cust" value="New Kashmir Autos, Karachi">
+            <p class="help">Balance Rs&nbsp;6,12,400, of which <span class="bad">Rs&nbsp;4,05,000 is 21 days overdue</span>. Credit limit Rs&nbsp;8,00,000.</p>
+          </div>
+          <div class="field">
+            <label for="d-date">Date</label>
+            <input id="d-date" value="11-11-2026">
+            <p class="help">Due <span class="nb">11-12-2026</span> (30 days)</p>
+          </div>
+          <div class="field">
+            <label for="d-no">Number</label>
+            <input id="d-no" value="On submit" readonly>
+            <p class="help">Next in the series</p>
+          </div>
+          <div class="field">
+            <label for="d-branch">Branch</label>
+            <select id="d-branch"><option>Karachi</option></select>
+            <p class="help">Stock from Main godown</p>
+          </div>
+        </div>
+
+        <p class="keys">
+          <span class="lead">Item code, Tab, quantity, Tab. The mouse is optional.</span>
+          <span><kbd>Tab</kbd> next field</span>
+          <span><kbd>Enter</kbd> new line</span>
+          <span><kbd>F2</kbd> find item by name</span>
+          <span><kbd>Ctrl</kbd> <kbd>Enter</kbd> submit</span>
+        </p>
+
+        <table class="lines">
+          <thead>
+            <tr>
+              <th class="w-no">#</th>
+              <th class="w-code">Item code</th>
+              <th>Item</th>
+              <th class="num w-qty">Qty</th>
+              <th class="w-unit">Unit</th>
+              <th class="num w-price">Price</th>
+              <th class="num w-disc">Disc %</th>
+              <th class="num w-amt">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="c-no ro">1</td>
+              <td class="c-code" data-label="Item code"><input aria-label="Item code, line 1" value="CSK-70"></td>
+              <td class="c-item ro">Chain sprocket kit 70cc<small>260 in stock</small></td>
+              <td class="c-qty num" data-label="Qty"><input aria-label="Quantity, line 1" inputmode="decimal" value="40"></td>
+              <td class="c-unit" data-label="Unit"><select aria-label="Unit, line 1"><option>set</option></select></td>
+              <td class="c-price num" data-label="Price"><input aria-label="Price, line 1" inputmode="decimal" value="1,450.00"></td>
+              <td class="c-disc num" data-label="Disc %"><input aria-label="Discount percent, line 1" inputmode="decimal" value="5"></td>
+              <td class="c-amt num ro" data-label="Amount">55,100.00</td>
+            </tr>
+            <tr>
+              <td class="c-no ro">2</td>
+              <td class="c-code" data-label="Item code"><input aria-label="Item code, line 2" value="AFL-125"></td>
+              <td class="c-item ro">Air filter 125cc<small>410 in stock</small></td>
+              <td class="c-qty num" data-label="Qty"><input aria-label="Quantity, line 2" inputmode="decimal" value="120"></td>
+              <td class="c-unit" data-label="Unit"><select aria-label="Unit, line 2"><option>pc</option><option>carton of 50</option></select></td>
+              <td class="c-price num" data-label="Price"><input aria-label="Price, line 2" inputmode="decimal" value="310.00"></td>
+              <td class="c-disc num" data-label="Disc %"><input aria-label="Discount percent, line 2" inputmode="decimal" value="0"></td>
+              <td class="c-amt num ro" data-label="Amount">37,200.00</td>
+            </tr>
+            <tr>
+              <td class="c-no ro">3</td>
+              <td class="c-code" data-label="Item code"><input aria-label="Item code, line 3" value="SPK-C7"></td>
+              <td class="c-item ro">Spark plug C7<small>120 in stock</small></td>
+              <td class="c-qty num" data-label="Qty"><input aria-label="Quantity, line 3" inputmode="decimal" value="100"></td>
+              <td class="c-unit" data-label="Unit"><select aria-label="Unit, line 3"><option>pc</option><option>box of 10</option></select></td>
+              <td class="c-price num" data-label="Price"><input aria-label="Price, line 3" inputmode="decimal" value="190.00"></td>
+              <td class="c-disc num" data-label="Disc %"><input aria-label="Discount percent, line 3" inputmode="decimal" value="0"></td>
+              <td class="c-amt num ro" data-label="Amount">19,000.00</td>
+            </tr>
+            <tr>
+              <td class="c-no ro">4</td>
+              <td class="c-code" data-label="Item code"><input aria-label="Item code, line 4" value="TUB-2.50-17"></td>
+              <td class="c-item ro">Tube <span class="nb">2.50-17</span><small>2 cartons are 48 pcs · 80 pcs in stock</small></td>
+              <td class="c-qty num" data-label="Qty"><input aria-label="Quantity, line 4" inputmode="decimal" value="2"></td>
+              <td class="c-unit" data-label="Unit"><select aria-label="Unit, line 4"><option>carton (24)</option><option>pc</option></select></td>
+              <td class="c-price num" data-label="Price"><input aria-label="Price, line 4" inputmode="decimal" value="12,480.00"></td>
+              <td class="c-disc num" data-label="Disc %"><input aria-label="Discount percent, line 4" inputmode="decimal" value="0"></td>
+              <td class="c-amt num ro" data-label="Amount">24,960.00</td>
+            </tr>
+            <tr class="new">
+              <td class="c-no ro">5</td>
+              <td class="c-code" data-label="Item code"><input aria-label="Item code, new line" placeholder="Item code"></td>
+              <td class="c-item ro"><span class="muted">Type a code or press F2</span></td>
+              <td class="c-qty num" data-label="Qty"><input aria-label="Quantity, new line" inputmode="decimal"></td>
+              <td class="c-unit" data-label="Unit"><select aria-label="Unit, new line"><option></option></select></td>
+              <td class="c-price num" data-label="Price"><input aria-label="Price, new line" inputmode="decimal"></td>
+              <td class="c-disc num" data-label="Disc %"><input aria-label="Discount percent, new line" inputmode="decimal"></td>
+              <td class="c-amt num ro" data-label="Amount"></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="doc-bottom">
+          <div>
+            <div class="field">
+              <label for="d-note">Note on the invoice</label>
+              <input id="d-note" value="Deliver by own van, 2:00&nbsp;pm.">
+            </div>
+            <p class="words">In words: Rupees one lakh thirty-six thousand two hundred and sixty only.</p>
+          </div>
+          <dl class="totals">
+            <dt>Subtotal, 4 lines</dt><dd>1,39,160.00</dd>
+            <dt>Line discounts</dt><dd>− 2,900.00</dd>
+            <dt class="grand">Total</dt><dd class="grand">Rs&nbsp;1,36,260.00</dd>
+          </dl>
+        </div>
+
+        <details class="more">
+          <summary><span class="t">More</span><span class="muted small">Salesperson split, currency, tax category, FBR. Stays closed unless you need it.</span></summary>
+          <div class="more-grid">
+            <fieldset>
+              <legend>Salesperson split</legend>
+              <div class="pair">
+                <div class="field">
+                  <label for="d-sp">Salesperson</label>
+                  <select id="d-sp"><option>Usman Tariq</option><option>Bilal Ahmed</option><option>Kashif Raza</option></select>
+                </div>
+                <div class="field">
+                  <label for="d-sp-share">Share %</label>
+                  <input id="d-sp-share" inputmode="decimal" value="100">
+                </div>
+              </div>
+              <p class="help">Add a second salesperson to split the commission. Shares must add up to 100%.</p>
+            </fieldset>
+            <fieldset>
+              <legend>Currency</legend>
+              <div class="field">
+                <label for="d-cur">Invoice currency</label>
+                <select id="d-cur"><option>PKR, Pakistani rupee</option><option>USD, US dollar</option><option>CNY, Chinese yuan</option></select>
+              </div>
+              <p class="help">An exchange rate shows only for a foreign currency. It comes from the rate table for the invoice date and is stored on the invoice.</p>
+            </fieldset>
+            <fieldset>
+              <legend>Tax category</legend>
+              <div class="field">
+                <label for="d-tax">For all 4 lines</label>
+                <select id="d-tax"><option>Standard rate</option><option>Reduced rate (SRO)</option><option>Exempt</option><option>Zero-rated</option><option>Third Schedule (retail price)</option></select>
+              </div>
+              <p class="help">No sales tax is charged, because this company is not registered for sales tax. The category is still kept on every line.</p>
+            </fieldset>
+            <fieldset disabled>
+              <legend>FBR digital invoicing <span class="chip">Off for this company</span></legend>
+              <div class="field">
+                <label for="d-fbr-id">Buyer NTN or CNIC</label>
+                <input id="d-fbr-id" placeholder="From the customer record">
+              </div>
+              <div class="field">
+                <label for="d-fbr-reg">Buyer registration and province</label>
+                <select id="d-fbr-reg"><option>Unregistered, Sindh</option></select>
+              </div>
+              <div class="field">
+                <label for="d-fbr-sale">Sale type</label>
+                <select id="d-fbr-sale"><option>Goods at standard rate</option></select>
+              </div>
+              <p class="help">Shown for review only. While the FBR module is off, this block is not on the screen at all.</p>
+            </fieldset>
+          </div>
+        </details>
+
+        <div class="statusbar">
+          <div class="state">
+            <span class="chip">Draft</span>
+            <p>Not in the books yet.</p>
+          </div>
+          <div class="bar-total"><span>Total</span><strong>Rs&nbsp;1,36,260.00</strong></div>
+          <div class="actions">
+            <button class="btn quiet danger" type="button">Discard</button>
+            <button class="btn" type="button">Save draft</button>
+            <button class="btn primary big" type="button">Submit invoice</button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="card" aria-labelledby="h-tl-draft">
+        <div class="card-head"><h2 id="h-tl-draft">What happened</h2></div>
+        <ol class="timeline">
+          <li class="next"><span class="next-label">Next</span><br>Submit the invoice. It gets its number, and the customer's balance goes up by Rs&nbsp;1,36,260.</li>
+          <li class="done"><time>Today 10:47</time>Usman Tariq changed Spark plug C7 from 80 to 100 pcs.</li>
+          <li class="done"><time>Today 10:42</time>Usman Tariq made this draft from order <span class="nb">SO-2627-00226</span>.</li>
+          <li class="done"><time><span class="nb">10-11-2026</span> 16:15</time>Usman Tariq submitted order <span class="nb">SO-2627-00226</span>.</li>
+        </ol>
+      </aside>
+    </div>
+
+    <!-- ================= STATE 2: SUBMITTED (locked) ================= -->
+    <div class="doc-layout only-sub">
+      <section class="card" aria-label="Invoice, submitted">
+        <div class="doc-top">
+          <div class="field wide">
+            <span class="lbl">Customer</span>
+            <p class="val">New Kashmir Autos, Karachi</p>
+            <p class="help">Balance now Rs&nbsp;7,48,660. Credit limit Rs&nbsp;8,00,000.</p>
+          </div>
+          <div class="field">
+            <span class="lbl">Date</span>
+            <p class="val"><span class="nb">11-11-2026</span></p>
+            <p class="help">Due <span class="nb">11-12-2026</span> (30 days)</p>
+          </div>
+          <div class="field">
+            <span class="lbl">Number</span>
+            <p class="val"><span class="nb">SI-2627-00418</span></p>
+          </div>
+          <div class="field">
+            <span class="lbl">Branch</span>
+            <p class="val">Karachi</p>
+            <p class="help">Stock from Main godown</p>
+          </div>
+        </div>
+
+        <p class="keys">
+          <span class="lead">Locked.</span>
+          <span>A submitted invoice cannot be changed. To correct it, <a>make a credit note</a>.</span>
+        </p>
+
+        <table class="lines locked">
+          <thead>
+            <tr>
+              <th class="w-no">#</th>
+              <th class="w-code">Item code</th>
+              <th>Item</th>
+              <th class="num w-qty">Qty</th>
+              <th class="w-unit">Unit</th>
+              <th class="num w-price">Price</th>
+              <th class="num w-disc">Disc %</th>
+              <th class="num w-amt">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="c-no">1</td>
+              <td class="c-code" data-label="Item code"><span class="nb">CSK-70</span></td>
+              <td class="c-item">Chain sprocket kit 70cc</td>
+              <td class="c-qty num" data-label="Qty">40</td>
+              <td class="c-unit" data-label="Unit">set</td>
+              <td class="c-price num" data-label="Price">1,450.00</td>
+              <td class="c-disc num" data-label="Disc %">5</td>
+              <td class="c-amt num" data-label="Amount">55,100.00</td>
+            </tr>
+            <tr>
+              <td class="c-no">2</td>
+              <td class="c-code" data-label="Item code"><span class="nb">AFL-125</span></td>
+              <td class="c-item">Air filter 125cc</td>
+              <td class="c-qty num" data-label="Qty">120</td>
+              <td class="c-unit" data-label="Unit">pc</td>
+              <td class="c-price num" data-label="Price">310.00</td>
+              <td class="c-disc num" data-label="Disc %">0</td>
+              <td class="c-amt num" data-label="Amount">37,200.00</td>
+            </tr>
+            <tr>
+              <td class="c-no">3</td>
+              <td class="c-code" data-label="Item code"><span class="nb">SPK-C7</span></td>
+              <td class="c-item">Spark plug C7</td>
+              <td class="c-qty num" data-label="Qty">100</td>
+              <td class="c-unit" data-label="Unit">pc</td>
+              <td class="c-price num" data-label="Price">190.00</td>
+              <td class="c-disc num" data-label="Disc %">0</td>
+              <td class="c-amt num" data-label="Amount">19,000.00</td>
+            </tr>
+            <tr>
+              <td class="c-no">4</td>
+              <td class="c-code" data-label="Item code"><span class="nb">TUB-2.50-17</span></td>
+              <td class="c-item">Tube <span class="nb">2.50-17</span><small>2 cartons are 48 pcs</small></td>
+              <td class="c-qty num" data-label="Qty">2</td>
+              <td class="c-unit" data-label="Unit">carton of 24</td>
+              <td class="c-price num" data-label="Price">12,480.00</td>
+              <td class="c-disc num" data-label="Disc %">0</td>
+              <td class="c-amt num" data-label="Amount">24,960.00</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="doc-bottom">
+          <div>
+            <div class="field">
+              <span class="lbl">Note on the invoice</span>
+              <p class="val">Deliver by own van, 2:00&nbsp;pm.</p>
+            </div>
+            <p class="words">In words: Rupees one lakh thirty-six thousand two hundred and sixty only.</p>
+          </div>
+          <dl class="totals">
+            <dt>Subtotal, 4 lines</dt><dd>1,39,160.00</dd>
+            <dt>Line discounts</dt><dd>− 2,900.00</dd>
+            <dt class="grand">Total</dt><dd class="grand">Rs&nbsp;1,36,260.00</dd>
+            <dt>Received</dt><dd>0.00</dd>
+            <dt class="strong">Unpaid</dt><dd class="strong">1,36,260.00</dd>
+          </dl>
+        </div>
+
+        <details class="more">
+          <summary><span class="t">More</span><span class="muted small">Salesperson split, currency, tax category, FBR.</span></summary>
+          <div class="more-grid">
+            <fieldset>
+              <legend>Salesperson split</legend>
+              <dl><dt>Usman Tariq</dt><dd>100%</dd></dl>
+            </fieldset>
+            <fieldset>
+              <legend>Currency</legend>
+              <dl><dt>Invoice currency</dt><dd>PKR, Pakistani rupee</dd></dl>
+            </fieldset>
+            <fieldset>
+              <legend>Tax category</legend>
+              <dl><dt>All 4 lines</dt><dd>Standard rate. No sales tax charged; company not registered.</dd></dl>
+            </fieldset>
+            <fieldset disabled>
+              <legend>FBR digital invoicing <span class="chip">Off for this company</span></legend>
+              <dl><dt>FBR invoice number</dt><dd>Not sent</dd></dl>
+              <p class="help">Shown for review only. While the FBR module is off, this block is not on the screen at all.</p>
+            </fieldset>
+          </div>
+        </details>
+
+        <div class="statusbar">
+          <div class="state">
+            <span class="chip green">Submitted</span>
+            <span class="chip amber">Unpaid</span>
+          </div>
+          <div class="bar-total"><span>Unpaid, due <span class="nb">11-12-2026</span></span><strong>Rs&nbsp;1,36,260.00</strong></div>
+          <div class="actions">
+            <button class="btn" type="button">Email</button>
+            <button class="btn" type="button">Print</button>
+            <button class="btn primary big" type="button">Record receipt</button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="card" aria-labelledby="h-tl-sub">
+        <div class="card-head"><h2 id="h-tl-sub">What happened</h2></div>
+        <ol class="timeline">
+          <li class="next"><span class="next-label">Next</span><br>Record the receipt when the customer pays. Due <span class="nb">11-12-2026</span>.</li>
+          <li class="done"><time>Today 11:08</time>Sana Malik emailed the invoice to New Kashmir Autos.</li>
+          <li class="done"><time>Today 11:06</time>Sana Malik printed the invoice.</li>
+          <li class="done"><time>Today 11:05</time>Sana Malik submitted. Number <span class="nb">SI-2627-00418</span> given. Customer balance went from Rs&nbsp;6,12,400 to Rs&nbsp;7,48,660.</li>
+          <li class="done"><time>Today 10:47</time>Usman Tariq changed Spark plug C7 from 80 to 100 pcs.</li>
+          <li class="done"><time>Today 10:42</time>Usman Tariq made this draft from order <span class="nb">SO-2627-00226</span>.</li>
+          <li class="done"><time><span class="nb">10-11-2026</span> 16:15</time>Usman Tariq submitted order <span class="nb">SO-2627-00226</span>.</li>
+        </ol>
+      </aside>
+    </div>
+
+    <aside class="reviewer">
+      <h2>What to ask the reviewer</h2>
+      <p class="hint">For the person running the review. Not part of the product. Show the draft first, then switch to Submitted.</p>
+      <ol>
+        <li>Add a line without touching the mouse: say out loud what you would type. Do you know your item codes, or do you search by name?</li>
+        <li>Open "More". Is there anything in there you need on every invoice? Is there anything outside it that you never use?</li>
+        <li>Once submitted, the invoice is locked and a mistake is fixed with a credit note. Can you work that way? When do you change an invoice today?</li>
+      </ol>
+    </aside>
+  </main>
+</div>
+
+</body>
+</html>

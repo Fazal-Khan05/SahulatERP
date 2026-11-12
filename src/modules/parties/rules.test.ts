@@ -28,6 +28,7 @@ describe("readParty", () => {
       creditLimit: null,
       customerClass: null,
       isWithholdingAgent: false,
+      priceListId: null,
       supplierType: null,
       contactName: null,
       phone: null,

@@ -61,6 +61,15 @@ describe("roles", () => {
     expect(allowed("supplier.manage")).toEqual(["owner", "accountant"]);
   });
 
+  it("opens prices to whoever sells or keeps the books; an owner, an accountant or a sales manager sets them", () => {
+    const allowed = (permission: Parameters<typeof can>[1]) => MEMBER_ROLES.filter((role) => can(role, permission));
+    expect(allowed("price.read")).toEqual(["owner", "accountant", "sales_manager", "salesperson", "auditor"]);
+    expect(allowed("price.manage")).toEqual(["owner", "accountant", "sales_manager"]);
+    expect(navFor("sales_manager", state()).find((e) => e.label === "Price lists")?.href).toBe("/price-lists");
+    expect(labels(navFor("salesperson", state()))).not.toContain("Price lists");
+    expect(labels(navFor("owner", state({ sales: false, collections: false, commissions: false })))).not.toContain("Price lists");
+  });
+
   it("opens items to whoever sells, stores or keeps the books; an owner or an accountant changes them", () => {
     const allowed = (permission: Parameters<typeof can>[1]) => MEMBER_ROLES.filter((role) => can(role, permission));
     expect(allowed("item.read")).toEqual(["owner", "accountant", "sales_manager", "salesperson", "warehouse_manager", "auditor"]);
@@ -241,6 +250,7 @@ describe("navigation", () => {
       "Needs attention",
       "Sales",
       "Customers",
+      "Price lists",
       "Collections",
       "Purchases and imports",
       "Suppliers",
@@ -299,6 +309,7 @@ describe("navigation", () => {
       "Needs attention",
       "Sales invoices",
       "Customers",
+      "Price lists",
       "Bills and payments",
       "Suppliers",
       "Items",

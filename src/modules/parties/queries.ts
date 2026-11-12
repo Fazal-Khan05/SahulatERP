@@ -47,6 +47,7 @@ type Row = {
   creditLimit: string | null;
   customerClass: string | null;
   isWithholdingAgent: boolean;
+  priceListId: string | null;
   supplierType: SupplierType | null;
   contactName: string | null;
   phone: string | null;
@@ -74,6 +75,7 @@ const stored = (row: Row): StoredParty => ({
     creditLimit: row.creditLimit,
     customerClass: row.customerClass,
     isWithholdingAgent: row.isWithholdingAgent,
+    priceListId: row.priceListId,
     supplierType: row.supplierType,
     contactName: row.contactName,
     phone: row.phone,
@@ -123,6 +125,7 @@ export async function selectParties(
             creditLimit: customers.creditLimit,
             customerClass: customers.customerClass,
             isWithholdingAgent: customers.isWithholdingAgent,
+            priceListId: customers.priceListId,
             supplierType: sql<SupplierType | null>`null`,
           })
           .from(customers)
@@ -140,6 +143,7 @@ export async function selectParties(
             creditLimit: sql<string | null>`null`,
             customerClass: sql<string | null>`null`,
             isWithholdingAgent: sql<boolean>`false`,
+            priceListId: sql<string | null>`null`,
             supplierType: suppliers.supplierType,
           })
           .from(suppliers)

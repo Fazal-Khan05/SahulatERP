@@ -396,9 +396,11 @@ describe.skipIf(!hasDb)("customers and suppliers", () => {
     for (const bad of [{ cnic: "123" }, { ntn: "12345" }, { strn: "1111111111111" }, { creditDays: 400 }, { creditLimit: "-1" }, { name: "x" }, { atlStatus: "active" as const }]) {
       expect(await codeOf(() => withTenant(owner, tenantA, (tx) => tx.insert(customers).values({ tenantId: tenantA, name: "Direct", ...bad, ...by(owner) }))), JSON.stringify(bad)).toBe(CHECK);
     }
-    for (const change of [{ tenantId: tenantB }, { createdBy: ownerB }, { priceListId: randomUUID() }]) {
+    for (const change of [{ tenantId: tenantB }, { createdBy: ownerB }]) {
       expect(await codeOf(() => withTenant(owner, tenantA, (tx) => tx.update(customers).set(change))), JSON.stringify(change)).toBe(DENIED);
     }
+    // A customer's price list must be one of the company's own.
+    expect(await codeOf(() => withTenant(owner, tenantA, (tx) => tx.update(customers).set({ priceListId: randomUUID(), updatedBy: owner })))).toBe("23503");
     // Nothing deletes a party; a contact belongs to exactly one party of this company.
     expect(await codeOf(() => withTenant(owner, tenantA, (tx) => tx.delete(customers)))).toBe(DENIED);
     expect(await codeOf(() => withTenant(owner, tenantA, (tx) => tx.delete(suppliers)))).toBe(DENIED);

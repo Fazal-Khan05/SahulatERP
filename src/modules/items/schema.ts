@@ -66,6 +66,8 @@ export const items = pgTable(
     // FBR's own code for the unit of measure, and its sale type, as its invoice format asks.
     fbrUomCode: text("fbr_uom_code"),
     saleType: text("sale_type"),
+    // What one of the item's own unit sells for when no price list, class or customer price applies.
+    defaultPrice: numeric("default_price", { precision: 20, scale: 4 }),
     // The printed retail price, the tax base for Third Schedule goods.
     retailPrice: numeric("retail_price", { precision: 20, scale: 4 }),
     // In base units; stock at or below it asks to be reordered.
@@ -95,6 +97,7 @@ export const items = pgTable(
     check("items_fbr_uom_code_length", sql`char_length(btrim(${t.fbrUomCode})) between 1 and 40`),
     check("items_sale_type_length", sql`char_length(btrim(${t.saleType})) between 1 and 60`),
     check("items_amounts_not_negative", sql`coalesce(${t.retailPrice}, 0) >= 0 and coalesce(${t.reorderLevel}, 0) >= 0 and coalesce(${t.weight}, 0) >= 0 and coalesce(${t.volume}, 0) >= 0`),
+    check("items_default_price_not_negative", sql`${t.defaultPrice} >= 0`),
     check("items_archived_pair", sql`(${t.archivedAt} is null) = (${t.archivedBy} is null)`),
   ],
 );

@@ -143,6 +143,7 @@ describe("readItem", () => {
         hsCode: null,
         fbrUomCode: null,
         saleType: null,
+        defaultPrice: null,
         retailPrice: null,
         reorderLevel: null,
         weight: null,

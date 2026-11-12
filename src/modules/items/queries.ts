@@ -54,6 +54,7 @@ const itemColumns = {
   hsCode: items.hsCode,
   fbrUomCode: items.fbrUomCode,
   saleType: items.saleType,
+  defaultPrice: items.defaultPrice,
   retailPrice: items.retailPrice,
   reorderLevel: items.reorderLevel,
   weight: items.weight,
@@ -94,6 +95,7 @@ export type ItemListRow = {
   name: string;
   category: string | null;
   unit: string;
+  defaultPrice: Decimal | null;
   retailPrice: Decimal | null;
   reorderLevel: Decimal | null;
 };
@@ -110,7 +112,7 @@ export async function listItems(ctx: TenantContext, options: { search?: string; 
   const matches: SQL | undefined = term === "" ? undefined : sql`(${items.code} ilike ${pattern} or ${items.name} ilike ${pattern} or ${itemCategories.name} ilike ${pattern})`;
   const found = await withTenant(ctx.userId, ctx.tenantId, (tx) =>
     tx
-      .select({ id: items.id, code: items.code, name: items.name, category: itemCategories.name, unit: units.code, retailPrice: items.retailPrice, reorderLevel: items.reorderLevel })
+      .select({ id: items.id, code: items.code, name: items.name, category: itemCategories.name, unit: units.code, defaultPrice: items.defaultPrice, retailPrice: items.retailPrice, reorderLevel: items.reorderLevel })
       .from(items)
       .innerJoin(units, and(eq(units.tenantId, items.tenantId), eq(units.id, items.baseUnitId)))
       .leftJoin(itemCategories, and(eq(itemCategories.tenantId, items.tenantId), eq(itemCategories.id, items.categoryId)))
@@ -122,6 +124,7 @@ export async function listItems(ctx: TenantContext, options: { search?: string; 
     more: found.length > ITEM_LIST_LIMIT,
     rows: found.slice(0, ITEM_LIST_LIMIT).map((row) => ({
       ...row,
+      defaultPrice: row.defaultPrice === null ? null : new Decimal(row.defaultPrice),
       retailPrice: row.retailPrice === null ? null : new Decimal(row.retailPrice),
       reorderLevel: row.reorderLevel === null ? null : new Decimal(row.reorderLevel),
     })),

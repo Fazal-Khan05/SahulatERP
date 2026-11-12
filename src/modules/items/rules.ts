@@ -103,6 +103,8 @@ export type ItemInput = {
   hsCode: string | null;
   fbrUomCode: string | null;
   saleType: string | null;
+  /** What one of the item's own unit sells for when no other price applies. */
+  defaultPrice: string | null;
   retailPrice: string | null;
   reorderLevel: string | null;
   weight: string | null;
@@ -123,6 +125,7 @@ const FIELDS = [
   { key: "hsCode", header: "HS code" },
   { key: "fbrUomCode", header: "FBR unit code" },
   { key: "saleType", header: "Sale type" },
+  { key: "defaultPrice", header: "Selling price" },
   { key: "retailPrice", header: "Retail price" },
   { key: "reorderLevel", header: "Reorder level" },
   { key: "weight", header: "Weight" },
@@ -207,6 +210,7 @@ export function readItem(raw: RawItem, known: ItemLookups): { ok: true; item: It
   }
   const fbrUomCode = optional(raw.fbrUomCode, 40, "FBR unit code");
   const saleType = optional(raw.saleType, 60, "Sale type");
+  const defaultPrice = amount(raw.defaultPrice, "Selling price");
   const retailPrice = amount(raw.retailPrice, "Retail price");
   const reorderLevel = amount(raw.reorderLevel, "Reorder level");
   const weight = amount(raw.weight, "Weight");
@@ -230,7 +234,7 @@ export function readItem(raw: RawItem, known: ItemLookups): { ok: true; item: It
   return {
     ok: true,
     pack,
-    item: { code, name, categoryId, baseUnitId, taxCategoryId, hsCode, fbrUomCode, saleType, retailPrice, reorderLevel, weight, volume, trackBatches, trackSerials },
+    item: { code, name, categoryId, baseUnitId, taxCategoryId, hsCode, fbrUomCode, saleType, defaultPrice, retailPrice, reorderLevel, weight, volume, trackBatches, trackSerials },
   };
 }
 

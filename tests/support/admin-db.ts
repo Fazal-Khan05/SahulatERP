@@ -21,6 +21,9 @@ export async function deleteTenants(sql: AdminSql, tenantIds: string[]): Promise
   if (tenantIds.length === 0) return;
   await sql.begin(async (tx) => {
     await tx`delete from public.audit_log where tenant_id = any(${tenantIds})`;
+    await tx`delete from public.customer_prices where tenant_id = any(${tenantIds})`;
+    await tx`delete from public.item_prices_by_class where tenant_id = any(${tenantIds})`;
+    await tx`delete from public.price_list_items where tenant_id = any(${tenantIds})`;
     await tx`delete from public.item_units where tenant_id = any(${tenantIds})`;
     await tx`delete from public.items where tenant_id = any(${tenantIds})`;
     await tx`delete from public.item_categories where tenant_id = any(${tenantIds})`;
@@ -29,6 +32,7 @@ export async function deleteTenants(sql: AdminSql, tenantIds: string[]): Promise
     await tx`delete from public.party_addresses where tenant_id = any(${tenantIds})`;
     await tx`delete from public.customers where tenant_id = any(${tenantIds})`;
     await tx`delete from public.suppliers where tenant_id = any(${tenantIds})`;
+    await tx`delete from public.price_lists where tenant_id = any(${tenantIds})`;
     await tx`delete from public.withholding_rules where tenant_id = any(${tenantIds})`;
     await tx`delete from public.tax_rates where tenant_id = any(${tenantIds})`;
     await tx`delete from public.tax_categories where tenant_id = any(${tenantIds})`;

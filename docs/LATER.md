@@ -298,3 +298,32 @@ Things noticed while building a step that belong to a later one, or to nobody ye
   and suppliers; held for the next migration that touches these tables.
 - **A save that does not say which version it was loaded from is not checked for staleness.**
   The screens always say; a hand-made request need not.
+
+## From Step 9
+
+- **A price is for one of the item's own unit.** A line entered in cartons needs the price times
+  the carton's size; the sales order (Step 18) does that with `convertToBase`'s factor.
+- **`getPriceFor` (`src/modules/prices/queries.ts`) is what a sales line calls**: the customer's
+  own price, else the class price, else the customer's list or the default list, else the item's
+  selling price. It returns nothing when no level has a price; the line must then ask for one.
+  A salesperson overriding the price on a line, and who may, is Step 18's decision.
+- **Prices do not say whether they include tax.** The founder decided prices can include tax;
+  the tax engine and sales documents (Steps 17 to 20) need a company-wide or per-list switch.
+- **Prices are in the company's base currency only.** A price list in another currency waits for
+  multi-currency sales (Step 22).
+- **A price is ended by giving it a last day; it cannot be deleted**, and a price list cannot be
+  renamed or archived. Saving a price that starts the same day corrects it.
+- **Class prices match the customer's class by its text**, whatever the capitals. The class is
+  still free text on the customer (see Step 7's note); a list of classes to pick from would stop
+  misspellings from silently missing their price.
+- **Prices are typed one at a time.** Importing a price list from a file would help the pilot's
+  migration (Step 49).
+- **A sales manager can set prices but not an item's selling price**, which sits on the item and
+  follows the item's rule (owner or accountant).
+- **The warehouse manager reads items, including the selling price, but no price lists or special
+  prices.**
+- **A customer price is given by the customer's code or exact name.** Where one customer's code
+  is another's name, the code wins. A picker that searches customers would remove the question.
+- **A comment in `drizzle/0007_prices.sql` says the warehouse has no business with prices**, yet
+  a warehouse manager reads an item's selling price, which sits on the item. The migration is
+  applied and cannot be edited; the sentence above is the accurate one.

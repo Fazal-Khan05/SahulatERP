@@ -26,6 +26,8 @@ function requireManager(ctx: TenantContext, kind: PartyKind): void {
 
 /** Which unique rule a refused insert or update broke: the name's or the code's. */
 function taken(kind: PartyKind, error: unknown): UserError | null {
+  // The only thing a party points at is its price list.
+  if (pgCode(error) === "23503") return new UserError("Choose a price list from the list.");
   if (pgCode(error) !== UNIQUE_VIOLATION) return null;
   const e = error as { constraint_name?: string; cause?: { constraint_name?: string } };
   const constraint = e.cause?.constraint_name ?? e.constraint_name ?? "";
@@ -50,6 +52,7 @@ const customerValues = (party: PartyInput) => ({
   creditLimit: party.creditLimit,
   customerClass: party.customerClass,
   isWithholdingAgent: party.isWithholdingAgent,
+  priceListId: party.priceListId,
 });
 const supplierValues = (party: PartyInput) => ({ ...sharedValues(party), supplierType: party.supplierType ?? ("company" as const) });
 

@@ -32,6 +32,7 @@ export async function savePartyAction(kind: PartyKind, id: string | null, _: For
   const off = moduleOff(session, kind);
   if (off) return off;
   const raw: RawParty = Object.fromEntries(importColumns(kind).map(({ key }) => [key, formData.get(key)]));
+  raw.priceListId = formData.get("priceListId");
   try {
     const saved = id === null ? await createParty(session, kind, raw) : await updateParty(session, kind, id, raw, formData.get("loadedAt"));
     // A full page load: the screen that opens shows what the database now holds.

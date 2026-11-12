@@ -45,6 +45,9 @@ const ACTION_LABELS: Record<string, string> = {
   "item.import": "Imported items",
   "item_unit.set": "Set an item's other unit",
   "item_unit.remove": "Removed an item's other unit",
+  "price_list.create": "Added a price list",
+  "price_list.set_default": "Chose the default price list",
+  "price.set": "Set a price",
   "job.enqueue": "Queued background work",
 };
 

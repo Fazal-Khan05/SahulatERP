@@ -78,6 +78,8 @@ export type PartyInput = {
   customerClass: string | null;
   /** Customers only: the customer deducts tax when it pays. */
   isWithholdingAgent: boolean;
+  /** Customers only: the price list the customer is on; null means the company's default list. */
+  priceListId: string | null;
   /** Suppliers only. */
   supplierType: SupplierType | null;
   contactName: string | null;
@@ -88,7 +90,7 @@ export type PartyInput = {
 };
 
 /** The raw text of each field, by the name the form and the import use. */
-export type RawParty = Partial<Record<(typeof FIELDS)[number]["key"], unknown>>;
+export type RawParty = Partial<Record<(typeof FIELDS)[number]["key"] | "priceListId", unknown>>;
 
 // Every field: its key, its column heading in a CSV file, and which kind of party has it.
 const FIELDS = [
@@ -223,7 +225,12 @@ export function readParty(kind: PartyKind, raw: RawParty): { ok: true; party: Pa
   let customerClass: string | null = null;
   let isWithholdingAgent = false;
   let supplierType: SupplierType | null = null;
+  let priceListId: string | null = null;
   if (kind === "customer") {
+    // Chosen from a list on the form; a file does not carry it.
+    const chosen = text(raw.priceListId);
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(chosen)) priceListId = chosen.toLowerCase();
+    else if (chosen !== "") problems.push("Choose a price list from the list.");
     if (text(raw.creditLimit) !== "") {
       const parsed = parseAmount(raw.creditLimit);
       if (parsed.ok) creditLimit = parsed.amount.toFixed(AMOUNT_SCALE);
@@ -270,6 +277,7 @@ export function readParty(kind: PartyKind, raw: RawParty): { ok: true; party: Pa
       creditLimit,
       customerClass,
       isWithholdingAgent,
+      priceListId,
       supplierType,
       contactName,
       phone,

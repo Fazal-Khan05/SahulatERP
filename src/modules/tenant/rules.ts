@@ -49,6 +49,8 @@ const PERMISSIONS = {
   "supplier.manage": ["owner", "accountant"],
   "item.read": ["owner", "accountant", "auditor", "sales_manager", "salesperson", "warehouse_manager"],
   "item.manage": ["owner", "accountant"],
+  "price.read": ["owner", "accountant", "auditor", "sales_manager", "salesperson"],
+  "price.manage": ["owner", "accountant", "sales_manager"],
 } as const satisfies Record<string, readonly MemberRole[]>;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -284,6 +286,7 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
       return [
         ["Sales", "sales"],
         ["Customers", "sales", "/customers"],
+        ["Price lists", "sales", "/price-lists"],
         ["Collections", "collections"],
         [purchases, "purchasing"],
         ["Suppliers", "purchasing", "/suppliers"],
@@ -299,6 +302,7 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
       return [
         ["Sales", "sales"],
         ["Customers", "sales", "/customers"],
+        ["Price lists", "sales", "/price-lists"],
         ["Collections", "collections"],
         [purchases, "purchasing"],
         ["Suppliers", "purchasing", "/suppliers"],
@@ -314,6 +318,7 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
       return [
         ["Sales invoices", "sales"],
         ["Customers", "sales", "/customers"],
+        ["Price lists", "sales", "/price-lists"],
         ["Bills and payments", "purchasing"],
         ["Suppliers", "purchasing", "/suppliers"],
         ["Items", "inventory", "/items"],
@@ -329,6 +334,7 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
       return [
         ["Sales", "sales"],
         ["Customers", "sales", "/customers"],
+        ["Price lists", "sales", "/price-lists"],
         ["Collections", "collections"],
         ["Stock", "inventory"],
         ["Items", "inventory", "/items"],

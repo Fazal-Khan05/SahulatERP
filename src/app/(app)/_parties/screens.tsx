@@ -10,6 +10,7 @@ import { logFailure } from "@/lib/errors";
 import { formatDateTime } from "@/lib/format";
 import { formatAmount } from "@/lib/money";
 import { PARTY_LIST_LIMIT, getParty, listParties } from "@/modules/parties/queries";
+import { listPriceLists } from "@/modules/prices/queries";
 import {
   ATL_LABELS,
   ATL_STATUSES,
@@ -185,7 +186,14 @@ const pairs = <T extends string>(keys: readonly T[], labels: Record<T, string>):
 /** A stored amount as a person would type it: no trailing zeros. */
 const plainAmount = (value: string | null) => (value === null ? "" : new Decimal(value).toFixed());
 
-function PartyForm({ kind, id, party, loadedAt }: { kind: PartyKind; id: string | null; party: PartyInput | null; loadedAt?: Date }) {
+type ListChoice = { id: string; name: string; isDefault: boolean };
+
+/** The price lists a customer can be put on; none when this person may not see prices. */
+async function priceListChoices(session: Parameters<typeof listPriceLists>[0], kind: PartyKind): Promise<ListChoice[]> {
+  return kind === "customer" && can(session.role, "price.read") ? listPriceLists(session) : [];
+}
+
+function PartyForm({ kind, id, party, loadedAt, priceLists }: { kind: PartyKind; id: string | null; party: PartyInput | null; loadedAt?: Date; priceLists: ListChoice[] }) {
   const { one } = PARTY_WORDS[kind];
   return (
     <ActionForm action={savePartyAction.bind(null, kind, id)} submitLabel={id === null ? `Add ${one}` : "Save changes"}>
@@ -200,6 +208,15 @@ function PartyForm({ kind, id, party, loadedAt }: { kind: PartyKind; id: string 
           <Field label="Class" name="customerClass" defaultValue={party?.customerClass ?? ""} maxLength={40} hint="Such as Wholesale or Retail." />
         )}
         <Field label="Credit days" name="creditDays" defaultValue={party?.creditDays ?? ""} inputMode="numeric" autoComplete="off" />
+        {kind === "customer" && priceLists.length > 0 ? (
+          <Choice
+            label="Price list"
+            name="priceListId"
+            value={party?.priceListId ?? null}
+            options={priceLists.map((list): [string, string] => [list.id, list.name])}
+            blank={`The default list${priceLists.find((list) => list.isDefault) ? ` (${priceLists.find((list) => list.isDefault)!.name})` : ""}`}
+          />
+        ) : null}
         {kind === "customer" ? (
           <Field
             label="Credit limit"
@@ -252,7 +269,7 @@ export async function PartyNewScreen({ kind }: { kind: PartyKind }) {
       <PageHead title={`New ${one}`} sub={<Link href={path}>Back to {many.toLowerCase()}</Link>} />
       {canManage(session.role, kind) ? (
         <Card className="max-w-3xl">
-          <PartyForm kind={kind} id={null} party={null} />
+          <PartyForm kind={kind} id={null} party={null} priceLists={await priceListChoices(session, kind)} />
         </Card>
       ) : (
         <p className="text-muted-foreground">Your role cannot add a {one}.</p>
@@ -320,7 +337,7 @@ export async function PartyDetailScreen({ kind, params }: { kind: PartyKind; par
       <div className="flex max-w-3xl flex-col gap-5">
         {manager && !archived ? (
           <Card title={`Change this ${one}`}>
-            <PartyForm kind={kind} id={found.id} party={found.party} loadedAt={found.updatedAt} />
+            <PartyForm kind={kind} id={found.id} party={found.party} loadedAt={found.updatedAt} priceLists={await priceListChoices(session, kind)} />
           </Card>
         ) : (
           <Card title="Details">

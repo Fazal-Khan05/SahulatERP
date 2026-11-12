@@ -13,6 +13,7 @@ import { ITEM_LIST_LIMIT, getItem, getItemSetup, listItems, type Named, type Sto
 import { ITEM_COLUMNS, ITEM_IMPORT_MAX_BYTES, ITEM_IMPORT_MAX_ROWS, type ItemInput } from "@/modules/items/rules";
 import { can, type MemberRole, type ModuleState } from "@/modules/tenant/rules";
 import { ImportForm } from "../../_parties/import-form";
+import { ItemPricesCard } from "../../price-lists/_parts/screens";
 import { addItemCategoryAction, addUnitAction, archiveItemAction, importItemsAction, removeItemUnitAction, saveItemAction, setItemUnitAction } from "./actions";
 
 const SELECT = "h-8 w-full min-w-0 rounded-lg border border-input bg-card px-2 text-sm";
@@ -102,6 +103,7 @@ export async function ItemListScreen({ searchParams }: { searchParams: Promise<R
                   <th className="py-2 pr-4 font-medium">Name</th>
                   <th className="py-2 pr-4 font-medium">Category</th>
                   <th className="py-2 pr-4 font-medium">Unit</th>
+                  <th className="py-2 pr-4 text-right font-medium">Selling price</th>
                   <th className="py-2 pr-4 text-right font-medium">Retail price</th>
                   <th className="py-2 text-right font-medium">Reorder level</th>
                 </tr>
@@ -117,6 +119,7 @@ export async function ItemListScreen({ searchParams }: { searchParams: Promise<R
                     <td className="py-2 pr-4">{row.name}</td>
                     <td className="py-2 pr-4">{row.category}</td>
                     <td className="py-2 pr-4">{row.unit}</td>
+                    <td className="py-2 pr-4 text-right whitespace-nowrap">{row.defaultPrice ? formatAmount(row.defaultPrice) : ""}</td>
                     <td className="py-2 pr-4 text-right whitespace-nowrap">{row.retailPrice ? formatAmount(row.retailPrice) : ""}</td>
                     <td className="py-2 text-right whitespace-nowrap">{row.reorderLevel ? quantity(row.reorderLevel) : ""}</td>
                   </tr>
@@ -173,6 +176,7 @@ function ItemForm({ id, item, loadedAt, setup }: { id: string | null; item: Item
             <span className="text-xs text-muted-foreground">Stock is counted in it, so it cannot be changed.</span>
           </div>
         )}
+        <Field label="Selling price" name="defaultPrice" defaultValue={plain(item?.defaultPrice ?? null)} inputMode="decimal" autoComplete="off" hint="For one of the item's own unit, when no price list or special price applies." />
         <Field label="Retail price" name="retailPrice" defaultValue={plain(item?.retailPrice ?? null)} inputMode="decimal" autoComplete="off" hint="The price printed on the pack, without commas." />
         <Field label="Reorder level" name="reorderLevel" defaultValue={plain(item?.reorderLevel ?? null)} inputMode="decimal" autoComplete="off" hint="Stock at or below this asks to be reordered." />
       </div>
@@ -286,6 +290,7 @@ function Summary({ item, setup }: { item: ItemInput; setup: Setup }) {
     ["Code", item.code],
     ["Category", name(setup.categories, item.categoryId)],
     ["Unit", name(setup.units, item.baseUnitId)],
+    ["Selling price", item.defaultPrice === null ? null : formatAmount(new Decimal(item.defaultPrice))],
     ["Retail price", item.retailPrice === null ? null : formatAmount(new Decimal(item.retailPrice))],
     ["Reorder level", item.reorderLevel === null ? null : plain(item.reorderLevel)],
     ["Tax category", name(setup.taxCategories, item.taxCategoryId)],
@@ -341,6 +346,7 @@ export async function ItemDetailScreen({ params }: { params: Promise<{ id: strin
           </Card>
         )}
         <Units found={found} setup={setup} manager={manager} />
+        {archived ? null : <ItemPricesCard itemId={found.id} />}
         {manager ? (
           <Card title={archived ? "Restore" : "Archive"}>
             <p className="mb-3 text-sm text-muted-foreground">

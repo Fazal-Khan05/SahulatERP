@@ -61,6 +61,16 @@ describe("roles", () => {
     expect(allowed("supplier.manage")).toEqual(["owner", "accountant"]);
   });
 
+  it("opens items to whoever sells, stores or keeps the books; an owner or an accountant changes them", () => {
+    const allowed = (permission: Parameters<typeof can>[1]) => MEMBER_ROLES.filter((role) => can(role, permission));
+    expect(allowed("item.read")).toEqual(["owner", "accountant", "sales_manager", "salesperson", "warehouse_manager", "auditor"]);
+    expect(allowed("item.manage")).toEqual(["owner", "accountant"]);
+    // The list follows Stock: no Stock, no Items.
+    expect(navFor("owner", state()).find((e) => e.label === "Items")?.href).toBe("/items");
+    expect(labels(navFor("warehouse_manager", state()))).toContain("Items");
+    expect(labels(navFor("salesperson", state()))).not.toContain("Items");
+  });
+
   it("shows the tax rates to an owner, an accountant and an auditor; only the first two change them", () => {
     for (const role of MEMBER_ROLES) {
       expect(can(role, "tax.read")).toBe(role === "owner" || role === "accountant" || role === "auditor");
@@ -235,6 +245,7 @@ describe("navigation", () => {
       "Purchases and imports",
       "Suppliers",
       "Stock",
+      "Items",
       "Cash and bank",
       "Commissions",
       "Reports",
@@ -269,6 +280,7 @@ describe("navigation", () => {
       "Deliveries",
       "Transfers",
       "Stock",
+      "Items",
       "Stock count",
     ]);
     expect(labels(navFor("payroll_administrator", state({ payroll: true })))).toEqual([
@@ -289,6 +301,7 @@ describe("navigation", () => {
       "Customers",
       "Bills and payments",
       "Suppliers",
+      "Items",
       "Bank and cash",
       "Journals",
       "Period close",

@@ -243,3 +243,58 @@ Things noticed while building a step that belong to a later one, or to nobody ye
   different order: one gets "That did not work. Please try again." and nothing of theirs is kept.
 - **The local throwaway database must be created as UTF-8** (`initdb -E UTF8`); otherwise names
   outside ASCII are counted and compared differently from Supabase.
+
+## Decided by the founder on 2026-11-13
+
+- **No accountant.** Claude does the accounting checks; see "Accounting checks" in
+  `docs/PROMPTS.md`. Issues found later are debugged then.
+- **The merchant is responsible for its tax rates.** New companies get the starting rates; the
+  setup wizard (Step 11) shows them and has the owner tick that they were checked. The terms of
+  service (launch gate) say the same.
+- **A company that is not registered for sales tax sees no tax anywhere.** The wizard (Step 11)
+  asks once; invoices then show item, quantity, price and total only, and the tax engine
+  (Step 17) charges nothing. This is the usual case for the first customers.
+- **Prices can include tax.** A registered merchant types the final price and the product works
+  the tax out of it (for 18%, the price divided by 1.18), still showing the tax on the invoice as
+  the law requires. Needed in the tax engine and the sales documents (Steps 17 to 20); the plan's
+  text does not mention it.
+- **Recommended options are accepted without asking** while the founder is away, including
+  applying additive migrations to the dev database and pushing a step once every check passes.
+  Anything destructive, or a choice with no clear recommendation, still waits for him.
+
+
+## From Step 8
+
+- **An item is counted in one unit and that unit can never change**, because stock will be kept
+  in it. A wrong unit means archiving the item and adding it again.
+- **Only `toBaseQuantity` (`src/modules/items/rules.ts`) converts a quantity**, and
+  `convertToBase` is what a document line calls with the stored conversions. It refuses a result
+  that four decimals cannot hold exactly; nothing is rounded. Sales and purchase lines (Steps 18
+  and 24) must store both what was entered (quantity and unit) and the base quantity.
+- **Correcting a pack size affects only lines entered afterwards.** Lines already written keep
+  their own base quantities. Once stock exists, changing or removing a unit should warn.
+- **An item has no price yet except the printed retail price.** The default selling price and
+  price lists are Step 9; cost comes from purchases (Step 24).
+- **Categories are a flat list** and units and categories cannot be renamed or removed. Add
+  archiving and a category tree if a customer needs them.
+- **The tax category on an item may be left empty.** The tax engine (Step 17) decides what an
+  item with none is charged; a company not registered for sales tax never needs one.
+- **HS code, FBR unit code and sale type are stored as typed.** The FBR module (Phase 7) should
+  offer FBR's own lists to pick from.
+- **Batch and serial tracking are switches only.** Nothing uses them until Phase 9.
+- **Only an owner or an accountant changes items.** A warehouse manager reads them. Widen it if
+  the pilot's storekeeper keeps the item list.
+- **Import matches units, categories and tax categories by name and never creates them.** It adds
+  items only; it cannot update items that exist. One pack unit per row.
+- **The party import and the item import read files with two copies of the same logic**
+  (`src/modules/parties/rules.ts` and `src/lib/csv-table.ts`). Move the party import onto
+  `readCsvTable` when it is next touched.
+- **Weight is in kilograms and volume in cubic metres**, per one of the item's own unit, for
+  spreading freight over a shipment (Step 28).
+- **Nothing calls `convertToBase` yet**: the conversion is proved by tests until documents exist.
+  The posting engine will need the same lookup inside its own transaction, and must decide
+  whether a line may use an archived item.
+- **The policy on `items` does not pin `archived_by` to the person archiving**, as on customers
+  and suppliers; held for the next migration that touches these tables.
+- **A save that does not say which version it was loaded from is not checked for staleness.**
+  The screens always say; a hand-made request need not.

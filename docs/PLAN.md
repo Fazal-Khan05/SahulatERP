@@ -116,7 +116,7 @@ Fifty-two steps in nine phases. Phases finish in order; steps inside a phase mos
 | 5 | Currencies and dated exchange rates; tenant base currency fixed at setup | Rate lookup by date returns the latest rate on or before the date | Done 2026-11-12 |
 | 6 | Tax categories, dated tax rates, withholding rules tables, seeded with 2026-27 Pakistani values (18%, 4% further, exempt, zero-rated, Third Schedule; s.153 rates; Eleventh Schedule; provincial 16/15/15/15) and an "effective from" on every row | A rate lookup for an invoice dated before a change returns the old rate | Done 2026-11-12 |
 | 7 | Customers and suppliers with every tax field, credit limit and days, class, price list; archive/restore; CSV import (atomic, bad-row report) | Import of 500 rows with 3 bad rows imports nothing and lists the 3 | Done 2026-11-12 |
-| 8 | Items, categories, units and conversions, HS code, FBR UoM code, tax category, retail price, reorder level; CSV import | Carton-to-piece conversion applies on a line entered in cartons | |
+| 8 | Items, categories, units and conversions, HS code, FBR UoM code, tax category, retail price, reorder level; CSV import | Carton-to-piece conversion applies on a line entered in cartons | Done 2026-11-13 |
 | 9 | Price lists (per list, per customer class, per customer, with validity dates) and the price-resolution rule: customer-specific > class > list > item default | Unit test table of 12 cases passes | |
 | 10 | Branches, warehouses, number series per document type and fiscal year, fiscal periods with lock/unlock (owner only) | Two concurrent invoice posts get consecutive numbers with no gap (test with 20 parallel requests) | |
 | 11 | Setup wizard (company, tax registration status, base currency, modules bundle, first branch and warehouse, chart of accounts template) | A new tenant can reach an empty inbox in under five minutes | |
@@ -210,7 +210,7 @@ Sellable to an unregistered trading company when Steps 0–42 and 47–52 are do
 - [ ] Month-end trial balance of the pilot company matches Fast Accounts within explained differences; control reconciliation report shows zero variance
 - [ ] Restore from the nightly R2 export tested into a fresh project; trial balance matches
 - [ ] 2FA on for every owner and accountant login
-- [ ] Statutory rate tables reviewed by the pilot company's accountant and signed off in `docs/RATES-REVIEW.md`
+- [ ] Statutory rate tables checked by Claude against the law texts and recorded in `docs/RATES-REVIEW.md`; each company confirms its own rates during setup (the founder has no accountant; decided 2026-11-13)
 - [ ] Pricing page, terms of service and a data-processing statement
 - [ ] Support channel with a stated response time
 - [ ] Product name decided and set in settings; domain live
@@ -220,7 +220,7 @@ After launch, nothing from Phase 9 starts until the pilot company has run two cl
 ## Risks
 
 1. **Scope creep by the builder.** Every "while I'm here" addition pushes launch by days. "Do only Step N" is the defence.
-2. **Accounting correctness only an accountant can judge.** Steps 13, 20, 25, 28, 32 and 41 each need a worked example checked by the pilot company's accountant before the step is called done.
+2. **Accounting correctness with no accountant.** The founder has no accountant (decided 2026-11-13). Steps 13, 20, 25, 28, 32 and 41 each produce a worked example that Claude checks: the expected journal is derived from the law texts and standard practice, an independent reviewer derives it again without seeing the first, and the two are compared with what the software posts. Each is recorded as checked by Claude, not by an accountant. A tax practitioner's read of `docs/RATES-REVIEW.md` and the six examples before the first paying customer files a return is advised, not required.
 3. **FBR contract drift.** Keep the client code in one module, pin the API version in config, re-run the sandbox scenarios before every release that touches invoices.
 4. **Statutory rates changing every July and by SRO mid-year.** Dated rate tables make updates a data change, not a deploy.
 5. **The pilot company losing patience.** Agree the parallel month in advance, with a date.

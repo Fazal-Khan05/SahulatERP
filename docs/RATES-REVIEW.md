@@ -3,7 +3,7 @@
 Every statutory rate the product gives a new company, for the pilot company's accountant to check.
 The launch gate in [PLAN.md](PLAN.md) needs this signed off before the first real company goes live.
 
-**Status: not yet reviewed by an accountant.**
+**Status: checked by Claude against the law texts on 12 November 2026; not reviewed by an accountant.** The founder has no accountant (decided 13 November 2026). Each company will confirm its own rates during setup, and can change any of them on Settings, Tax.
 
 The rows below are what `app.seed_tax_defaults` (in `drizzle/0004_tax.sql`) writes for each new
 company. Every row is dated 1 July 2026, the start of fiscal year 2026-27 (tax year 2027). They can

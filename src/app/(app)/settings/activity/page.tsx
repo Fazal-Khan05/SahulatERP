@@ -36,6 +36,15 @@ const ACTION_LABELS: Record<string, string> = {
   "supplier.archive": "Archived a supplier",
   "supplier.restore": "Restored a supplier",
   "supplier.import": "Imported suppliers",
+  "unit.add": "Added a unit",
+  "item_category.add": "Added an item category",
+  "item.create": "Added an item",
+  "item.update": "Changed an item",
+  "item.archive": "Archived an item",
+  "item.restore": "Restored an item",
+  "item.import": "Imported items",
+  "item_unit.set": "Set an item's other unit",
+  "item_unit.remove": "Removed an item's other unit",
   "job.enqueue": "Queued background work",
 };
 

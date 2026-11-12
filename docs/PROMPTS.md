@@ -8,7 +8,7 @@ How to use: start a fresh Claude Code session in the repo and paste the one-line
 Do the next undone step in docs/PLAN.md. Use docs/PROMPTS.md if it has a section for that step; otherwise use the generic template there. Stop when the step's acceptance is met and the status is marked.
 ```
 
-To chain low-risk steps (Phase 1 only, Steps 5–10): "Do Steps 5 to 10 in sequence; stop at the first failing check; mark each done as you go." Never chain Steps 13, 20, 25, 28, 32 or 41; each needs an accountant's check before it is marked done.
+To chain low-risk steps (Phase 1 only, Steps 5–10): "Do Steps 5 to 10 in sequence; stop at the first failing check; mark each done as you go." Steps 13, 20, 25, 28, 32 and 41 each end with a worked example checked as the "Accounting checks" section below describes.
 
 ## Generic template (applies to every step without its own section)
 
@@ -92,6 +92,6 @@ npm run owner:create -- <founder's email> --url=https://sahulaterp.vercel.app
 
 Until then, definition-of-done item 5 (the founder clicks through on the dev deployment) is outstanding for Step 2 onwards. Each session proves its step with the automated tests and sends screenshots of the new screens instead.
 
-## Accountant checkpoints
+## Accounting checks
 
-Steps 13, 20, 25, 28, 32 and 41: the session must end by producing a one-page worked example (docs/examples/step-N.md) showing the input document and the exact journal lines, for the founder to take to the accountant. The step is not marked done until the founder says the accountant agreed.
+Steps 13, 20, 25, 28, 32 and 41: the session must end by producing a one-page worked example (docs/examples/step-N.md) showing the input document and the exact journal lines. The founder has no accountant (decided 2026-11-13), so Claude checks it: derive the expected journal from the law texts and standard double-entry practice, have an independent reviewer derive it again without seeing the first, compare both with what the software posts, and write in the example that it was checked by Claude, not by an accountant. Open tax questions go in docs/RATES-REVIEW.md. The step is then marked done; it does not wait for anyone.

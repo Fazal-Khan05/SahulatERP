@@ -47,6 +47,8 @@ const PERMISSIONS = {
   "customer.manage": ["owner", "accountant", "sales_manager"],
   "supplier.read": ["owner", "accountant", "auditor", "warehouse_manager"],
   "supplier.manage": ["owner", "accountant"],
+  "item.read": ["owner", "accountant", "auditor", "sales_manager", "salesperson", "warehouse_manager"],
+  "item.manage": ["owner", "accountant"],
 } as const satisfies Record<string, readonly MemberRole[]>;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -286,6 +288,7 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
         [purchases, "purchasing"],
         ["Suppliers", "purchasing", "/suppliers"],
         ["Stock", "inventory"],
+        ["Items", "inventory", "/items"],
         ["Cash and bank", "cash_bank"],
         ["Commissions", "commissions"],
         ["Payroll", "payroll"],
@@ -300,6 +303,7 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
         [purchases, "purchasing"],
         ["Suppliers", "purchasing", "/suppliers"],
         ["Stock", "inventory"],
+        ["Items", "inventory", "/items"],
         ["Cash and bank", "cash_bank"],
         ["Commissions", "commissions"],
         ["Payroll", "payroll"],
@@ -312,6 +316,7 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
         ["Customers", "sales", "/customers"],
         ["Bills and payments", "purchasing"],
         ["Suppliers", "purchasing", "/suppliers"],
+        ["Items", "inventory", "/items"],
         ["Bank and cash", "cash_bank"],
         ["Journals", null],
         ["Period close", null],
@@ -326,6 +331,7 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
         ["Customers", "sales", "/customers"],
         ["Collections", "collections"],
         ["Stock", "inventory"],
+        ["Items", "inventory", "/items"],
         ["Commissions", "commissions"],
         ["Reports", null],
       ];
@@ -349,6 +355,7 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
         ["Deliveries", "sales"],
         ["Transfers", "inventory"],
         ["Stock", "inventory"],
+        ["Items", "inventory", "/items"],
         ["Stock count", "inventory"],
       ];
     case "payroll_administrator":

@@ -29,6 +29,13 @@
       "when": 1794484850023,
       "tag": "0003_currencies",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794500994114,
+      "tag": "0004_tax",
+      "breakpoints": true
     }
   ]
 }

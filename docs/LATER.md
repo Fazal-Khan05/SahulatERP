@@ -122,3 +122,67 @@ Things noticed while building a step that belong to a later one, or to nobody ye
   foreign currency will need them; the screen itself is for the owner, accountant and auditor.
 - **The accountant's menu has "Exchange rates"**, which opens the Currencies tab in Settings.
   It is not in the Step 1 mock-up.
+
+## From Step 6
+
+- **The starting tax rows are not yet checked by an accountant.** `docs/RATES-REVIEW.md` lists
+  every value with its source and four open questions (further tax on Third Schedule and
+  zero-rated goods, the Khyber Pakhtunkhwa section, what the pilot needs from day one). The
+  founder takes it to the pilot company's accountant; the launch gate needs the sign-off.
+- **Every starting row is dated 1 July 2026.** A document dated earlier finds no rate, and the
+  lookup returns nothing rather than guess. If the pilot's old documents are entered with tax
+  (Step 49), rows for the earlier period must be added first.
+- **A change in the law reaches companies in two ways.** We ship a migration that adds the new
+  dated row for every company and updates `app.seed_tax_defaults` for new ones; or a company's own
+  owner or accountant adds the row on Settings, Tax. If both happen for the same date, the
+  company's row stays (the migration must use `ON CONFLICT DO NOTHING`, as the seed does).
+- **Only the rate tables exist.** Who attracts further tax, which supplies SRO 648(I)/2013
+  excludes, the retail-price base for Third Schedule goods and the sale type code are the tax
+  engine's (Step 17). Which withholding line a supplier bill uses, the section 153 thresholds
+  (Rs 75,000 goods, Rs 30,000 services a year), who must deduct, and the Eleventh Schedule's
+  exclusions are the supplier bill's (Step 25). Step 25 picks a line by its code, such as
+  `income_tax.goods.company`; the codes are the fixed vocabulary in the seed.
+- **Which sales tax withholding lines apply depends on what the company itself is** (a company,
+  or an individual or AOP; registered or not). The setup wizard (Step 11) asks for the tax
+  registration status; nothing stores the company's own type yet.
+- **How much provincial sales tax the buyer withholds is not in the tables**, only each
+  province's standard rate. The shares differ by province and Punjab's published rules contradict
+  each other; `docs/RATES-REVIEW.md` has what was found. Needed by Steps 25 and 34.
+- **Lines left out of the starting rows** (reduced rates, special section 153 lines such as the
+  0.25% for distributors, other Eleventh Schedule lines, Islamabad, extra tax, federal excise) are
+  listed in `docs/RATES-REVIEW.md` under "Not included".
+- **A company can add a sales tax category but not a withholding line.** A new withholding line,
+  or a change to a line's wording or to what its percentage is taken of, needs a migration.
+- **A category cannot be renamed, archived or removed**, like a currency. Add archiving with the
+  pattern Step 7 sets.
+- **The starting rows can be corrected by an owner or an accountant** (a second rate for the same
+  date replaces the first; the audit log keeps both). Decide before launch whether the rows we
+  ship should be locked against that.
+- **Rows we seed are recorded as created by the person who created the company.** Nothing marks a
+  row as ours rather than typed in; the audit log shows only the rows a member changed.
+- **The withholding lists are in code order, not the law's order** (contracts before goods).
+  A display order column would fix it.
+- **The accountant's menu has "Tax rates"**, which opens the Tax tab in Settings. It is not in the
+  Step 1 mock-up.
+- **`isIsoDate` and `formatIsoDate` live in the currencies rules** and the tax module borrows
+  them. Move them to `src/lib` when a third module needs them.
+- **Database changes held for the migration that follows the accountant's answers**, so the
+  founder is asked once. None changes a rate; the app already enforces the first two.
+  (1) Only an income tax line may carry a second rate for suppliers not on the Active Taxpayers
+  List, and it must carry one: a CHECK on `withholding_rules`. (2) Category names unique whatever
+  their capitals: an index on `lower(name)`, as branches have. (3) The seeded wording: the Third
+  Schedule row states SRO 648(I)/2013 as settled and the zero-rated row cites no basis for its
+  zero further tax; the listed-services line names five of about thirty sectors; the
+  independent-professionals line omits software developers; the two active-taxpayer sales tax
+  lines do not say they apply only to a buyer that is not registered. (4) The trigger on
+  `tax_rates` runs before the row-level check, so its error text can tell someone writing raw SQL
+  as `app_runtime` the kind of another company's category; it also passes a row whose category
+  it cannot find (the foreign key then refuses it). (5) The seed matches a rate to its category by
+  name only.
+- **The supplier bill must show the full list of the 7% service sectors** where the line is
+  chosen (Step 25); the line's own wording is too short for it.
+- **Two people correcting the same date's rate at the same moment** now wait for each other, so
+  each audit row records the value it really replaced. Step 5's `setRate` for exchange rates does
+  not do this yet.
+- **The Activity screen shows only the new values of a change**, and leaves out anything empty.
+  The audit row itself holds the old and new values.

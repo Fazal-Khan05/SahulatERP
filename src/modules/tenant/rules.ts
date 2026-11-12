@@ -41,6 +41,8 @@ const PERMISSIONS = {
   "currency.read": ["owner", "accountant", "auditor"],
   "currency.manage": ["owner", "accountant"],
   "currency.set_base": ["owner"],
+  "tax.read": ["owner", "accountant", "auditor"],
+  "tax.manage": ["owner", "accountant"],
 } as const satisfies Record<string, readonly MemberRole[]>;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -306,6 +308,7 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
         ["Payroll", "payroll"],
         ["Reports", null],
         ["Exchange rates", null, "/settings/currencies"],
+        ["Tax rates", null, "/settings/tax"],
       ];
     case "sales_manager":
       return [

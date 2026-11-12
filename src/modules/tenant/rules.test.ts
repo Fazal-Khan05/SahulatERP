@@ -52,6 +52,13 @@ describe("roles", () => {
       expect(can(role, "audit.read")).toBe(role === "owner" || role === "auditor");
     }
   });
+
+  it("shows the tax rates to an owner, an accountant and an auditor; only the first two change them", () => {
+    for (const role of MEMBER_ROLES) {
+      expect(can(role, "tax.read")).toBe(role === "owner" || role === "accountant" || role === "auditor");
+      expect(can(role, "tax.manage")).toBe(role === "owner" || role === "accountant");
+    }
+  });
 });
 
 describe("branch scope", () => {
@@ -255,7 +262,7 @@ describe("navigation", () => {
     ]);
   });
 
-  it("gives the accountant the books and the exchange rates", () => {
+  it("gives the accountant the books, the exchange rates and the tax rates", () => {
     const menu = navFor("accountant", state());
     expect(labels(menu)).toEqual([
       "Home",
@@ -267,8 +274,10 @@ describe("navigation", () => {
       "Period close",
       "Reports",
       "Exchange rates",
+      "Tax rates",
     ]);
     expect(menu.find((e) => e.label === "Exchange rates")?.href).toBe("/settings/currencies");
+    expect(menu.find((e) => e.label === "Tax rates")?.href).toBe("/settings/tax");
   });
 
   it("removes a module's entries when the module is off", () => {

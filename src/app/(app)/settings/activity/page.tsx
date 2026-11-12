@@ -23,6 +23,9 @@ const ACTION_LABELS: Record<string, string> = {
   "currency.set_base": "Chose the base currency",
   "currency.add": "Added a currency",
   "exchange_rate.set": "Set an exchange rate",
+  "tax_category.add": "Added a tax category",
+  "tax_rate.set": "Set a sales tax rate",
+  "withholding_rule.set": "Set a withholding rate",
   "job.enqueue": "Queued background work",
 };
 

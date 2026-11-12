@@ -8,6 +8,7 @@ import { objectStore } from "@/lib/storage";
 import { addCurrency, setBaseCurrency, setRate } from "@/modules/currencies/commands";
 import { uploadFile } from "@/modules/files/commands";
 import { FILE_MAX_BYTES } from "@/modules/files/rules";
+import { addTaxCategory, setTaxRate, setWithholdingRate } from "@/modules/tax/commands";
 import { createBranch, inviteMember, setModuleEnabled, updateBranding } from "@/modules/tenant/commands";
 import { LOGO_MAX_BYTES } from "@/modules/tenant/rules";
 
@@ -122,6 +123,60 @@ export async function setRateAction(_: FormState, formData: FormData): Promise<F
     });
   } catch (error) {
     return refusal("set rate", error);
+  }
+  refresh();
+  return { ok: true, message: "Saved." };
+}
+
+export async function addTaxCategoryAction(_: FormState, formData: FormData): Promise<FormState> {
+  const session = await requireTenant();
+  try {
+    await addTaxCategory(session, {
+      name: formData.get("name"),
+      kind: formData.get("kind"),
+      sroScheduleNo: formData.get("sroScheduleNo"),
+      sroItemSerial: formData.get("sroItemSerial"),
+      effectiveFrom: formData.get("effectiveFrom"),
+      rate: formData.get("rate"),
+      furtherTaxRate: formData.get("furtherTaxRate"),
+      legalReference: formData.get("legalReference"),
+    });
+  } catch (error) {
+    return refusal("add tax category", error);
+  }
+  refresh();
+  return { ok: true, message: "Added." };
+}
+
+export async function setTaxRateAction(_: FormState, formData: FormData): Promise<FormState> {
+  const session = await requireTenant();
+  try {
+    await setTaxRate(session, {
+      categoryId: formData.get("categoryId"),
+      effectiveFrom: formData.get("effectiveFrom"),
+      rate: formData.get("rate"),
+      furtherTaxRate: formData.get("furtherTaxRate"),
+      legalReference: formData.get("legalReference"),
+    });
+  } catch (error) {
+    return refusal("set tax rate", error);
+  }
+  refresh();
+  return { ok: true, message: "Saved." };
+}
+
+export async function setWithholdingRateAction(_: FormState, formData: FormData): Promise<FormState> {
+  const session = await requireTenant();
+  try {
+    await setWithholdingRate(session, {
+      code: formData.get("code"),
+      effectiveFrom: formData.get("effectiveFrom"),
+      rate: formData.get("rate"),
+      rateNonAtl: formData.get("rateNonAtl"),
+      legalReference: formData.get("legalReference"),
+    });
+  } catch (error) {
+    return refusal("set withholding rate", error);
   }
   refresh();
   return { ok: true, message: "Saved." };

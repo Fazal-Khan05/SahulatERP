@@ -113,7 +113,7 @@ Fifty-two steps in nine phases. Phases finish in order; steps inside a phase mos
 
 | Step | Deliverable | Acceptance | Status |
 | --- | --- | --- | --- |
-| 5 | Currencies and dated exchange rates; tenant base currency fixed at setup | Rate lookup by date returns the latest rate on or before the date | |
+| 5 | Currencies and dated exchange rates; tenant base currency fixed at setup | Rate lookup by date returns the latest rate on or before the date | Done 2026-11-12 |
 | 6 | Tax categories, dated tax rates, withholding rules tables, seeded with 2026-27 Pakistani values (18%, 4% further, exempt, zero-rated, Third Schedule; s.153 rates; Eleventh Schedule; provincial 16/15/15/15) and an "effective from" on every row | A rate lookup for an invoice dated before a change returns the old rate | |
 | 7 | Customers and suppliers with every tax field, credit limit and days, class, price list; archive/restore; CSV import (atomic, bad-row report) | Import of 500 rows with 3 bad rows imports nothing and lists the 3 | |
 | 8 | Items, categories, units and conversions, HS code, FBR UoM code, tax category, retail price, reorder level; CSV import | Carton-to-piece conversion applies on a line entered in cartons | |

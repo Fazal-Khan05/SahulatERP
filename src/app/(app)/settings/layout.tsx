@@ -31,6 +31,7 @@ async function Tabs() {
           <TabLink href="/settings/modules">Modules</TabLink>
         </>
       ) : null}
+      {can(role, "currency.read") ? <TabLink href="/settings/currencies">Currencies</TabLink> : null}
       <TabLink href="/settings/branches">Branches</TabLink>
       {can(role, "member.read") ? <TabLink href="/settings/members">Members</TabLink> : null}
       {can(role, "file.read") ? <TabLink href="/settings/files">Files</TabLink> : null}

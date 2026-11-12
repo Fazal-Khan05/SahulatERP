@@ -101,3 +101,24 @@ Things noticed while building a step that belong to a later one, or to nobody ye
   copying the objects; keys (`<company id>/<file id>`) stay the same.
 - **The database tests take about three minutes locally** and run one file at a time, because of
   the distance to the database. CI skips them.
+
+## From Step 5
+
+- **The base currency is chosen on the Currencies screen**, by the owner, the first time they open
+  it. The setup wizard (Step 11) should ask for it during setup with the same command
+  (`setBaseCurrency`), so no company reaches its first document without one.
+- **A currency cannot be renamed, archived or removed once added**, and the base currency can
+  never change: the app has no UPDATE or DELETE on `currencies`. If a wrong code is added it just
+  stays unused. Add archiving with the pattern Step 7 sets for customers.
+- **Rates are typed in by hand.** Nothing fetches them. A daily rate from the State Bank or a
+  bank's feed would be a job for the worker.
+- **A lookup returns nothing when a currency has no rate on or before the date.** The first
+  document in a foreign currency (Step 22) must refuse to guess, and should decide whether a rate
+  that is many days old needs a warning.
+- **How a converted amount is rounded is not decided yet.** Rates keep eight decimals and money
+  four; the rounding rule belongs with the first step that converts an amount, checked by the
+  accountant.
+- **Every member can read currencies and rates in the database**, because any document in a
+  foreign currency will need them; the screen itself is for the owner, accountant and auditor.
+- **The accountant's menu has "Exchange rates"**, which opens the Currencies tab in Settings.
+  It is not in the Step 1 mock-up.

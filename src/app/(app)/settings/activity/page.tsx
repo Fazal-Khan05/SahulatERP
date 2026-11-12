@@ -20,6 +20,9 @@ const ACTION_LABELS: Record<string, string> = {
   "settings.update": "Changed the product name or logo",
   "module.update": "Switched a module",
   "file.upload": "Added a file",
+  "currency.set_base": "Chose the base currency",
+  "currency.add": "Added a currency",
+  "exchange_rate.set": "Set an exchange rate",
   "job.enqueue": "Queued background work",
 };
 

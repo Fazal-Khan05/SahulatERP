@@ -255,6 +255,22 @@ describe("navigation", () => {
     ]);
   });
 
+  it("gives the accountant the books and the exchange rates", () => {
+    const menu = navFor("accountant", state());
+    expect(labels(menu)).toEqual([
+      "Home",
+      "Needs attention",
+      "Sales invoices",
+      "Bills and payments",
+      "Bank and cash",
+      "Journals",
+      "Period close",
+      "Reports",
+      "Exchange rates",
+    ]);
+    expect(menu.find((e) => e.label === "Exchange rates")?.href).toBe("/settings/currencies");
+  });
+
   it("removes a module's entries when the module is off", () => {
     expect(labels(navFor("owner", state({ commissions: false })))).not.toContain("Commissions");
     expect(labels(navFor("salesperson", state({ commissions: false })))).toEqual(["Home", "Needs attention", "My customers", "Orders"]);

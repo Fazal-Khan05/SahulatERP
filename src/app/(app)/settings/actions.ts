@@ -5,6 +5,7 @@ import { requireTenant } from "@/lib/auth/session";
 import { UserError, logFailure } from "@/lib/errors";
 import type { FormState } from "@/lib/form-state";
 import { objectStore } from "@/lib/storage";
+import { addCurrency, setBaseCurrency, setRate } from "@/modules/currencies/commands";
 import { uploadFile } from "@/modules/files/commands";
 import { FILE_MAX_BYTES } from "@/modules/files/rules";
 import { createBranch, inviteMember, setModuleEnabled, updateBranding } from "@/modules/tenant/commands";
@@ -86,4 +87,42 @@ export async function uploadFileAction(_: FormState, formData: FormData): Promis
   }
   refresh();
   return { ok: true, message: "Added." };
+}
+
+export async function setBaseCurrencyAction(_: FormState, formData: FormData): Promise<FormState> {
+  const session = await requireTenant();
+  try {
+    await setBaseCurrency(session, { code: formData.get("code"), name: formData.get("name") });
+  } catch (error) {
+    return refusal("set base currency", error);
+  }
+  refresh();
+  return { ok: true };
+}
+
+export async function addCurrencyAction(_: FormState, formData: FormData): Promise<FormState> {
+  const session = await requireTenant();
+  try {
+    await addCurrency(session, { code: formData.get("code"), name: formData.get("name") });
+  } catch (error) {
+    return refusal("add currency", error);
+  }
+  refresh();
+  return { ok: true, message: "Added." };
+}
+
+export async function setRateAction(_: FormState, formData: FormData): Promise<FormState> {
+  const session = await requireTenant();
+  try {
+    await setRate(session, {
+      currencyId: formData.get("currencyId"),
+      date: formData.get("date"),
+      rate: formData.get("rate"),
+      source: formData.get("source"),
+    });
+  } catch (error) {
+    return refusal("set rate", error);
+  }
+  refresh();
+  return { ok: true, message: "Saved." };
 }

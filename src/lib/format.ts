@@ -21,3 +21,10 @@ export function formatDay(value: Date): string {
   const parts = Object.fromEntries(dateTime.formatToParts(value).map((p) => [p.type, p.value]));
   return `${weekday.format(value)} ${parts.day}-${parts.month}-${parts.year}`;
 }
+
+const isoDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi", year: "numeric", month: "2-digit", day: "2-digit" });
+
+/** Today in Pakistan as YYYY-MM-DD, the form a date field and the database use. */
+export function todayIso(now: Date): string {
+  return isoDay.format(now);
+}

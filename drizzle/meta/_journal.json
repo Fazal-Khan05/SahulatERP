@@ -57,6 +57,20 @@
       "when": 1794518805390,
       "tag": "0007_prices",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794520106602,
+      "tag": "0008_numbering",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794522134400,
+      "tag": "0009_numbering_lock",
+      "breakpoints": true
     }
   ]
 }

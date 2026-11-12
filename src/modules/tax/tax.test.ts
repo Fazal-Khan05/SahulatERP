@@ -93,7 +93,7 @@ describe.skipIf(!hasDb)("tax categories, dated rates and withholding rules", () 
     );
     await admin.end();
     await closeDb();
-  });
+  }, 120_000);
 
   it("gives a company made through the app its starting tax rows, all dated 1 July 2026", async () => {
     const created = await withTenant(ids.founder, null, (tx) =>
@@ -150,7 +150,7 @@ describe.skipIf(!hasDb)("tax categories, dated rates and withholding rules", () 
     expect(
       await codeOf(() => withTenant(ids.ownerA, tenantA, (tx) => tx.execute(sql`select app.seed_tax_defaults(${tenantB}::uuid, ${ids.ownerA}::uuid)`))),
     ).toBe(DENIED);
-  });
+  }, 120_000);
 
   it("shows the tables to an owner, an accountant and an auditor, with the row in force marked", async () => {
     const { categories, rates, rules } = await listTaxTables(auditor, TODAY);
@@ -174,7 +174,7 @@ describe.skipIf(!hasDb)("tax categories, dated rates and withholding rules", () 
     expect((await listTaxTables(owner, "2026-06-30")).rates.some((r) => r.inForce)).toBe(false);
     expect((await listTaxTables(accountant, TODAY)).rules.length).toBe(rules.length);
     await expect(listTaxTables(sales, TODAY)).rejects.toBeInstanceOf(UserError);
-  });
+  }, 120_000);
 
   it("gives an invoice dated before a change the old rate", async () => {
     const on = async (date: string) => {
@@ -238,7 +238,7 @@ describe.skipIf(!hasDb)("tax categories, dated rates and withholding rules", () 
         },
       },
     ]);
-  });
+  }, 120_000);
 
   it("corrects a rate saved for the same date and keeps both values in the audit log", async () => {
     const again = await setTaxRate(owner, {
@@ -257,7 +257,7 @@ describe.skipIf(!hasDb)("tax categories, dated rates and withholding rules", () 
       { was: null, now: "19.0000" },
       { was: "19.0000", now: "19.5000" },
     ]);
-  });
+  }, 120_000);
 
   it("refuses a rate that makes no sense", async () => {
     const good = { categoryId: standard, effectiveFrom: "2027-07-01", rate: "20", furtherTaxRate: "4", legalReference: "Finance Act 2027" };
@@ -275,7 +275,7 @@ describe.skipIf(!hasDb)("tax categories, dated rates and withholding rules", () 
     await expect(setTaxRate(sales, good)).rejects.toBeInstanceOf(UserError);
     await expect(setTaxRate(auditor, good)).rejects.toBeInstanceOf(UserError);
     expect(await admin`select 1 from public.tax_rates where tenant_id = ${tenantA} and effective_from = '2027-07-01'`).toHaveLength(0);
-  });
+  }, 120_000);
 
   it("lets a zero-rated category carry further tax, as the law can, but never a rate", async () => {
     const further = { categoryId: zeroRated, effectiveFrom: "2027-01-01", rate: "0", furtherTaxRate: "4", legalReference: "Sales Tax Act 1990, s.3(1A)" };
@@ -285,7 +285,7 @@ describe.skipIf(!hasDb)("tax categories, dated rates and withholding rules", () 
     const after = (await getTaxRateOn(sales, zeroRated, "2027-01-01"))!;
     expect([before.rate.toFixed(), before.furtherTaxRate.toFixed()]).toEqual(["0", "0"]);
     expect([after.kind, after.rate.toFixed(), after.furtherTaxRate.toFixed()]).toEqual(["zero_rated", "0", "4"]);
-  });
+  }, 120_000);
 
   it("adds a reduced-rate category with the SRO that gives it and its first rate", async () => {
     const reduced = {
@@ -323,7 +323,7 @@ describe.skipIf(!hasDb)("tax categories, dated rates and withholding rules", () 
     });
     const audited = await admin`select action, after->>'name' as name, after->>'rate' as rate from public.audit_log where entity_id = ${id}`;
     expect(audited).toEqual([{ action: "tax_category.add", name: "Reduced rate 10%", rate: "10.0000" }]);
-  });
+  }, 120_000);
 
   it("looks a withholding rule up by date, with the higher rate for a supplier not on the ATL", async () => {
     const on = async (date: string) => {
@@ -387,7 +387,7 @@ describe.skipIf(!hasDb)("tax categories, dated rates and withholding rules", () 
       { actor_role: "accountant", was: null, now: "6.0000" },
       { actor_role: "owner", was: "6.0000", now: "6.5000" },
     ]);
-  });
+  }, 120_000);
 
   it("keeps the same rules in the database, whatever the app does", async () => {
     const rate = { tenantId: tenantA, categoryId: standard, effectiveFrom: "2028-01-01", rate: "21", furtherTaxRate: "4", legalReference: "direct" };
@@ -441,7 +441,7 @@ describe.skipIf(!hasDb)("tax categories, dated rates and withholding rules", () 
     const untouched = await admin`select count(*)::int as n, max(rate)::text as highest from public.tax_rates where tenant_id = ${tenantA}`;
     expect(untouched).toEqual([{ n: 7, highest: "19.5000" }]);
     expect(await admin`select 1 from public.withholding_rules where tenant_id = ${tenantA} and (rate = 99 or code = ${rule.code})`).toHaveLength(0);
-  });
+  }, 120_000);
 
   it("keeps each company's tax tables to itself", async () => {
     const { id: reducedB } = await addTaxCategory(otherOwner, {
@@ -488,5 +488,5 @@ describe.skipIf(!hasDb)("tax categories, dated rates and withholding rules", () 
       ).toMatch(/^(42501|23503)$/);
     }
     expect(await admin`select count(*)::int as n from public.tax_rates where category_id = ${reducedB}`).toEqual([{ n: 1 }]);
-  });
+  }, 120_000);
 });

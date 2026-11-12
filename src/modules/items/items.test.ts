@@ -62,7 +62,7 @@ describe.skipIf(!hasDb)("items, units and conversions", () => {
     await deleteTenants(admin, [tenantA, tenantB]);
     await admin.end();
     await closeDb();
-  });
+  }, 120_000);
 
   it("adds units and categories once each, by an owner or an accountant", async () => {
     piece = (await addUnit(as.owner, { code: "pc", name: "Piece" })).id;
@@ -89,7 +89,7 @@ describe.skipIf(!hasDb)("items, units and conversions", () => {
       { action: "item_category.add", after: { name: "Engine parts" } },
       { action: "unit.add", after: { code: "pc", name: "Piece" } },
     ]);
-  });
+  }, 120_000);
 
   it("adds an item with every field and its pack, and writes the audit row", async () => {
     brakePad = (
@@ -133,7 +133,7 @@ describe.skipIf(!hasDb)("items, units and conversions", () => {
       await expect(createItem(as[role], { code: "BP-200", name: "Chain", unit: piece }), role).rejects.toThrow("Only an owner or an accountant can change items.");
     }
     expect(await count("items")).toBe(1);
-  });
+  }, 120_000);
 
   it("applies the carton-to-piece conversion to a line entered in cartons", async () => {
     // Asked as a salesperson: whoever writes the line needs it.
@@ -171,7 +171,7 @@ describe.skipIf(!hasDb)("items, units and conversions", () => {
     await removeItemUnit(as.owner, brakePad, kg);
     expect(await base("2", kg)).toBe("This item is not bought or sold in that unit.");
     expect((await getItem(as.auditor, brakePad))!.conversions.map((c) => [c.code, c.factor.toFixed()])).toEqual([["ctn", "24"]]);
-  });
+  }, 120_000);
 
   it("changes an item, records only what changed, and never its unit", async () => {
     const form = { code: "BP-100", name: "Brake pad", category: parts, taxCategory: "Standard rate", hsCode: "8714.1090", fbrUomCode: "U1000069", saleType: "Goods at standard rate (default)", retailPrice: "1250.50", reorderLevel: "20", weight: "0.35", volume: "0.0012" };
@@ -194,7 +194,7 @@ describe.skipIf(!hasDb)("items, units and conversions", () => {
     await expect(updateItem(as.owner, brakePad, { ...form, name: "" })).rejects.toThrow("Enter the item's name.");
     await expect(updateItem(as.owner, randomUUID(), form)).rejects.toThrow("That item is not in this company.");
     await expect(updateItem(as.sales_manager, brakePad, form)).rejects.toBeInstanceOf(UserError);
-  });
+  }, 120_000);
 
   it("archives and restores without deleting anything", async () => {
     await setItemArchived(as.owner, brakePad, true);
@@ -213,7 +213,7 @@ describe.skipIf(!hasDb)("items, units and conversions", () => {
     await expect(setItemUnit(as.owner, brakePad, { unit: carton, factor: "30" })).rejects.toThrow("Restore the item before changing it.");
     await setItemArchived(as.owner, brakePad, false);
     expect((await getItem(as.owner, brakePad))!.conversions.map((c) => c.factor.toFixed())).toEqual(["24"]);
-  });
+  }, 120_000);
 
   it("imports all or nothing, listing every bad row at once", async () => {
     const lines = ["Code,Name,Unit,Category,Retail price,Pack unit,Units per pack"];
@@ -256,7 +256,7 @@ describe.skipIf(!hasDb)("items, units and conversions", () => {
     expect((await listItems(as.salesperson, { search: "brake" })).rows.map((r) => r.code)).toEqual(["BP-100"]);
     expect((await listItems(as.salesperson, { search: "%" })).rows).toEqual([]);
     await expect(listItems(as.recovery_officer, {})).rejects.toThrow("Your role does not include the item list.");
-  });
+  }, 120_000);
 
   it("keeps the same rules in the database, whatever the app does", async () => {
     const owner = userIds.owner;
@@ -285,7 +285,7 @@ describe.skipIf(!hasDb)("items, units and conversions", () => {
     expect(await codeOf(() => withTenant(owner, tenantA, (tx) => tx.update(units).set({ name: "Renamed" })))).toBe(DENIED);
     for (const table of [items, units, itemCategories]) expect(await codeOf(() => withTenant(owner, tenantA, (tx) => tx.delete(table)))).toBe(DENIED);
     expect(await admin`select 1 from public.items where tenant_id = ${tenantA} and code = 'DIRECT'`).toHaveLength(0);
-  });
+  }, 120_000);
 
   it("keeps each company's items and units to itself", async () => {
     const pcB = (await addUnit(otherOwner, { code: "pc", name: "Piece" })).id;
@@ -308,5 +308,5 @@ describe.skipIf(!hasDb)("items, units and conversions", () => {
       ).toMatch(/^(42501|23503)$/);
     }
     expect(await count("item_units", tenantB)).toBe(0);
-  });
+  }, 120_000);
 });

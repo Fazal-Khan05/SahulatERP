@@ -118,7 +118,7 @@ Fifty-two steps in nine phases. Phases finish in order; steps inside a phase mos
 | 7 | Customers and suppliers with every tax field, credit limit and days, class, price list; archive/restore; CSV import (atomic, bad-row report) | Import of 500 rows with 3 bad rows imports nothing and lists the 3 | Done 2026-11-12 |
 | 8 | Items, categories, units and conversions, HS code, FBR UoM code, tax category, retail price, reorder level; CSV import | Carton-to-piece conversion applies on a line entered in cartons | Done 2026-11-13 |
 | 9 | Price lists (per list, per customer class, per customer, with validity dates) and the price-resolution rule: customer-specific > class > list > item default | Unit test table of 12 cases passes | Done 2026-11-13 |
-| 10 | Branches, warehouses, number series per document type and fiscal year, fiscal periods with lock/unlock (owner only) | Two concurrent invoice posts get consecutive numbers with no gap (test with 20 parallel requests) | |
+| 10 | Branches, warehouses, number series per document type and fiscal year, fiscal periods with lock/unlock (owner only) | Two concurrent invoice posts get consecutive numbers with no gap (test with 20 parallel requests) | Done 2026-11-13 |
 | 11 | Setup wizard (company, tax registration status, base currency, modules bundle, first branch and warehouse, chart of accounts template) | A new tenant can reach an empty inbox in under five minutes | |
 
 ### Phase 2: Ledger core

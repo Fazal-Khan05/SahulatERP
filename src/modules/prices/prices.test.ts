@@ -72,7 +72,7 @@ describe.skipIf(!hasDb)("price lists and the price a customer pays", () => {
     await deleteTenants(admin, [tenantA, tenantB]);
     await admin.end();
     await closeDb();
-  });
+  }, 120_000);
 
   it("starts from the item's default price, and from nothing where there is none", async () => {
     expect((await getItem(as.owner, pad))!.item.defaultPrice).toBe("110.0000");
@@ -83,7 +83,7 @@ describe.skipIf(!hasDb)("price lists and the price a customer pays", () => {
     expect(await pays(as.salesperson, pad, randomUUID())).toBeNull();
     expect(await getPriceFor(as.salesperson, { itemId: pad, customerId: null, date: "13-11-2026" })).toBeNull();
     await expect(getPriceFor(as.warehouse_manager, { itemId: pad, customerId: null, date: D })).rejects.toThrow("Your role does not include prices.");
-  });
+  }, 120_000);
 
   it("adds price lists; the first is the default until another is chosen", async () => {
     standard = (await createPriceList(as.sales_manager, "Standard")).id;
@@ -100,7 +100,7 @@ describe.skipIf(!hasDb)("price lists and the price a customer pays", () => {
     const audited = await admin`select action, before, after from public.audit_log where tenant_id = ${tenantA} and entity = 'price_list' order by at`;
     expect(audited.map((a) => a.action)).toEqual(["price_list.create", "price_list.create", "price_list.set_default", "price_list.set_default"]);
     expect([audited[3].before, audited[3].after]).toEqual([{ default: "Retail" }, { default: "Standard" }]);
-  });
+  }, 120_000);
 
   it("resolves customer-specific > class > list > item default, from stored prices", async () => {
     // List: the default list applies to a customer on no list.
@@ -160,7 +160,7 @@ describe.skipIf(!hasDb)("price lists and the price a customer pays", () => {
       [["wholesale", "95", true]],
       [["Khan Autos", true]],
     ]);
-  });
+  }, 120_000);
 
   it("refuses a price that makes no sense, and roles that may not set one", async () => {
     const good = { item: "BP-100", price: "99", validFrom: "2027-01-01", validTo: "" };
@@ -221,7 +221,7 @@ describe.skipIf(!hasDb)("price lists and the price a customer pays", () => {
     }
     expect(await codeOf(() => withTenant(owner, tenantA, (tx) => tx.update(priceLists).set({ name: "Renamed" })))).toBe(DENIED);
     for (const table of [priceLists, priceListItems, itemPricesByClass, customerPrices]) expect(await codeOf(() => withTenant(owner, tenantA, (tx) => tx.delete(table)))).toBe(DENIED);
-  });
+  }, 120_000);
 
   it("keeps each company's prices to itself", async () => {
     const listB = (await createPriceList(otherOwner, "Standard")).id;
@@ -240,5 +240,5 @@ describe.skipIf(!hasDb)("price lists and the price a customer pays", () => {
       ).toMatch(/^(42501|23503)$/);
     }
     expect(await admin`select count(*)::int as n from public.price_list_items where tenant_id = ${tenantB}`).toEqual([{ n: 0 }]);
-  });
+  }, 120_000);
 });

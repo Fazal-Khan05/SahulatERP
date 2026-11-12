@@ -128,7 +128,7 @@ test("an accountant reaches the tax rates from their menu and changes a withhold
   await signIn(page, accountant);
   expect(await railLabels(page)).toContain("Tax rates");
   await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Tax rates" }).click();
-  await expect(page.getByRole("navigation", { name: "Settings" }).getByRole("link")).toHaveText(["Currencies", "Tax", "Branches"]);
+  await expect(page.getByRole("navigation", { name: "Settings" }).getByRole("link")).toHaveText(["Currencies", "Tax", "Fiscal periods", "Branches"]);
 
   const change = page.locator("form").filter({ has: page.getByRole("button", { name: "Save withholding rate" }) });
   await change.getByLabel("Rule").selectOption({ label: "Goods, from a company" });

@@ -61,6 +61,13 @@ describe("roles", () => {
     expect(allowed("supplier.manage")).toEqual(["owner", "accountant"]);
   });
 
+  it("lets only an owner open a fiscal year, lock a period or add a warehouse; the books can read the periods", () => {
+    const allowed = (permission: Parameters<typeof can>[1]) => MEMBER_ROLES.filter((role) => can(role, permission));
+    expect(allowed("period.manage")).toEqual(["owner"]);
+    expect(allowed("warehouse.create")).toEqual(["owner"]);
+    expect(allowed("period.read")).toEqual(["owner", "accountant", "auditor"]);
+  });
+
   it("opens prices to whoever sells or keeps the books; an owner, an accountant or a sales manager sets them", () => {
     const allowed = (permission: Parameters<typeof can>[1]) => MEMBER_ROLES.filter((role) => can(role, permission));
     expect(allowed("price.read")).toEqual(["owner", "accountant", "sales_manager", "salesperson", "auditor"]);

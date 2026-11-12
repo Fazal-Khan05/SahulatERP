@@ -48,6 +48,10 @@ const ACTION_LABELS: Record<string, string> = {
   "price_list.create": "Added a price list",
   "price_list.set_default": "Chose the default price list",
   "price.set": "Set a price",
+  "warehouse.create": "Added a warehouse",
+  "fiscal_year.open": "Opened a fiscal year",
+  "fiscal_period.lock": "Locked a period",
+  "fiscal_period.unlock": "Unlocked a period",
   "job.enqueue": "Queued background work",
 };
 

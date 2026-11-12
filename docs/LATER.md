@@ -327,3 +327,37 @@ Things noticed while building a step that belong to a later one, or to nobody ye
 - **A comment in `drizzle/0007_prices.sql` says the warehouse has no business with prices**, yet
   a warehouse manager reads an item's selling price, which sits on the item. The migration is
   applied and cannot be edited; the sentence above is the accurate one.
+
+## From Step 10
+
+- **`takeDocumentNumber` (`src/modules/numbering/commands.ts`) is how a document gets its
+  number**, inside the transaction that writes it. It asks the database function
+  `app.next_document_number`; nothing in the app computes a number. The posting engine (Step 13)
+  and every document step call it at the moment a document is submitted, not when a draft is
+  saved, so drafts that are thrown away leave no gap.
+- **A document's date must fall in an open, unlocked fiscal period** or it gets no number. The
+  posting engine must make the same check for journals that carry no document number.
+- **Numbers look like SI-2627-00001** (kind, fiscal year, counter), chosen by the founder. The
+  letters for each kind are fixed in `DOCUMENT_TYPES` (`src/modules/numbering/rules.ts`); a company
+  cannot change them. The counter grows past five digits rather than wrap.
+- **The fiscal year's first month is chosen once**, when the first year is opened; every later
+  year follows the last. Periods are whole calendar months. A short first year or a change of
+  year-end is not supported.
+- **Locking a period stops new document numbers in it.** It does not yet stop edits to drafts or
+  postings without a number; Step 13 enforces the lock on journals.
+- **Only an owner opens a fiscal year, locks or unlocks a period, or adds a warehouse.** An
+  accountant reads the periods and counters.
+- **Warehouses and branches cannot be renamed, archived or removed.** A warehouse belongs to one
+  branch, and members limited to some branches see only those branches' warehouses.
+- **Nobody is reminded to open the next fiscal year.** On the first day of an unopened year no
+  document can be numbered. The inbox ("Needs attention") should warn the owner a month ahead.
+- **For the posting engine (Step 13), from the review of the number function:** a transaction
+  that takes numbers for two kinds of document must always take them in the same order, or two
+  such transactions can deadlock (one is rolled back; no number is lost). A caller running at
+  REPEATABLE READ or SERIALIZABLE gets a serialization failure under contention and must retry;
+  the app runs at READ COMMITTED. Nothing yet ties a taken number to a document row: the
+  document tables should carry a unique document number per company.
+- **The first fiscal year cannot be moved once opened.** It must start within two years before
+  or one year after today; a wrong one needs the database's undo script.
+- **The Fiscal periods screen shows each counter's next number formatted by the app** (display
+  only); the number a document gets always comes from the database function.

@@ -8,7 +8,9 @@ import { objectStore } from "@/lib/storage";
 import { addCurrency, setBaseCurrency, setRate } from "@/modules/currencies/commands";
 import { uploadFile } from "@/modules/files/commands";
 import { FILE_MAX_BYTES } from "@/modules/files/rules";
+import { openFiscalYear, setPeriodLocked } from "@/modules/numbering/commands";
 import { addTaxCategory, setTaxRate, setWithholdingRate } from "@/modules/tax/commands";
+import { createWarehouse } from "@/modules/warehouses/commands";
 import { createBranch, inviteMember, setModuleEnabled, updateBranding } from "@/modules/tenant/commands";
 import { LOGO_MAX_BYTES } from "@/modules/tenant/rules";
 
@@ -180,4 +182,38 @@ export async function setWithholdingRateAction(_: FormState, formData: FormData)
   }
   refresh();
   return { ok: true, message: "Saved." };
+}
+
+export async function createWarehouseAction(_: FormState, formData: FormData): Promise<FormState> {
+  const session = await requireTenant();
+  try {
+    await createWarehouse(session, { name: formData.get("name"), branchId: formData.get("branchId") });
+  } catch (error) {
+    return refusal("create warehouse", error);
+  }
+  refresh();
+  return { ok: true };
+}
+
+export async function openFiscalYearAction(_: FormState, formData: FormData): Promise<FormState> {
+  const session = await requireTenant();
+  try {
+    await openFiscalYear(session, { month: formData.get("month"), year: formData.get("year") });
+  } catch (error) {
+    return refusal("open fiscal year", error);
+  }
+  refresh();
+  return { ok: true };
+}
+
+/** Locks or unlocks a period. The period and the direction are bound to the action; the command checks both. */
+export async function setPeriodLockedAction(periodId: string, locked: boolean): Promise<FormState> {
+  const session = await requireTenant();
+  try {
+    await setPeriodLocked(session, periodId, locked === true);
+  } catch (error) {
+    return refusal("lock period", error);
+  }
+  refresh();
+  return {};
 }

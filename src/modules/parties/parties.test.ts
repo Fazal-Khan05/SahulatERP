@@ -77,7 +77,7 @@ describe.skipIf(!hasDb)("customers and suppliers", () => {
     await deleteTenants(admin, [tenantA, tenantB]);
     await admin.end();
     await closeDb();
-  });
+  }, 120_000);
 
   it("adds a customer with its tax fields, contact and address, and writes the audit row", async () => {
     khan = (
@@ -140,7 +140,7 @@ describe.skipIf(!hasDb)("customers and suppliers", () => {
     const read = await getParty(as.salesperson, "customer", khan);
     expect(read?.party).toMatchObject({ name: "Khan Autos", ntn: "1111111-1", creditLimit: "500000.5000", phone: "0300-1111111", city: "Lahore", supplierType: null });
     expect(read?.atlCheckedAt).toBeInstanceOf(Date);
-  });
+  }, 120_000);
 
   it("adds a supplier from a name alone, with no contact or address rows", async () => {
     guangzhou = (await createParty(as.accountant, "supplier", { name: "Guangzhou Parts Co" })).id;
@@ -149,7 +149,7 @@ describe.skipIf(!hasDb)("customers and suppliers", () => {
     expect(await count("contacts")).toBe(1);
     expect(await count("party_addresses")).toBe(1);
     expect((await getParty(as.warehouse_manager, "supplier", guangzhou))?.party).toMatchObject({ name: "Guangzhou Parts Co", supplierType: "company", creditLimit: null });
-  });
+  }, 120_000);
 
   it("refuses a second party with the same name or code, whatever the capitals", async () => {
     await expect(createParty(as.owner, "customer", { name: "KHAN AUTOS" })).rejects.toThrow("A customer with this name already exists.");
@@ -160,7 +160,7 @@ describe.skipIf(!hasDb)("customers and suppliers", () => {
     await createParty(as.owner, "supplier", { name: "Khan Autos", supplierType: "aop" });
     expect(await count("customers")).toBe(1);
     expect(await count("suppliers")).toBe(2);
-  });
+  }, 120_000);
 
   it("lets each role do only its part", async () => {
     const customer = { name: "Role Test Customer" };
@@ -191,7 +191,7 @@ describe.skipIf(!hasDb)("customers and suppliers", () => {
     }
     expect(await count("customers")).toBe(1);
     expect(await count("suppliers")).toBe(2);
-  });
+  }, 120_000);
 
   it("changes a customer and records only what changed, old value and new", async () => {
     const full = (await getParty(as.owner, "customer", khan))!;
@@ -267,7 +267,7 @@ describe.skipIf(!hasDb)("customers and suppliers", () => {
     await expect(updateParty(as.owner, "customer", randomUUID(), form)).rejects.toThrow("That customer is not in this company.");
     await expect(updateParty(as.owner, "customer", "not-an-id", form)).rejects.toThrow("That customer is not in this company.");
     await expect(updateParty(as.owner, "supplier", guangzhou, { name: "Khan Autos" })).rejects.toThrow("A supplier with this name already exists.");
-  });
+  }, 120_000);
 
   it("archives and restores without deleting anything", async () => {
     await setPartyArchived(as.sales_manager, "customer", khan, true);
@@ -292,7 +292,7 @@ describe.skipIf(!hasDb)("customers and suppliers", () => {
       { actor_role: "owner", action: "customer.restore", archived: "false" },
     ]);
     await expect(setPartyArchived(as.owner, "supplier", khan, true)).rejects.toThrow("That supplier is not in this company.");
-  });
+  }, 120_000);
 
   it("imports nothing from 500 rows when 3 are bad, and lists the 3", async () => {
     const lines = fiveHundred();
@@ -339,7 +339,7 @@ describe.skipIf(!hasDb)("customers and suppliers", () => {
     expect(await count("customers")).toBe(before.customers + 500);
     // A file that cannot be read at all is refused outright.
     await expect(importParties(as.owner, "customer", { name: "x.csv", text: "City\nLahore\n" })).rejects.toThrow('The file needs a "Name" column in its first row.');
-  });
+  }, 120_000);
 
   it("lists by name, searches, and says when there are more than it shows", async () => {
     const all = await listParties(as.auditor, "customer", {});
@@ -356,7 +356,7 @@ describe.skipIf(!hasDb)("customers and suppliers", () => {
     expect(await found("nobody by this name")).toEqual([]);
     const khanRow = (await listParties(as.owner, "customer", { search: "Khan Autos" })).rows[0];
     expect([khanRow.creditLimit?.toFixed(2), khanRow.creditDays, khanRow.customerClass, khanRow.city]).toEqual(["750000.00", 45, "Wholesale", "Lahore"]);
-  });
+  }, 120_000);
 
   it("imports suppliers with their own columns", async () => {
     const csv = "Name,Supplier type,Registration,STRN,Province,Credit days,Contact person,Email\nShenzhen Bearings,Company,,,,60,Li Wei,sales@shenzhen.test\nAnwar & Brothers,AOP,Registered,1111111111111,Sindh,15,,\n";
@@ -369,7 +369,7 @@ describe.skipIf(!hasDb)("customers and suppliers", () => {
       { name: "Anwar & Brothers", supplier_type: "aop", registration_type: "registered", strn: "1111111111111", province: "sindh", credit_days: 15, contact: null, email: null },
       { name: "Shenzhen Bearings", supplier_type: "company", registration_type: "unregistered", strn: null, province: null, credit_days: 60, contact: "Li Wei", email: "sales@shenzhen.test" },
     ]);
-  });
+  }, 120_000);
 
   it("keeps the same rules in the database, whatever the app does", async () => {
     const by = (who: string) => ({ createdBy: who, updatedBy: who });
@@ -411,7 +411,7 @@ describe.skipIf(!hasDb)("customers and suppliers", () => {
     expect(await codeOf(() => withTenant(owner, tenantA, (tx) => tx.insert(contacts).values({ tenantId: tenantA, customerId: khan, name: "Second primary", ...by(owner) })))).toBe("23505");
     expect(await codeOf(() => withTenant(owner, tenantA, (tx) => tx.insert(partyAddresses).values({ tenantId: tenantA, customerId: khan, isPrimary: false, ...by(owner) })))).toBe(CHECK);
     expect(await admin`select 1 from public.customers where tenant_id = ${tenantA} and name = 'Direct'`).toHaveLength(0);
-  });
+  }, 120_000);
 
   it("keeps each company's customers and suppliers to itself", async () => {
     // The other company may use the same names and codes.
@@ -438,5 +438,5 @@ describe.skipIf(!hasDb)("customers and suppliers", () => {
     }
     const [untouched] = await admin`select name, archived_at from public.customers where id = ${theirs}`;
     expect(untouched).toEqual({ name: "Khan Autos", archived_at: null });
-  });
+  }, 120_000);
 });

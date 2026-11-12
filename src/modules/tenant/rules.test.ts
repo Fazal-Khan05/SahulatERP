@@ -53,6 +53,14 @@ describe("roles", () => {
     }
   });
 
+  it("opens customers to sales, recovery and the books, and suppliers to the books and the warehouse", () => {
+    const allowed = (permission: Parameters<typeof can>[1]) => MEMBER_ROLES.filter((role) => can(role, permission));
+    expect(allowed("customer.read")).toEqual(["owner", "accountant", "sales_manager", "salesperson", "recovery_officer", "auditor"]);
+    expect(allowed("customer.manage")).toEqual(["owner", "accountant", "sales_manager"]);
+    expect(allowed("supplier.read")).toEqual(["owner", "accountant", "warehouse_manager", "auditor"]);
+    expect(allowed("supplier.manage")).toEqual(["owner", "accountant"]);
+  });
+
   it("shows the tax rates to an owner, an accountant and an auditor; only the first two change them", () => {
     for (const role of MEMBER_ROLES) {
       expect(can(role, "tax.read")).toBe(role === "owner" || role === "accountant" || role === "auditor");
@@ -222,8 +230,10 @@ describe("navigation", () => {
       "Home",
       "Needs attention",
       "Sales",
+      "Customers",
       "Collections",
       "Purchases and imports",
+      "Suppliers",
       "Stock",
       "Cash and bank",
       "Commissions",
@@ -231,6 +241,14 @@ describe("navigation", () => {
       "Settings",
     ]);
     expect(navFor("owner", state()).find((e) => e.label === "Settings")?.href).toBe("/settings");
+    expect(navFor("owner", state()).find((e) => e.label === "Customers")?.href).toBe("/customers");
+    expect(navFor("owner", state()).find((e) => e.label === "Suppliers")?.href).toBe("/suppliers");
+    // The lists follow their modules: no Sales, no Customers; no Purchases, no Suppliers.
+    expect(labels(navFor("owner", state({ sales: false, collections: false, commissions: false })))).not.toContain("Customers");
+    expect(labels(navFor("owner", state({ purchasing: false, imports: false })))).not.toContain("Suppliers");
+    expect(navFor("salesperson", state()).find((e) => e.label === "My customers")?.href).toBe("/customers");
+    expect(labels(navFor("sales_manager", state()))).toContain("Customers");
+    expect(labels(navFor("sales_manager", state()))).not.toContain("Suppliers");
   });
 
   it("gives each working role its own short menu", () => {
@@ -268,7 +286,9 @@ describe("navigation", () => {
       "Home",
       "Needs attention",
       "Sales invoices",
+      "Customers",
       "Bills and payments",
+      "Suppliers",
       "Bank and cash",
       "Journals",
       "Period close",

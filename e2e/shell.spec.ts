@@ -14,8 +14,10 @@ const OWNER_MENU = [
   "Home",
   "Needs attention",
   "Sales",
+  "Customers",
   "Collections",
   "Purchases and imports",
+  "Suppliers",
   "Stock",
   "Cash and bank",
   "Commissions",
@@ -71,7 +73,7 @@ test("the owner gets the shell: their menu, an empty inbox and their company in 
   expect(await railLabels(page)).toEqual(OWNER_MENU);
   // Only screens that exist are links.
   const rail = page.getByRole("navigation", { name: "Main" });
-  await expect(rail.getByRole("link")).toHaveText(["Home", "Needs attention", "Settings"]);
+  await expect(rail.getByRole("link")).toHaveText(["Home", "Needs attention", "Customers", "Suppliers", "Settings"]);
   await expect(rail.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
 
   await expect(page.getByText("Nothing needs your attention.").filter({ visible: true })).toHaveCount(1);
@@ -149,6 +151,11 @@ test("the dependency rules refuse a switch that would break another module", asy
   const without = await railLabels(page);
   expect(without).not.toContain("Purchases");
   expect(without).not.toContain("Purchases and imports");
+  // The supplier list belongs to Purchases: it leaves the menu and its screen says why.
+  expect(without).not.toContain("Suppliers");
+  await page.goto("/suppliers");
+  await expect(page.getByText("Suppliers are part of Purchases, which is switched off for this company.")).toBeVisible();
+  await page.goto("/settings/modules");
 
   // Imports cannot come back before Purchases.
   await moduleRow(page, "imports").getByRole("button", { name: "Turn on" }).click();

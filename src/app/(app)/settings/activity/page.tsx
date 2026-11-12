@@ -26,6 +26,16 @@ const ACTION_LABELS: Record<string, string> = {
   "tax_category.add": "Added a tax category",
   "tax_rate.set": "Set a sales tax rate",
   "withholding_rule.set": "Set a withholding rate",
+  "customer.create": "Added a customer",
+  "customer.update": "Changed a customer",
+  "customer.archive": "Archived a customer",
+  "customer.restore": "Restored a customer",
+  "customer.import": "Imported customers",
+  "supplier.create": "Added a supplier",
+  "supplier.update": "Changed a supplier",
+  "supplier.archive": "Archived a supplier",
+  "supplier.restore": "Restored a supplier",
+  "supplier.import": "Imported suppliers",
   "job.enqueue": "Queued background work",
 };
 

@@ -115,7 +115,7 @@ Fifty-two steps in nine phases. Phases finish in order; steps inside a phase mos
 | --- | --- | --- | --- |
 | 5 | Currencies and dated exchange rates; tenant base currency fixed at setup | Rate lookup by date returns the latest rate on or before the date | Done 2026-11-12 |
 | 6 | Tax categories, dated tax rates, withholding rules tables, seeded with 2026-27 Pakistani values (18%, 4% further, exempt, zero-rated, Third Schedule; s.153 rates; Eleventh Schedule; provincial 16/15/15/15) and an "effective from" on every row | A rate lookup for an invoice dated before a change returns the old rate | Done 2026-11-12 |
-| 7 | Customers and suppliers with every tax field, credit limit and days, class, price list; archive/restore; CSV import (atomic, bad-row report) | Import of 500 rows with 3 bad rows imports nothing and lists the 3 | |
+| 7 | Customers and suppliers with every tax field, credit limit and days, class, price list; archive/restore; CSV import (atomic, bad-row report) | Import of 500 rows with 3 bad rows imports nothing and lists the 3 | Done 2026-11-12 |
 | 8 | Items, categories, units and conversions, HS code, FBR UoM code, tax category, retail price, reorder level; CSV import | Carton-to-piece conversion applies on a line entered in cartons | |
 | 9 | Price lists (per list, per customer class, per customer, with validity dates) and the price-resolution rule: customer-specific > class > list > item default | Unit test table of 12 cases passes | |
 | 10 | Branches, warehouses, number series per document type and fiscal year, fiscal periods with lock/unlock (owner only) | Two concurrent invoice posts get consecutive numbers with no gap (test with 20 parallel requests) | |

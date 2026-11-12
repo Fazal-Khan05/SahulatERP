@@ -186,3 +186,60 @@ Things noticed while building a step that belong to a later one, or to nobody ye
   not do this yet.
 - **The Activity screen shows only the new values of a change**, and leaves out anything empty.
   The audit row itself holds the old and new values.
+
+## From Step 7
+
+- **A customer or supplier has one contact and one address on its screen.** The `contacts` and
+  `party_addresses` tables can hold more (one is marked primary); the screens for more than one
+  arrive with the documents that need them, such as a delivery address on an order.
+- **`customers.price_list_id` has no foreign key and no field on the screen.** Step 9 creates
+  price lists, adds the foreign key and the column grant, and puts the choice on the customer.
+- **The customer class is free text.** Two spellings are two classes. Step 9 prices by class, so
+  it should turn the classes in use into a list to pick from.
+- **A salesperson's "My customers" shows every customer.** Nothing ties a customer to a
+  salesperson yet; that comes with commissions and assignments (Steps 18 and 37). Salespeople can
+  read customers but not add them.
+- **Recovery officers and warehouse managers can read their list but have no menu entry for it.**
+  Recovery officers read customers and warehouse managers read suppliers, in the database and by
+  address (`/customers`, `/suppliers`); their menus get an entry when their own screens need one.
+- **The Active Taxpayers List status is typed in by hand.** The time it was last changed is kept
+  as the time it was checked. The automatic check against FBR is Step 45.
+- **The credit limit is only stored.** Checking an order against it, with the owner's override,
+  is Step 18; a customer's balance does not exist yet.
+- **Names must be unique within customers and within suppliers**, whatever the capitals, and an
+  archived party still holds its name and code. Two real parties with the same name need
+  something added to tell them apart, such as the city.
+- **Import adds only.** It cannot update customers that already exist; a file that names one is
+  refused. Updating from a file, and a file to download as a starting point, would help the
+  migration from Fast Accounts (Step 49).
+- **Import reads comma-separated UTF-8 files up to 2,000 rows.** Excel's "CSV UTF-8" works. A
+  file in an older encoding is refused with that advice when it holds any accented letter; a
+  semicolon-separated file is refused as having unknown columns.
+- **Lists show the first 200 and ask the reader to search.** Paging, sorting, a column chooser and
+  export (UI principle 8) are not built; the same pattern will serve every list.
+- **A supplier has no default currency or bank details.** Purchase orders in a foreign currency
+  (Step 24) and supplier payments (Step 26) will want them.
+- **Phone numbers and CNICs are in the audit log** when a party is created or one of those fields
+  changes, readable by the owner and the auditor. Nothing writes them to the server's logs.
+- **Amounts are shown with lakh and crore grouping by `formatAmount` in `src/lib/money.ts`**, and
+  `parseAmount` reads them without commas. Later screens should use these.
+- **A module that is off closes the customer or supplier screens and their forms, not the data.**
+  Customers go with Sales and suppliers with Purchases: the menu entry leaves, the screens say the
+  module is off and the actions refuse. The commands and the database policies do not look at the
+  module switches.
+- **Database tightening held for the next migration that touches these tables** (Step 9 adds the
+  price list foreign key). The policies do not pin `archived_by` to the person archiving, and an
+  insert may set `price_list_id` or `created_at`; only the app holds the role that could, and the
+  app never does.
+- **A form opened before someone else's change is refused on save**, with a message to reload.
+  The same guard belongs on every edit form to come.
+- **An imported party has no audit row of its own.** The import's one audit row lists the ids of
+  everything it made.
+- **A search travels in the page address** (`/customers?q=...`), so a phone number searched for
+  can sit in the hosting platform's request logs. The app's own logs never hold it.
+- **A registered party needs an NTN, an STRN or a CNIC.** Check with the accountant whether a
+  registered buyer can be recorded on a CNIC alone.
+- **Imports that overlap can deadlock.** Two people importing files that share names in a
+  different order: one gets "That did not work. Please try again." and nothing of theirs is kept.
+- **The local throwaway database must be created as UTF-8** (`initdb -E UTF8`); otherwise names
+  outside ASCII are counted and compared differently from Supabase.

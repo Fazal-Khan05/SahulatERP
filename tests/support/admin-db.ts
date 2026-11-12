@@ -21,6 +21,10 @@ export async function deleteTenants(sql: AdminSql, tenantIds: string[]): Promise
   if (tenantIds.length === 0) return;
   await sql.begin(async (tx) => {
     await tx`delete from public.audit_log where tenant_id = any(${tenantIds})`;
+    await tx`delete from public.contacts where tenant_id = any(${tenantIds})`;
+    await tx`delete from public.party_addresses where tenant_id = any(${tenantIds})`;
+    await tx`delete from public.customers where tenant_id = any(${tenantIds})`;
+    await tx`delete from public.suppliers where tenant_id = any(${tenantIds})`;
     await tx`delete from public.withholding_rules where tenant_id = any(${tenantIds})`;
     await tx`delete from public.tax_rates where tenant_id = any(${tenantIds})`;
     await tx`delete from public.tax_categories where tenant_id = any(${tenantIds})`;

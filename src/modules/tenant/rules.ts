@@ -43,6 +43,10 @@ const PERMISSIONS = {
   "currency.set_base": ["owner"],
   "tax.read": ["owner", "accountant", "auditor"],
   "tax.manage": ["owner", "accountant"],
+  "customer.read": ["owner", "accountant", "auditor", "sales_manager", "salesperson", "recovery_officer"],
+  "customer.manage": ["owner", "accountant", "sales_manager"],
+  "supplier.read": ["owner", "accountant", "auditor", "warehouse_manager"],
+  "supplier.manage": ["owner", "accountant"],
 } as const satisfies Record<string, readonly MemberRole[]>;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -277,8 +281,10 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
     case "owner":
       return [
         ["Sales", "sales"],
+        ["Customers", "sales", "/customers"],
         ["Collections", "collections"],
         [purchases, "purchasing"],
+        ["Suppliers", "purchasing", "/suppliers"],
         ["Stock", "inventory"],
         ["Cash and bank", "cash_bank"],
         ["Commissions", "commissions"],
@@ -289,8 +295,10 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
     case "auditor":
       return [
         ["Sales", "sales"],
+        ["Customers", "sales", "/customers"],
         ["Collections", "collections"],
         [purchases, "purchasing"],
+        ["Suppliers", "purchasing", "/suppliers"],
         ["Stock", "inventory"],
         ["Cash and bank", "cash_bank"],
         ["Commissions", "commissions"],
@@ -301,7 +309,9 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
     case "accountant":
       return [
         ["Sales invoices", "sales"],
+        ["Customers", "sales", "/customers"],
         ["Bills and payments", "purchasing"],
+        ["Suppliers", "purchasing", "/suppliers"],
         ["Bank and cash", "cash_bank"],
         ["Journals", null],
         ["Period close", null],
@@ -313,6 +323,7 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
     case "sales_manager":
       return [
         ["Sales", "sales"],
+        ["Customers", "sales", "/customers"],
         ["Collections", "collections"],
         ["Stock", "inventory"],
         ["Commissions", "commissions"],
@@ -320,7 +331,7 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
       ];
     case "salesperson":
       return [
-        ["My customers", "sales"],
+        ["My customers", "sales", "/customers"],
         ["Orders", "sales"],
         ["My commission", "commissions"],
       ];

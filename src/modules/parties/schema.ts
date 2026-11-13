@@ -75,6 +75,8 @@ export const customers = pgTable(
     check("customers_atl_checked", sql`(${t.atlStatus} = 'unknown') = (${t.atlCheckedAt} is null)`),
     check("customers_credit_days_range", sql`${t.creditDays} between 0 and 365`),
     check("customers_credit_limit_not_negative", sql`${t.creditLimit} >= 0`),
+    // "Not a number" passes ">= 0"; the upper bound refuses it.
+    check("customers_credit_limit_sane", sql`${t.creditLimit} < 1e16`),
     check("customers_class_length", sql`char_length(btrim(${t.customerClass})) between 1 and 40`),
     check("customers_archived_pair", sql`(${t.archivedAt} is null) = (${t.archivedBy} is null)`),
   ],

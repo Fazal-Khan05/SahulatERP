@@ -1,7 +1,7 @@
 import "server-only";
 import Decimal from "decimal.js";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
-import { isUuid, withTenant } from "@/db";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { isUuid, withTenant, type Tx } from "@/db";
 import { UserError } from "@/lib/errors";
 import { isIsoDate } from "@/modules/currencies/rules";
 import { items } from "@/modules/items/schema";
@@ -163,4 +163,44 @@ export async function getPriceFor(
     const exact = (rows: { price: string; validFrom: string; validTo: string | null }[]) => rows.map((row) => ({ ...row, price: new Decimal(row.price) }));
     return resolvePrice({ customer: exact(own), class: exact(byClass), list: exact(onList), itemDefault: item.defaultPrice === null ? null : new Decimal(item.defaultPrice) }, date);
   });
+}
+
+/**
+ * The price a customer pays for one of each item's own unit on a date, for many items at once,
+ * inside a transaction the caller holds: what a sales document's lines ask. An item with no
+ * price at any level is simply absent; the line must then ask, never guess.
+ */
+export async function selectPricesFor(
+  tx: Tx,
+  tenantId: string,
+  query: { customerId: string; itemIds: readonly string[]; date: string },
+): Promise<Map<string, { price: Decimal; source: PriceSource }>> {
+  const found = new Map<string, { price: Decimal; source: PriceSource }>();
+  const itemIds = [...new Set(query.itemIds)].filter(isUuid);
+  if (itemIds.length === 0 || !isUuid(query.customerId) || !isIsoDate(query.date)) return found;
+  const [[customer], [defaultList], itemRows] = await Promise.all([
+    tx.select({ customerClass: customers.customerClass, priceListId: customers.priceListId }).from(customers).where(and(eq(customers.tenantId, tenantId), eq(customers.id, query.customerId))),
+    tx.select({ id: priceLists.id }).from(priceLists).where(and(eq(priceLists.tenantId, tenantId), eq(priceLists.isDefault, true))),
+    tx.select({ id: items.id, defaultPrice: items.defaultPrice }).from(items).where(and(eq(items.tenantId, tenantId), inArray(items.id, itemIds))),
+  ]);
+  if (!customer) return found;
+  const listId = customer.priceListId ?? defaultList?.id ?? null;
+  const columns = (t: typeof priceListItems | typeof itemPricesByClass | typeof customerPrices) => ({ itemId: t.itemId, price: t.price, validFrom: t.validFrom, validTo: t.validTo });
+  const [own, byClass, onList] = await Promise.all([
+    tx.select(columns(customerPrices)).from(customerPrices).where(and(eq(customerPrices.tenantId, tenantId), eq(customerPrices.customerId, query.customerId), inArray(customerPrices.itemId, itemIds))),
+    !customer.customerClass
+      ? Promise.resolve([])
+      : tx
+          .select(columns(itemPricesByClass))
+          .from(itemPricesByClass)
+          .where(and(eq(itemPricesByClass.tenantId, tenantId), inArray(itemPricesByClass.itemId, itemIds), sql`lower(${itemPricesByClass.customerClass}) = lower(${customer.customerClass})`)),
+    listId === null ? Promise.resolve([]) : tx.select(columns(priceListItems)).from(priceListItems).where(and(eq(priceListItems.tenantId, tenantId), eq(priceListItems.priceListId, listId), inArray(priceListItems.itemId, itemIds))),
+  ]);
+  const of = (rows: { itemId: string; price: string; validFrom: string; validTo: string | null }[], itemId: string) =>
+    rows.filter((row) => row.itemId === itemId).map((row) => ({ price: new Decimal(row.price), validFrom: row.validFrom, validTo: row.validTo }));
+  for (const item of itemRows) {
+    const resolved = resolvePrice({ customer: of(own, item.id), class: of(byClass, item.id), list: of(onList, item.id), itemDefault: item.defaultPrice === null ? null : new Decimal(item.defaultPrice) }, query.date);
+    if (resolved) found.set(item.id, { price: resolved.price, source: resolved.source });
+  }
+  return found;
 }

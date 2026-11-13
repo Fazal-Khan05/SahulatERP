@@ -218,6 +218,9 @@ describe.skipIf(!hasDb)("customers and suppliers", () => {
     await updateParty(as.accountant, "customer", khan, form);
     expect(await admin`select 1 from public.audit_log where entity_id = ${khan} and action = 'customer.update'`).toHaveLength(0);
 
+    // The credit limit is the owner's to change; everything else an accountant may change too.
+    await expect(updateParty(as.accountant, "customer", khan, { ...form, creditLimit: "750000", creditDays: "45", phone: "0321-2222222", address: "", city: "" })).rejects.toThrow("Only the owner changes a customer's credit limit.");
+    await updateParty(as.owner, "customer", khan, { ...form, creditLimit: "750000" });
     await updateParty(as.accountant, "customer", khan, { ...form, creditLimit: "750000", creditDays: "45", phone: "0321-2222222", address: "", city: "" });
     const [row] = await admin`
       select c.credit_limit::text, c.credit_days, c.updated_by, c.created_by, c.atl_checked_at, k.phone, k.updated_by as contact_updated_by,
@@ -234,11 +237,11 @@ describe.skipIf(!hasDb)("customers and suppliers", () => {
     });
     // The status did not change, so the time it was checked did not move.
     expect(new Date(row.atl_checked_at as string).getTime()).toBe(full.atlCheckedAt!.getTime());
-    const [audited] = await admin`select actor_role, before, after from public.audit_log where entity_id = ${khan} and action = 'customer.update'`;
+    const [audited] = await admin`select actor_role, before, after from public.audit_log where entity_id = ${khan} and action = 'customer.update' and actor_role = 'accountant'`;
     expect(audited).toEqual({
       actor_role: "accountant",
-      before: { creditLimit: "500000.5000", creditDays: 30, phone: "0300-1111111", address: "12 Circular Road", city: "Lahore" },
-      after: { creditLimit: "750000.0000", creditDays: 45, phone: "0321-2222222", address: null, city: null },
+      before: { creditDays: 30, phone: "0300-1111111", address: "12 Circular Road", city: "Lahore" },
+      after: { creditDays: 45, phone: "0321-2222222", address: null, city: null },
     });
 
     // A status change moves the check time; back to unknown clears it. An address typed again comes back.

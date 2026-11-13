@@ -265,6 +265,13 @@ Things noticed while building a step that belong to a later one, or to nobody ye
 - **An item with no tax category is charged the standard rate** at a company registered for
   sales tax (decided 2026-11-13). The invoice shows the tax, so a wrong one is seen and put
   right on the item.
+- **A salesperson may change a price or give a discount on their own** (decided 2026-11-13).
+  The document shows the list price beside the price charged, and the audit log keeps who
+  charged what. A cap on the discount can be added later; nothing limits it now.
+- **Stock never goes below zero** (decided 2026-11-13). A delivery that asks for more than the
+  system shows in stock is refused; the stock is entered first.
+- **Salespeople may issue sales invoices** (decided 2026-11-13), as may the owner, an
+  accountant and a sales manager. Every invoice is logged.
 - **Recommended options are accepted without asking** while the founder is away, including
   applying additive migrations to the dev database and pushing a step once every check passes.
   Anything destructive, or a choice with no clear recommendation, still waits for him.
@@ -689,3 +696,76 @@ Things noticed while building a step that belong to a later one, or to nobody ye
 - **A company that registers for sales tax later** still cannot say so: the setup answers
   cannot be changed. It needs a dated record, so that documents before the date carry no tax.
 
+
+## From Step 18
+
+- **One table holds every sales document** (`sales_documents`, with `sales_lines`,
+  `sales_line_salespeople` and `sales_document_links`). Its `kind` already allows a delivery, an
+  invoice and a credit note, but only a quotation and an order can be written; Steps 19 to 21
+  open the others. The buyer's details and FBR's fields are on the table from the start.
+- **A submitted document is never edited.** A wrong order is cancelled, with a reason, and
+  written again. Changing an order after it is submitted (an amendment that keeps the number)
+  is not built.
+- **The credit limit is checked when a sales order is submitted, and only then.** What counts
+  against the limit is what the books say the customer owes (trade receivables less any advance
+  from the customer), plus every submitted order that is not cancelled, plus the order itself.
+  Until invoices exist an order counts in full for ever; **Step 20 must take the invoiced part
+  of an order out** (it is then in the receivable) by replacing `app.customer_credit`. Nothing
+  closes an order that will never be delivered except cancelling it.
+- **A limit of zero means every order needs the owner; no limit means no check.** A quotation
+  is never checked. An invoice or a delivery is not checked again (Steps 19 and 20 decide
+  whether they should be).
+- **Only an owner changes the credit limit of a customer that already exists**, in the app and
+  in the database: whoever could move the limit could lift it, sell, and put it back. Whoever
+  adds a customer (an owner, an accountant or a sales manager) still sets its first limit, and a
+  blank limit means no check. **The founder should confirm this**: the stricter choice is that
+  a customer added by anyone but the owner starts with a limit of zero until the owner sets one.
+- **Only an owner approves an order over the limit**, with a reason of at least three
+  characters, kept on the order and in the audit log (`sales_order.credit_override`). The order
+  waits "on hold" meanwhile and shows in the owner's "Needs attention" list. Nobody is sent a
+  message about it; the salesperson has to look. A sales manager cannot approve.
+- **An order approved days later goes through with the figures it was written with**, unless a
+  price list, a tax rate or the customer's tax status has changed since: it is then refused
+  and must be sent back to a draft and saved again. The same check stops any draft being
+  submitted with figures that have gone stale.
+- **A salesperson sees the documents they wrote and the ones filed under them** (the person
+  with the largest share). Someone with a smaller share of a colleague's sale does not see the
+  document; the commission statement (Step 39) must read the shares, not this rule.
+- **Shares are typed once for the document and stored on every line**, so commissions can be
+  worked out line by line (Step 38). Different salespeople on different lines of one document
+  have no screen. A member is shown by email: members have no names yet.
+- **Nothing ties a customer to a salesperson.** "My customers" still shows every customer, and
+  any salesperson can write an order for any customer. Assignments come with commissions
+  (Step 37).
+- **A draft must be complete enough to work out**: a line with no price anywhere is refused
+  when the draft is saved, not just when it is submitted.
+- **The database, not the app, takes the number, copies the buyer and writes the audit row**
+  when a document is submitted, held, sent back or cancelled, so none of them can be invented
+  by someone running their own SQL as the app. The row for a submit names every line sold at a
+  price that is not the price lists', or with a discount. Changes to a draft made past the app
+  are not logged; a draft is not yet a document.
+- **Sales documents are written only in ordinary (read committed) transactions.** A transaction
+  that reads an older picture of the database is refused, because the checks would not see a
+  line or an order committed after it began. The ledger's own functions (Step 13) do not refuse
+  such a transaction yet; they should be looked at the same way.
+- **Any member except an auditor can ask the database for the next document number directly**
+  (`app.next_document_number`, since Step 10), which would leave a gap in a series. The app
+  never does. Closing it means taking that right away from the app's role and numbering only
+  inside the functions and triggers that submit a document.
+- **Anyone who can write a sales order can hold up the credit check of one customer** for as
+  long as their own transaction stays open (the lock that makes two orders take turns).
+- **The database checks the arithmetic it can** when a document is submitted: totals are the
+  lines' own, each line is its quantity at its price less its discount, shares come to 100,
+  the unit is one of the item's. It does not work the tax out again: the tax figures are the
+  tax engine's, written by the app.
+- **A quotation's last day is only shown.** An order can be made from a quotation after it,
+  and more than one order from the same quotation.
+- **Documents are in the base currency** with a rate of 1 (Step 22). The mark "no further tax
+  on this sale" is on the document, not on the customer.
+- **Amounts are not rounded to whole rupees.** A round-off line, with its own account, is not
+  built; ask the pilot's users whether they want it.
+- **The accountant's menu entry "Sales invoices" opens the sales list** until invoices have
+  their own (Step 20). Print, PDF, email and the timeline of a document are Step 23. The role
+  home screens are still the same for everyone.
+- **The item screen still shows the tax category, the retail price and FBR's fields to a
+  company that is not registered for sales tax.** Sales documents themselves show no tax there.

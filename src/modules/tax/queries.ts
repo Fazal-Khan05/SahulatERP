@@ -1,11 +1,11 @@
 import "server-only";
 import Decimal from "decimal.js";
 import { and, asc, desc, eq, lte } from "drizzle-orm";
-import { isUuid, withTenant } from "@/db";
+import { isUuid, withTenant, type Tx } from "@/db";
 import { UserError } from "@/lib/errors";
 import { isIsoDate } from "@/modules/currencies/rules";
 import { can, type TenantContext } from "@/modules/tenant/rules";
-import { inForceOn, withholdingCodeSchema, type TaxCategoryKind, type WithholdingBase, type WithholdingKind } from "./rules";
+import { inForceOn, withholdingCodeSchema, type DatedTaxRate, type TaxCategoryForLine, type TaxCategoryKind, type WithholdingBase, type WithholdingKind } from "./rules";
 import { taxCategories, taxRates, withholdingRules } from "./schema";
 
 const NO_ACCESS = "Only an owner, an accountant or an auditor can see the tax rates.";
@@ -174,4 +174,25 @@ export async function getWithholdingRuleOn(
   );
   if (!found) return null;
   return { ...found, rate: new Decimal(found.rate), rateNonAtl: found.rateNonAtl === null ? null : new Decimal(found.rateNonAtl) };
+}
+
+/**
+ * What the tax engine needs to work out the lines of a sale, inside a transaction the caller
+ * holds: every sales-tax category, every dated rate, and the category an item with none of its
+ * own is treated as (the company's oldest standard-rate category, the one it was set up with).
+ */
+export async function selectSalesTaxTables(tx: Tx, tenantId: string): Promise<{ categories: Map<string, TaxCategoryForLine>; rates: DatedTaxRate[]; standardCategory: TaxCategoryForLine | null }> {
+  const [categoryRows, rateRows] = await Promise.all([
+    tx
+      .select({ id: taxCategories.id, kind: taxCategories.kind, sroScheduleNo: taxCategories.sroScheduleNo, sroItemSerial: taxCategories.sroItemSerial })
+      .from(taxCategories)
+      .where(eq(taxCategories.tenantId, tenantId))
+      .orderBy(asc(taxCategories.createdAt), asc(taxCategories.name)),
+    tx.select({ categoryId: taxRates.categoryId, effectiveFrom: taxRates.effectiveFrom, rate: taxRates.rate, furtherTaxRate: taxRates.furtherTaxRate }).from(taxRates).where(eq(taxRates.tenantId, tenantId)),
+  ]);
+  return {
+    categories: new Map(categoryRows.map((row) => [row.id, row])),
+    rates: rateRows.map((row) => ({ ...row, rate: new Decimal(row.rate), furtherTaxRate: new Decimal(row.furtherTaxRate) })),
+    standardCategory: categoryRows.find((row) => row.kind === "standard") ?? null,
+  };
 }

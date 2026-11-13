@@ -113,6 +113,13 @@
       "when": 1794552237581,
       "tag": "0015_prices_include_tax",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794560323226,
+      "tag": "0016_sales_documents",
+      "breakpoints": true
     }
   ]
 }

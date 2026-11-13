@@ -63,6 +63,9 @@ const PERMISSIONS = {
   "opening.read": ["owner", "accountant", "auditor"],
   "opening.manage": ["owner", "accountant"],
   "report.read": ["owner", "accountant", "auditor"],
+  "sales.read": ["owner", "accountant", "auditor", "sales_manager", "salesperson"],
+  "sales.manage": ["owner", "accountant", "sales_manager", "salesperson"],
+  "sales.approve_credit": ["owner"],
 } as const satisfies Record<string, readonly MemberRole[]>;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -296,7 +299,7 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
   switch (role) {
     case "owner":
       return [
-        ["Sales", "sales"],
+        ["Sales", "sales", "/sales"],
         ["Customers", "sales", "/customers"],
         ["Price lists", "sales", "/price-lists"],
         ["Collections", "collections"],
@@ -313,7 +316,7 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
       ];
     case "auditor":
       return [
-        ["Sales", "sales"],
+        ["Sales", "sales", "/sales"],
         ["Customers", "sales", "/customers"],
         ["Price lists", "sales", "/price-lists"],
         ["Collections", "collections"],
@@ -330,7 +333,7 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
       ];
     case "accountant":
       return [
-        ["Sales invoices", "sales"],
+        ["Sales invoices", "sales", "/sales"],
         ["Customers", "sales", "/customers"],
         ["Price lists", "sales", "/price-lists"],
         ["Bills and payments", "purchasing"],
@@ -348,7 +351,7 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
       ];
     case "sales_manager":
       return [
-        ["Sales", "sales"],
+        ["Sales", "sales", "/sales"],
         ["Customers", "sales", "/customers"],
         ["Price lists", "sales", "/price-lists"],
         ["Collections", "collections"],
@@ -360,7 +363,7 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
     case "salesperson":
       return [
         ["My customers", "sales", "/customers"],
-        ["Orders", "sales"],
+        ["Orders", "sales", "/sales"],
         ["My commission", "commissions"],
       ];
     case "recovery_officer":

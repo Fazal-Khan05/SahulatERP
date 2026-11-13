@@ -141,6 +141,8 @@ export async function updateParty(
       }
       const changes = partyChanges(found.party, party);
       if (Object.keys(changes.after).length === 0) return;
+      // An order over the limit needs the owner; so does moving the limit itself.
+      if (kind === "customer" && ctx.role !== "owner" && "creditLimit" in changes.after) throw new UserError("Only the owner changes a customer's credit limit.");
 
       const stamp = { updatedAt: sql`now()`, updatedBy: ctx.userId };
       // The check time moves only when the status itself changes.

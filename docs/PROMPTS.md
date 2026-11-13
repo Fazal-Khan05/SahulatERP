@@ -24,7 +24,7 @@ Read CLAUDE.md, then docs/PLAN.md section for Step N and nothing else from the p
 - Follow the module layout in PLAN.md "Architecture": `src/modules/<name>/{schema,rules,commands,queries}.ts`, screens in `src/app/(app)/<module>/`.
 - Every table: tenant_id, RLS with FORCE, composite unique (tenant_id, id), audit row on every command, decimal.js for amounts, dated rate tables for anything statutory.
 - Show the migration SQL before applying it. No new dependency without asking. Nothing from a later step; note it in docs/LATER.md.
-- From Step 21: write notes in docs/later/step-NN.md, and start the migration with `-- track: joint`. When building in a track, follow docs/PARALLEL.md instead: stay in your track's folders; add to shared lists only in your track's file in src/tracks; start the migration with `-- track: A` (B, C); apply migrations to your own database only.
+- From Step 21: write notes in docs/later/step-NN.md. When building in a track, follow docs/PARALLEL.md instead: stay in your track's folders; add to shared lists only in your track's file in src/tracks; start the migration with `-- track: A` (B, C); apply migrations to your own database only.
 - When finished: mark the step done with today's date in docs/PLAN.md, commit as "Step N: <title>", push (when building in a track: push your track's branch and merge as docs/PARALLEL.md says), and report what changed, what you did not do, and what the founder must click through to verify.
 
 ## Housekeeping before Step 2 (run once, before Step 1 or 2)

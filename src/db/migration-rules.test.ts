@@ -74,15 +74,23 @@ describe("the migrations folder", () => {
     expect(problems[0]).toContain("0021_m21: its snapshot does not follow the one before it");
   });
 
-  it("asks every migration from the first tracked one on whose it is", () => {
-    const files = folder(21);
-    files.sql["0020_m20"] = "-- Step 21.\nCREATE TABLE y ();\n-- track: A\n";
-    expect(checkMigrations(files)).toHaveLength(1);
-    expect(checkMigrations(files)[0]).toContain('must say whose it is');
+  it("takes a migration that names no track as built alone, and refuses a track that does not exist", () => {
+    const files = folder(22);
+    // Built alone, one step after another: no line, and free to change what an earlier step wrote.
+    const rewrite = "CREATE OR REPLACE FUNCTION app.post_delivery(p uuid) RETURNS void LANGUAGE sql AS 'select 1';\nREVOKE ALL ON FUNCTION app.post_delivery(uuid) FROM PUBLIC;\n";
+    files.sql["0020_m20"] = `-- Step 21.\n${rewrite}`;
+    files.sql["0021_m21"] = `-- Step 22.\n${rewrite}`;
+    expect(checkMigrations(files)).toEqual([]);
+    expect(trackOf(files.sql["0020_m20"])).toBeNull();
+    // A line after the SQL has begun is not read as the migration's track.
+    expect(trackOf("-- Step 21.\nCREATE TABLE y ();\n-- track: A\n")).toBeNull();
     files.sql["0020_m20"] = "-- Step 21.\n-- track: D\nCREATE TABLE y ();\n";
     expect(checkMigrations(files)).toHaveLength(1);
-    // An earlier migration is asked nothing.
-    expect(trackOf(files.sql["0019_m19"])).toBeNull();
+    expect(checkMigrations(files)[0]).toContain('names a track that does not exist ("D")');
+    // A track still may not change what a migration built alone before it wrote... unless it says so.
+    files.sql["0020_m20"] = `-- Step 21.\n${rewrite}`;
+    files.sql["0021_m21"] = `-- Step 22.\n-- track: B\n${rewrite}`;
+    expect(checkMigrations(files)).toHaveLength(1);
   });
 
   it("refuses a function two tracks have each written out again, until the second says it was written on top of the first", () => {

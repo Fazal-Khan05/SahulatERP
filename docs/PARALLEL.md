@@ -4,8 +4,9 @@ Steps 0 to 20 were built one after another. Steps 21 to 46 can be built by three
 once, each with their own Claude Code session. This file is how that works without the three
 getting in each other's way. Read it before starting a step in a track.
 
-Building alone, one step after another, needs none of this: do the next step as before, start
-its migration with `-- track: joint`, and keep its notes in `docs/later/step-NN.md`. The parts
+Building alone, one step after another, needs none of this: do the next step as before and
+keep its notes in `docs/later/step-NN.md`. A migration that names no track is taken as built
+alone. The parts
 under "Adding to a list the whole app shares" are still the way to add a journal kind, a locked
 account, a numbered document or protected audit rows.
 
@@ -125,8 +126,9 @@ menu entry that does not exist, that is a shared change.
    wrong tool: see "When main has a migration you do not".
 4. **Merge a step when it is done**, not several at once. One person merges at a time: say so
    to the other two before you start and when you have finished.
-5. **Every migration from `0020` on says whose it is.** Its opening comment has a line of its
-   own: `-- track: A` (or `B`, `C`, `joint`). `npm run check` refuses it otherwise.
+5. **Every migration built in a track says whose it is.** Its opening comment has a line of its
+   own: `-- track: A` (or `B`, `C`). Without the line a migration is taken as built alone, and
+   `npm run check` then cannot protect it from another track, so do not leave it out.
 6. **Never change a function, policy or trigger that another track wrote**: not by writing it
    out again, not by altering or dropping it. `npm run check` finds this when the tracks meet.
    The functions that hold the shared lists are never changed by a track: add a function of
@@ -201,8 +203,8 @@ stopped half-way.
 `npm run check:migrations` is part of `npm run check`, so GitHub runs it on every push. It
 refuses: a migration out of order or with a date older than its neighbour, two with one number,
 a file the journal does not name, a snapshot that does not follow the one before, a down file
-that names the wrong migration, a migration still set aside, a migration that does not say
-whose it is, a new function left callable by anyone, and a function, policy or trigger changed
+that names the wrong migration, a migration still set aside, a track that does not exist, a new
+function left callable by anyone, and a function, policy or trigger changed
 by two tracks. It reads the SQL as text, so it cannot see everything: a `-- track: joint` line is
 taken on trust, and it does not compare the tables in the code with the migrations.
 

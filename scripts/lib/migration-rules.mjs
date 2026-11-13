@@ -9,7 +9,7 @@
 //   - a function written out again by two people from the same starting point loses, in
 //     whichever migration runs second, everything the first one added.
 
-/** The first migration built in a track. Every migration from here on says whose it is. */
+/** The first migration that may be built in a track. One that names no track is taken as built alone ("joint"). */
 export const FIRST_TRACKED = 20;
 export const TRACK_NAMES = ["A", "B", "C", "joint"];
 
@@ -142,9 +142,10 @@ export function checkMigrations({ journal, sql, down, snapshots, aside = false }
     const text = sql[entry.tag];
     if (text === undefined) continue;
     const tracked = entry.idx >= FIRST_TRACKED;
-    const track = tracked ? trackOf(text) : null;
-    if (tracked && !TRACK_NAMES.includes(track ?? "")) {
-      problems.push(`${entry.tag}: its opening comment must say whose it is, on a line of its own: "-- track: A", "-- track: B", "-- track: C" or "-- track: joint".`);
+    // A migration that names no track was built alone, one step after another: nobody else's work to lose.
+    const track = tracked ? (trackOf(text) ?? "joint") : null;
+    if (tracked && !TRACK_NAMES.includes(track)) {
+      problems.push(`${entry.tag}: its opening comment names a track that does not exist ("${track}"). Use "-- track: A", "-- track: B" or "-- track: C", or leave the line out when the work is not split.`);
     }
     const fresh = created(text);
     for (const thing of definitions(text)) {

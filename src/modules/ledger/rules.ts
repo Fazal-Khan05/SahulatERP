@@ -232,6 +232,13 @@ export const SUPPLIER_CONTROLS = ["ap", "supplier_advances"] as const satisfies 
  */
 export const JOURNAL_SOURCES = {
   manual_journal: { label: "Manual journal", roles: ["owner", "accountant"], reversalRoles: ["owner", "accountant"], blockedControls: SUBLEDGER_CONTROLS },
+  // Receivables and payables are open to it: each of its lines there names the customer or the supplier.
+  opening_balance: {
+    label: "Opening balances",
+    roles: ["owner", "accountant"],
+    reversalRoles: ["owner", "accountant"],
+    blockedControls: ["inventory", "customer_advances", "supplier_advances", "grni", "goods_in_transit", "cheques_in_hand"],
+  },
 } as const satisfies Record<string, { label: string; roles: readonly MemberRole[]; reversalRoles: readonly MemberRole[]; blockedControls: readonly ControlType[] }>;
 export type JournalSourceType = keyof typeof JOURNAL_SOURCES;
 export const isJournalSource = (value: unknown): value is JournalSourceType => typeof value === "string" && Object.hasOwn(JOURNAL_SOURCES, value);

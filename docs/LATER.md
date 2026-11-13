@@ -535,3 +535,62 @@ Things noticed while building a step that belong to a later one, or to nobody ye
   migration, the removal of a test company) is not held to them. A trigger that runs with the
   table owner's rights must never trust a value read once per statement.
 
+## From Step 15
+
+- **Opening balances are one entry per company** (`opening_entries`, with its lines in
+  `opening_balances`): what each account stood at, each unpaid customer invoice and each unpaid
+  supplier bill. Posting it writes one journal on the opening date, with trade receivables once
+  per customer, trade payables once per supplier, and one line to Opening balance equity for
+  whatever the rest differ by. It was designed and checked by Claude, not by an accountant.
+- **Stock is not part of it.** A line on stock, goods in transit or goods received not invoiced
+  is refused: stock is brought in item by item when inventory is built (Step 29 onward), and that
+  opening must post against Opening balance equity too, so the account ends at nil. Until then
+  the value of the stock sits in Opening balance equity, and the screen says so.
+- **Advances and cheques in hand cannot be opened yet** (advances to suppliers, advances from
+  customers, post-dated cheques held). They need their own records; the steps that build those
+  (Steps 26, 31 and 32) should add their opening lines here.
+- **Only what a customer owes is entered, not what the company owes a customer** (a credit
+  balance), and the same for suppliers. Enter those as advances once advances can be opened.
+- **An unpaid invoice is one amount: what is still unpaid.** Its tax, its lines and its
+  salesperson are not brought in. Commission on receipts against opening invoices (Step 39) has
+  no salesperson to go to unless that step asks for one.
+- **Receipts and payments will be allocated against these opening invoices and bills** (Steps 31
+  and 26). Each line has its own id, number, date and due date for that. The ageing shown on the
+  opening screen takes nothing off yet for money received since; the real ageing report (Step
+  31) replaces it.
+- **Age is counted from the invoice's own date**, in bands of 0 to 30, 31 to 60, 61 to 90 and
+  over 90 days. The due date is kept for the collections screens, which may age by it instead.
+- **The opening date must be in an open fiscal period**, and every invoice and bill must be
+  dated before it. A company that starts mid-year brings its income and expense balances for
+  the year so far in the trial balance.
+- **Posted opening balances are corrected by reversing them**, which posts a second journal and
+  starts a new draft holding the same lines. Both journals stay in the books. The reversal is
+  always dated on the opening date itself: dated any later, every day in between would show the
+  opening balances twice once the corrected ones were posted. So the opening month must be
+  unlocked to correct them. Once receipts are allocated against opening invoices (Step 31),
+  reversing must be refused or must carry the allocations across.
+- **Nothing is posted before the opening date once opening balances are posted**, and opening
+  balances cannot be posted after journals already in the books: what happened before that day
+  is inside the opening figures and would be counted twice. The engine refuses the first
+  (`app.require_open_period`) and the opening entry's own guard the second. A company that never
+  posts opening balances (a brand-new business) has no such limit.
+- **The opening journal belongs to the whole company**, so only someone who works in every
+  branch can enter or read opening balances. Balances by branch are not kept.
+- **Balances are in the base currency only.** An unpaid invoice in another currency is entered
+  at its rupee value; its foreign amount is not kept (Step 22 and Step 26 decide if they need it).
+- **A customer or supplier is named by its code or its exact name**, in the form and in the
+  files; where one's code is another's name, the code wins. A picker that searches would remove
+  the question, as on prices.
+- **A journal holds at most 1,000 lines**, so an opening with more than about 900 customers and
+  suppliers together cannot be posted in one entry yet (see "From Step 13").
+- **Imports add lines; they never replace.** A file that names an account or an invoice already
+  on the draft is refused with the row listed. Files are comma-separated UTF-8, at most 2,000
+  rows; amounts without commas. Dates are read year first (2026-06-30) or day first
+  (30-06-2026, 30/06/2026), never month first; a file whose dates could be either, with no day
+  above 12 to tell, is refused rather than guessed at.
+- **A trial balance is matched by this chart's own account codes.** A row whose name is not the
+  name of the account its code belongs to stops the import: a file exported from Fast Accounts
+  carries Fast Accounts' codes, and the same number can mean a different account here. The
+  migration (Step 49) needs a mapping from the old codes to these.
+- **The migration of the pilot's books from Fast Accounts (Step 49)** should produce these three
+  files from its export.

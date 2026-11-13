@@ -11,13 +11,15 @@ type Props = {
   /** "customers" or "suppliers", for the messages. */
   many: string;
   maxBytes: number;
+  /** The file input's id; give one when two imports sit on the same screen. */
+  id?: string;
 };
 
 /**
  * Sends a CSV file to the import and shows what came back: how many rows were imported, or every
  * row that stopped the import with what is wrong in it.
  */
-export function ImportForm({ action, many, maxBytes }: Props) {
+export function ImportForm({ action, many, maxBytes, id = "file" }: Props) {
   const { state, ready, busy, run } = useFormAction<ImportState>(action);
   const [tooLarge, setTooLarge] = useState(false);
   const form = useRef<HTMLFormElement>(null);
@@ -38,8 +40,8 @@ export function ImportForm({ action, many, maxBytes }: Props) {
         className="flex flex-col gap-4"
       >
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="file">CSV file</Label>
-          <input id="file" name="file" type="file" accept=".csv,text/csv" required className="text-sm" />
+          <Label htmlFor={id}>CSV file</Label>
+          <input id={id} name="file" type="file" accept=".csv,text/csv" required className="text-sm" />
         </div>
         {error ? (
           <p role="alert" data-testid="form-error" className="text-sm text-destructive">

@@ -36,6 +36,7 @@ const MESSAGES: Record<string, string> = {
   SE012: "is archived. Restore it, or choose another account.",
   SE013: "A line on a customers' account must name the customer.",
   SE014: "A line on a suppliers' account must name the supplier.",
+  SE015: "That date is before the day the books were opened here. What happened before then is already part of the opening balances.",
   SE020: "A posted journal is never changed. Post a reversal instead.",
   "23503": "An account, customer, supplier or branch on the journal is not in this company.",
   "23505": "This has already been posted.",

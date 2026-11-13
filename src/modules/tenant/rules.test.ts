@@ -325,6 +325,7 @@ describe("navigation", () => {
       "Bank and cash",
       "Chart of accounts",
       "Journals",
+      "Opening balances",
       "Period close",
       "Reports",
       "Exchange rates",

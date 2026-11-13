@@ -66,6 +66,9 @@ const PERMISSIONS = {
   "sales.read": ["owner", "accountant", "auditor", "sales_manager", "salesperson"],
   "sales.manage": ["owner", "accountant", "sales_manager", "salesperson"],
   "sales.approve_credit": ["owner"],
+  "delivery.read": ["owner", "accountant", "auditor", "sales_manager", "salesperson", "warehouse_manager"],
+  "delivery.manage": ["owner", "accountant", "sales_manager", "salesperson", "warehouse_manager"],
+  "stock.cost.read": ["owner", "accountant", "auditor"],
 } as const satisfies Record<string, readonly MemberRole[]>;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -377,7 +380,7 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
     case "warehouse_manager":
       return [
         ["Receive goods", "purchasing"],
-        ["Deliveries", "sales"],
+        ["Deliveries", "sales", "/sales?kind=delivery"],
         ["Transfers", "inventory"],
         ["Stock", "inventory"],
         ["Items", "inventory", "/items"],

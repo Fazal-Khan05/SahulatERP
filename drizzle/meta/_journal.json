@@ -120,6 +120,13 @@
       "when": 1794560323226,
       "tag": "0016_sales_documents",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794562240411,
+      "tag": "0017_delivery_notes",
+      "breakpoints": true
     }
   ]
 }

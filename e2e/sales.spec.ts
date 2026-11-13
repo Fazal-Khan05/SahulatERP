@@ -35,6 +35,8 @@ async function pick(page: Page, label: string, typed: string) {
   const box = page.getByRole("combobox", { name: label, exact: true }).filter({ visible: true });
   await box.fill(typed);
   await box.press("Tab");
+  // The match is looked up on the server: wait until it is taken before typing on.
+  await expect(box).toHaveAttribute("data-picked", "true");
 }
 
 /** Fills one row of the lines grid, keyboard only; rows are numbered from 1. */

@@ -6,7 +6,6 @@ import { parseQuantity, toBaseQuantity } from "@/modules/items/rules";
 import type { PriceSource } from "@/modules/prices/rules";
 import { taxLine, type BuyerTax, type DatedTaxRate, type FurtherTaxReason, type SellerTax, type TaxCategoryForLine } from "@/modules/tax/rules";
 import type { TaxCategoryKind } from "@/modules/tax/rules";
-import type { DocumentType } from "@/modules/numbering/rules";
 
 // Pure rules for sales documents. No I/O.
 //
@@ -17,18 +16,23 @@ import type { DocumentType } from "@/modules/numbering/rules";
 // by anyone. Everything is decimal.js.
 
 /** The kinds of sales document that can be written so far. */
-export const SALES_KINDS = ["quotation", "order"] as const;
+export const SALES_KINDS = ["quotation", "order", "delivery"] as const;
 export type SalesKind = (typeof SALES_KINDS)[number];
 export const isSalesKind = (value: unknown): value is SalesKind => typeof value === "string" && (SALES_KINDS as readonly string[]).includes(value);
 
-export const KIND_LABELS: Record<SalesKind, string> = { quotation: "Quotation", order: "Sales order" };
-export const KIND_PLURALS: Record<SalesKind, string> = { quotation: "Quotations", order: "Sales orders" };
-/** The letters that start each kind's numbers. */
-export const KIND_NUMBER_TYPES: Record<SalesKind, DocumentType> = { quotation: "QT", order: "SO" };
+/** The kinds typed from nothing on the entry form. A delivery note is not: it is made from its order. */
+export const ENTRY_KINDS = ["quotation", "order"] as const;
+export type EntryKind = (typeof ENTRY_KINDS)[number];
+export const isEntryKind = (value: unknown): value is EntryKind => typeof value === "string" && (ENTRY_KINDS as readonly string[]).includes(value);
+
+export const KIND_LABELS: Record<SalesKind, string> = { quotation: "Quotation", order: "Sales order", delivery: "Delivery note" };
+export const KIND_PLURALS: Record<SalesKind, string> = { quotation: "Quotations", order: "Sales orders", delivery: "Delivery notes" };
 
 export const SALES_STATUSES = ["draft", "on_hold", "submitted", "cancelled"] as const;
 export type SalesStatus = (typeof SALES_STATUSES)[number];
 export const STATUS_LABELS: Record<SalesStatus, string> = { draft: "Draft", on_hold: "Waiting for approval", submitted: "Submitted", cancelled: "Cancelled" };
+/** A delivery note that is submitted has moved its goods: it is "posted". */
+export const statusLabel = (kind: SalesKind, status: SalesStatus) => (kind === "delivery" && status === "submitted" ? "Posted" : STATUS_LABELS[status]);
 
 /** A document typed by hand can hold this many lines. */
 export const MAX_SALES_LINES = 200;
@@ -73,7 +77,7 @@ export type DraftLine = {
 };
 export type Share = { userId: string; percent: Decimal };
 export type Draft = {
-  kind: SalesKind;
+  kind: EntryKind;
   date: string;
   validUntil: string | null;
   customerId: string;
@@ -123,7 +127,7 @@ export function readShares(raw: readonly RawShare[] | undefined): { ok: true; sh
 
 /** Cleans what was typed for a sales document, or gives the first thing that is wrong in plain words. */
 export function readDraft(raw: RawDocument): { ok: true; draft: Draft } | { ok: false; reason: string } {
-  if (!isSalesKind(raw.kind)) return { ok: false, reason: "Choose a quotation or a sales order." };
+  if (!isEntryKind(raw.kind)) return { ok: false, reason: "Choose a quotation or a sales order." };
   if (!isIsoDate(raw.date)) return { ok: false, reason: "Enter the date." };
   const until = text(raw.validUntil);
   if (until !== "" && raw.kind !== "quotation") return { ok: false, reason: "Only a quotation has a last day." };
@@ -389,4 +393,126 @@ export function leadSalesperson(shares: readonly Share[]): string | null {
   let lead: Share | null = null;
   for (const share of shares) if (lead === null || share.percent.gt(lead.percent)) lead = share;
   return lead?.userId ?? null;
+}
+
+// ── Delivery notes ──────────────────────────────────────────────────────────────────────────────
+//
+// A delivery note is made from one sales order and delivers some or all of what the order still
+// has to deliver. Its lines are lines of the order: the same item, in the same unit, at the
+// order's price and discount, for a quantity that is typed. It carries no tax: tax belongs to
+// the invoice. What the goods cost is worked out by the database when the note is posted.
+
+/** A line of the order, as a delivery note needs it. Quantities are in the unit the line was sold in. */
+export type OrderLineToDeliver = {
+  id: string;
+  itemId: string;
+  itemCode: string;
+  description: string;
+  unitId: string;
+  unitFactor: Decimal;
+  quantity: Decimal;
+  unitPrice: Decimal;
+  listPrice: Decimal | null;
+  priceSource: PriceSource | null;
+  discountPercent: Decimal | null;
+  /** What posted delivery notes have already delivered of it, in the same unit. */
+  delivered: Decimal;
+};
+
+export type RawDelivery = { date?: unknown; notes?: unknown; lines?: readonly { sourceLineId?: unknown; quantity?: unknown }[] };
+export type DeliveryDraft = { date: string; notes: string | null; lines: { sourceLineId: string; quantity: Decimal }[] };
+
+/** Cleans what was typed for a delivery note: a date, and how much of each line of the order to deliver now. A line left empty or at nil is not delivered. */
+export function readDelivery(raw: RawDelivery): { ok: true; delivery: DeliveryDraft } | { ok: false; reason: string } {
+  if (!isIsoDate(raw.date)) return { ok: false, reason: "Enter the date of the delivery." };
+  const notes = cleanText(raw.notes);
+  if (notes.length > 1000) return { ok: false, reason: "Notes: use at most 1,000 characters." };
+  const lines: DeliveryDraft["lines"] = [];
+  for (const row of raw.lines ?? []) {
+    const sourceLineId = text(row.sourceLineId);
+    const typed = text(row.quantity);
+    if (sourceLineId === "" || typed === "" || /^0+(\.0+)?$/.test(typed)) continue;
+    const parsed = parseQuantity(typed);
+    if (!parsed.ok) return { ok: false, reason: `Line ${lines.length + 1}, quantity: ${parsed.reason}` };
+    if (lines.some((line) => line.sourceLineId === sourceLineId)) return { ok: false, reason: "A line of the order is on the delivery note twice." };
+    lines.push({ sourceLineId, quantity: parsed.value });
+  }
+  if (lines.length > MAX_SALES_LINES) return { ok: false, reason: `A document can have at most ${MAX_SALES_LINES} lines.` };
+  return { ok: true, delivery: { date: raw.date, notes: notes === "" ? null : notes, lines } };
+}
+
+/** How much of an order line is still to be delivered, in the unit it was sold in; never below nil. */
+export function stillToDeliver(line: Pick<OrderLineToDeliver, "quantity" | "delivered">): Decimal {
+  return Decimal.max(line.quantity.minus(line.delivered), 0);
+}
+
+/**
+ * The lines of a delivery note, worked out from the order's own lines and the quantities to
+ * deliver now. A quantity above what the order still has to deliver is refused, here and again
+ * by the database when the note is posted. The goods are valued at the order's price less its
+ * discount; no tax is worked out.
+ */
+export function deliveryLines(order: readonly OrderLineToDeliver[], wanted: readonly { sourceLineId: string; quantity: Decimal }[]): { ok: true; lines: (PricedLine & { sourceLineId: string })[] } | { ok: false; reason: string } {
+  const lines: (PricedLine & { sourceLineId: string })[] = [];
+  for (const want of wanted) {
+    const line = order.find((candidate) => candidate.id === want.sourceLineId);
+    if (!line) return { ok: false, reason: "A line on the delivery note is not a line of its order." };
+    const left = stillToDeliver(line);
+    if (want.quantity.gt(left)) {
+      return { ok: false, reason: `${line.itemCode}: the order has ${left.toFixed()} still to deliver, not ${want.quantity.toFixed()}.` };
+    }
+    const base = new Decimal(new Wide(want.quantity).times(line.unitFactor).toFixed());
+    if (base.decimalPlaces() > 4) return { ok: false, reason: `${line.itemCode}: that quantity does not come to an exact number of the item's own unit.` };
+    const gross = paisa(new Decimal(new Wide(want.quantity).times(line.unitPrice).toFixed()));
+    const discountAmount = line.discountPercent === null ? NIL : paisa(new Decimal(new Wide(gross).times(line.discountPercent).div(HUNDRED).toFixed()));
+    const value = gross.minus(discountAmount);
+    lines.push({
+      sourceLineId: line.id,
+      itemId: line.itemId,
+      description: line.description,
+      unitId: line.unitId,
+      unitFactor: line.unitFactor,
+      quantity: want.quantity,
+      baseQuantity: base,
+      listPrice: line.listPrice,
+      priceSource: line.priceSource,
+      unitPrice: line.unitPrice,
+      discountPercent: line.discountPercent,
+      gross,
+      discountAmount,
+      taxCategoryId: null,
+      taxKind: null,
+      taxRate: NIL,
+      taxRateFrom: null,
+      taxAmount: NIL,
+      furtherTaxRate: NIL,
+      furtherTaxAmount: NIL,
+      furtherTaxReason: null,
+      extraTaxAmount: NIL,
+      retailPrice: null,
+      retailPriceBase: null,
+      saleType: null,
+      sroScheduleNo: null,
+      sroItemSerial: null,
+      fbrUomCode: null,
+      hsCode: null,
+      value,
+      total: value,
+    });
+  }
+  return { ok: true, lines };
+}
+
+/**
+ * Whether the warehouse holds enough for a delivery note, item by item (an item can be on more
+ * than one line). The first item that is short is named; null when there is enough of everything.
+ */
+export function stockShortfall(needs: readonly { itemId: string; itemCode: string; baseQuantity: Decimal }[], onHand: ReadonlyMap<string, Decimal>): { itemCode: string; needed: Decimal; onHand: Decimal } | null {
+  const needed = new Map<string, { itemCode: string; quantity: Decimal }>();
+  for (const need of needs) needed.set(need.itemId, { itemCode: need.itemCode, quantity: (needed.get(need.itemId)?.quantity ?? NIL).plus(need.baseQuantity) });
+  for (const [itemId, need] of needed) {
+    const held = onHand.get(itemId) ?? NIL;
+    if (need.quantity.gt(held)) return { itemCode: need.itemCode, needed: need.quantity, onHand: held };
+  }
+  return null;
 }

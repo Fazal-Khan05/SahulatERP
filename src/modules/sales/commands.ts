@@ -6,6 +6,8 @@ import { UserError, pgCode } from "@/lib/errors";
 import { AMOUNT_SCALE } from "@/lib/money";
 import { todayIso } from "@/lib/format";
 import { periodRefusal } from "@/modules/numbering/rules";
+import { selectStockOnHand } from "@/modules/inventory/queries";
+import { isIsoDate } from "@/modules/currencies/rules";
 import { can, seesBranch, type TenantContext } from "@/modules/tenant/rules";
 import { warehouses } from "@/modules/warehouses/schema";
 import {
@@ -14,10 +16,12 @@ import {
   selectBaseCurrency,
   selectCustomerCredit,
   selectLineItems,
+  selectOrderLinesToDeliver,
   selectSalesCustomer,
   selectSalesDocument,
   selectSalesPeople,
   selectTaxContext,
+  selectTaxFlags,
   type SalesCustomer,
   type SalesDocument,
 } from "./queries";
@@ -25,14 +29,18 @@ import {
   KIND_LABELS,
   creditCheck,
   creditRefusal,
+  deliveryLines,
   documentTotals,
   leadSalesperson,
   priceLine,
+  readDelivery,
   readDraft,
   readReason,
+  stockShortfall,
   type Draft,
   type DraftLine,
   type PricedLine,
+  type RawDelivery,
   type RawDocument,
   type Share,
   type Totals,
@@ -41,6 +49,16 @@ import { salesDocumentLinks, salesDocuments, salesLineSalespeople, salesLines } 
 
 function requireManager(ctx: TenantContext): void {
   if (!can(ctx.role, "sales.manage")) throw new UserError("Your role cannot write sales documents.");
+}
+
+function requireDeliveryWriter(ctx: TenantContext): void {
+  if (!can(ctx.role, "delivery.manage")) throw new UserError("Your role cannot write delivery notes.");
+}
+
+/** Who may write a document depends on what it is: the warehouse writes delivery notes and nothing else. */
+function requireWriterOf(ctx: TenantContext, kind: SalesDocument["kind"]): void {
+  if (kind === "delivery") requireDeliveryWriter(ctx);
+  else requireManager(ctx);
 }
 
 const NOT_HERE = "That document is not in this company.";
@@ -93,7 +111,7 @@ async function requireSalesPeople(tx: Tx, shares: readonly Share[]): Promise<voi
   }
 }
 
-async function writeLines(tx: Tx, ctx: TenantContext, documentId: string, lines: readonly PricedLine[], shares: readonly Share[]): Promise<void> {
+async function writeLines(tx: Tx, ctx: TenantContext, documentId: string, lines: readonly (PricedLine & { sourceLineId?: string })[], shares: readonly Share[]): Promise<void> {
   await tx.delete(salesLineSalespeople).where(and(eq(salesLineSalespeople.tenantId, ctx.tenantId), eq(salesLineSalespeople.documentId, documentId)));
   await tx.delete(salesLines).where(and(eq(salesLines.tenantId, ctx.tenantId), eq(salesLines.documentId, documentId)));
   if (lines.length === 0) return;
@@ -133,6 +151,7 @@ async function writeLines(tx: Tx, ctx: TenantContext, documentId: string, lines:
         hsCode: line.hsCode,
         value: money(line.value),
         total: money(line.total),
+        sourceLineId: line.sourceLineId ?? null,
         createdBy: ctx.userId,
       })),
     )
@@ -225,9 +244,10 @@ export async function saveSalesDraft(ctx: TenantContext, id: unknown, raw: RawDo
 
 /** Throws a draft away. A submitted document is never removed. */
 export async function discardSalesDraft(ctx: TenantContext, id: unknown, loadedAt?: unknown): Promise<{ kind: SalesDocument["kind"] }> {
-  requireManager(ctx);
+  if (!can(ctx.role, "sales.manage")) requireDeliveryWriter(ctx);
   return withTenant(ctx.userId, ctx.tenantId, async (tx) => {
     const document = await lockDocument(tx, ctx, id, loadedAt);
+    requireWriterOf(ctx, document.kind);
     if (document.status !== "draft") throw new UserError("Only a draft can be thrown away. A submitted document is cancelled instead.");
     await tx.delete(salesDocumentLinks).where(and(eq(salesDocumentLinks.tenantId, ctx.tenantId), eq(salesDocumentLinks.toDocumentId, document.id)));
     await tx.delete(salesLineSalespeople).where(and(eq(salesLineSalespeople.tenantId, ctx.tenantId), eq(salesLineSalespeople.documentId, document.id)));
@@ -299,6 +319,7 @@ export async function submitProblem(ctx: TenantContext, id: unknown): Promise<{ 
 async function submitIn(tx: Tx, ctx: TenantContext, id: unknown, loadedAt: unknown, raw: { reason?: unknown }): Promise<SubmitResult> {
   const document = await lockDocument(tx, ctx, id, loadedAt);
   const label = KIND_LABELS[document.kind];
+  if (document.kind === "delivery") throw new UserError("A delivery note is posted from its own page, which takes its goods out of stock.");
   if (document.status === "submitted" || document.status === "cancelled") throw new UserError(`This ${label.toLowerCase()} is already submitted.`);
   if (document.status === "on_hold" && !can(ctx.role, "sales.approve_credit")) throw new UserError("This order is waiting for the owner's approval.");
   if (document.lines.length === 0) throw new UserError(`A ${label.toLowerCase()} needs at least one line.`);
@@ -371,8 +392,13 @@ export async function cancelSalesDocument(ctx: TenantContext, id: unknown, raw: 
   if (!reason.ok) throw new UserError(reason.reason);
   await withTenant(ctx.userId, ctx.tenantId, async (tx) => {
     const document = await lockDocument(tx, ctx, id, loadedAt);
+    if (document.kind === "delivery") throw new UserError("A delivery note is cancelled from its own page, which puts its goods back into stock.");
     if (document.status === "cancelled") throw new UserError("This document is already cancelled.");
     if (document.status !== "submitted") throw new UserError("Only a submitted document is cancelled. A draft is simply thrown away.");
+    if (document.kind === "order") {
+      const delivered = (await selectOrderLinesToDeliver(tx, ctx.tenantId, document.id)).some((line) => line.delivered.gt(0));
+      if (delivered) throw new UserError("Goods have been delivered against this order. Cancel its delivery notes first.");
+    }
     await tx
       .update(salesDocuments)
       .set({ status: "cancelled", cancelledAt: sql`now()`, cancelledBy: ctx.userId, cancelReason: reason.reason, updatedAt: sql`now()`, updatedBy: ctx.userId })
@@ -413,5 +439,163 @@ export async function orderFromQuotation(ctx: TenantContext, quotationId: unknow
     await tx.insert(salesDocumentLinks).values({ tenantId: ctx.tenantId, fromDocumentId: quotation.id, toDocumentId: row.id, createdBy: ctx.userId });
     await audit(tx, ctx, { action: "sales_order.create", entity: "sales_document", entityId: row.id, after: { ...describe("order", worked.customer.name, draft.date, worked.lines.length, worked.totals.total), fromQuotation: quotation.number, ...(priceChanges(worked.lines).length > 0 ? { priceChanges: priceChanges(worked.lines) } : {}) } });
     return row;
+  });
+}
+
+// ── Delivery notes ──────────────────────────────────────────────────────────────────────────────
+
+const deliveryTotals = (lines: readonly PricedLine[]) => {
+  const totals = documentTotals(lines);
+  return {
+    grossTotal: money(totals.gross),
+    discountTotal: money(totals.discount),
+    valueTotal: money(totals.value),
+    taxTotal: "0",
+    furtherTaxTotal: "0",
+    extraTaxTotal: "0",
+    total: money(totals.total),
+  };
+};
+
+/**
+ * Starts a delivery note from a submitted sales order: a draft that delivers everything the
+ * order still has to deliver, from the order's warehouse, dated today. The quantities can then
+ * be brought down for a part delivery. Nothing leaves stock until the note is posted.
+ */
+export async function startDelivery(ctx: TenantContext, orderId: unknown): Promise<{ id: string }> {
+  requireDeliveryWriter(ctx);
+  if (!isUuid(orderId)) throw new UserError(NOT_HERE);
+  return withTenant(ctx.userId, ctx.tenantId, async (tx) => {
+    // Read, not held: the warehouse may read an order but not change it. The database holds the order when the note is posted.
+    const order = await selectSalesDocument(tx, ctx.tenantId, orderId);
+    if (!order || order.kind !== "order") throw new UserError("A delivery note is made from a sales order.");
+    if (order.status !== "submitted") throw new UserError(order.status === "cancelled" ? "This order is cancelled." : "Submit the order before delivering it.");
+    const lines = await selectOrderLinesToDeliver(tx, ctx.tenantId, order.id);
+    const wanted = lines.filter((line) => line.quantity.gt(line.delivered)).map((line) => ({ sourceLineId: line.id, quantity: line.quantity.minus(line.delivered) }));
+    if (wanted.length === 0) throw new UserError("Everything on this order has been delivered.");
+    const worked = deliveryLines(lines, wanted);
+    if (!worked.ok) throw new UserError(worked.reason);
+    const today = todayIso(new Date());
+    const [row] = await tx
+      .insert(salesDocuments)
+      .values({
+        tenantId: ctx.tenantId,
+        kind: "delivery",
+        // Never before the order it delivers.
+        documentDate: today < order.date ? order.date : today,
+        customerId: order.customerId,
+        warehouseId: order.warehouseId,
+        branchId: order.branchId,
+        currency: order.currency,
+        exchangeRate: "1",
+        // As the company stands now, not as it stood when the order was written.
+        ...(await selectTaxFlags(tx, ctx.tenantId)),
+        // Filed under whoever the order is filed under, or failing that whoever wrote it, so
+        // the people who see the order see its delivery notes. The database sets this itself.
+        salespersonId: order.salespersonId ?? order.createdBy,
+        sourceDocumentId: order.id,
+        ...deliveryTotals(worked.lines),
+        createdBy: ctx.userId,
+        updatedBy: ctx.userId,
+      })
+      .returning({ id: salesDocuments.id });
+    await writeLines(tx, ctx, row.id, worked.lines, []);
+    await tx.insert(salesDocumentLinks).values({ tenantId: ctx.tenantId, fromDocumentId: order.id, toDocumentId: row.id, createdBy: ctx.userId });
+    await audit(tx, ctx, { action: "sales_delivery.create", entity: "sales_document", entityId: row.id, after: { order: order.number, customer: order.customerName, lines: worked.lines.length } });
+    return row;
+  });
+}
+
+/** Saves a draft delivery note: its date, and how much of each line of the order it delivers. */
+export async function saveDeliveryDraft(ctx: TenantContext, id: unknown, raw: RawDelivery, loadedAt?: unknown): Promise<{ id: string; updatedAt: Date }> {
+  requireDeliveryWriter(ctx);
+  const read = readDelivery(raw);
+  if (!read.ok) throw new UserError(read.reason);
+  const delivery = read.delivery;
+  return withTenant(ctx.userId, ctx.tenantId, async (tx) => {
+    const document = await lockDocument(tx, ctx, id, loadedAt);
+    if (document.kind !== "delivery" || !document.source) throw new UserError("That is not a delivery note.");
+    if (document.status !== "draft") throw new UserError("This delivery note is posted and cannot be changed. Cancel it and make a new one.");
+    if (delivery.date < document.source.date) throw new UserError("A delivery note is dated on or after its order.");
+    const worked = deliveryLines(await selectOrderLinesToDeliver(tx, ctx.tenantId, document.source.id), delivery.lines);
+    if (!worked.ok) throw new UserError(worked.reason);
+    await writeLines(tx, ctx, document.id, worked.lines, []);
+    const [saved] = await tx
+      .update(salesDocuments)
+      .set({ documentDate: delivery.date, notes: delivery.notes, ...(await selectTaxFlags(tx, ctx.tenantId)), ...deliveryTotals(worked.lines), updatedAt: sql`now()`, updatedBy: ctx.userId })
+      .where(and(eq(salesDocuments.tenantId, ctx.tenantId), eq(salesDocuments.id, document.id)))
+      .returning({ id: salesDocuments.id, updatedAt: salesDocuments.updatedAt });
+    await audit(tx, ctx, { action: "sales_delivery.update", entity: "sales_document", entityId: document.id, before: { date: document.date, lines: document.lines.length }, after: { date: delivery.date, lines: worked.lines.length } });
+    return saved;
+  });
+}
+
+/** What the database's refusals of a delivery mean, for the few that can still happen after the checks here. */
+function deliveryRefusal(error: unknown, date: string): UserError | null {
+  const code = pgCode(error);
+  const closed = periodRefusal(code, date);
+  if (closed) return new UserError(closed);
+  if (code === "SE015") return new UserError("That date is before the day the books were opened.");
+  if (code === "SE060") return new UserError("There is not enough in stock for this delivery note. Stock is entered first; a delivery never takes it below zero.");
+  if (code === "SE061") return new UserError("This delivery note asks for more than its order still has to deliver. Open it again and check the quantities.");
+  if (code === "SE066" || code === "SE067") return new UserError("The order behind this delivery note is no longer open, or is dated after the note.");
+  if (code === "SE064") return new UserError("The chart of accounts has no stock or cost of goods sold account. Set the company up first.");
+  if (code === "SE009") return new UserError("A delivery note is cancelled on or after its own date.");
+  if (code === "SE050" || code === "SE052" || code === "SE056" || code === "SE063" || code === "SE068") return new UserError("This delivery note could not be posted as it stands. Open it again, save it, and post it once more.");
+  return null;
+}
+
+/**
+ * Posts a delivery note: the goods leave stock at their weighted-average cost, the cost goes to
+ * cost of goods sold, and the note takes its number, all in one act of the database. Refused
+ * when the warehouse does not hold enough of an item, or the order no longer has that much to
+ * deliver.
+ */
+export async function postDelivery(ctx: TenantContext, id: unknown, loadedAt?: unknown): Promise<{ number: string }> {
+  requireDeliveryWriter(ctx);
+  return withTenant(ctx.userId, ctx.tenantId, async (tx) => {
+    const document = await lockDocument(tx, ctx, id, loadedAt);
+    if (document.kind !== "delivery" || !document.source) throw new UserError("That is not a delivery note.");
+    if (document.status !== "draft") throw new UserError("This delivery note is already posted.");
+    if (document.lines.length === 0) throw new UserError("Enter how much of at least one line to deliver.");
+    // Said here in plain words; the database checks both again as it posts.
+    const order = await selectOrderLinesToDeliver(tx, ctx.tenantId, document.source.id);
+    const still = deliveryLines(order, document.lines.map((line) => ({ sourceLineId: line.sourceLineId ?? "", quantity: line.quantity })));
+    if (!still.ok) throw new UserError(still.reason);
+    const onHand = await selectStockOnHand(tx, ctx.tenantId, document.warehouseId, document.lines.map((line) => line.itemId));
+    const short = stockShortfall(document.lines, onHand);
+    if (short) {
+      throw new UserError(`Not enough ${short.itemCode} in stock at ${document.warehouseName}: ${short.onHand.toFixed()} on hand, ${short.needed.toFixed()} needed. Stock is entered first; a delivery never takes it below zero.`);
+    }
+    try {
+      const rows = await tx.execute<{ number: string }>(sql`select number from app.post_delivery(${document.id}::uuid)`);
+      return { number: rows[0].number };
+    } catch (error) {
+      throw deliveryRefusal(error, document.date) ?? error;
+    }
+  });
+}
+
+/**
+ * Cancels a posted delivery note, with a reason: its goods come back into stock at what they
+ * went out at, its journal is reversed on the date given, and the order can be delivered again.
+ */
+export async function cancelDelivery(ctx: TenantContext, id: unknown, raw: { date?: unknown; reason?: unknown }, loadedAt?: unknown): Promise<void> {
+  requireDeliveryWriter(ctx);
+  const reason = readReason(raw.reason, "why it is cancelled");
+  if (!reason.ok) throw new UserError(reason.reason);
+  const date = raw.date;
+  if (!isIsoDate(date)) throw new UserError("Enter the date the goods came back.");
+  await withTenant(ctx.userId, ctx.tenantId, async (tx) => {
+    const document = await lockDocument(tx, ctx, id, loadedAt);
+    if (document.kind !== "delivery") throw new UserError("That is not a delivery note.");
+    if (document.status === "cancelled") throw new UserError("This delivery note is already cancelled.");
+    if (document.status !== "submitted") throw new UserError("Only a posted delivery note is cancelled. A draft is simply thrown away.");
+    if (date < document.date) throw new UserError("A delivery note is cancelled on or after its own date.");
+    try {
+      await tx.execute(sql`select app.cancel_delivery(${document.id}::uuid, ${date}::date, ${reason.reason})`);
+    } catch (error) {
+      throw deliveryRefusal(error, date) ?? error;
+    }
   });
 }

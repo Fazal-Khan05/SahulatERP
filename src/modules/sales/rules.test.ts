@@ -1,7 +1,7 @@
 import Decimal from "decimal.js";
 import { describe, expect, it } from "vitest";
 import type { DatedTaxRate, TaxCategoryForLine } from "@/modules/tax/rules";
-import { creditCheck, creditRefusal, documentTotals, leadSalesperson, parsePercent, priceLine, readDraft, readReason, readShares, type DraftLine, type LineItem, type TaxContext } from "./rules";
+import { creditCheck, creditRefusal, deliveryLines, documentTotals, leadSalesperson, parsePercent, priceLine, readDelivery, readDraft, readReason, readShares, statusLabel, stillToDeliver, stockShortfall, type DraftLine, type LineItem, type OrderLineToDeliver, type TaxContext } from "./rules";
 
 const d = (value: string) => new Decimal(value);
 const STANDARD: TaxCategoryForLine = { id: "standard", kind: "standard", sroScheduleNo: null, sroItemSerial: null };
@@ -141,5 +141,45 @@ describe("the credit limit", () => {
     expect(creditRefusal(facts, d("4600"))).toBeNull();
     expect(creditRefusal(facts, d("11000"))).toBe("This order of 11,000.00 takes the customer 6,400.00 over the credit limit of 50,000.00: the customer owes 30,000.00 and has 15,400.00 in other orders.");
     expect(creditRefusal({ ...facts, openOrders: d("0") }, d("25000"))).toBe("This order of 25,000.00 takes the customer 5,000.00 over the credit limit of 50,000.00: the customer owes 30,000.00.");
+  });
+});
+
+describe("delivery notes", () => {
+  const ordered = (change: Partial<OrderLineToDeliver> = {}): OrderLineToDeliver => ({ id: "l1", itemId: "pad", itemCode: "BP-100", description: "Brake pad", unitId: "ctn", unitFactor: d("12"), quantity: d("3"), unitPrice: d("1320"), listPrice: d("1320"), priceSource: "item", discountPercent: d("5"), delivered: d("1.25"), ...change });
+  it("reads the date and the quantities, leaving out lines with nothing to deliver", () => {
+    expect(readDelivery({ date: "2026-11-10", lines: [{ sourceLineId: "a", quantity: "2" }, { sourceLineId: "b", quantity: "" }, { sourceLineId: "c", quantity: "0" }, { sourceLineId: "d", quantity: "0.00" }, { sourceLineId: "e", quantity: "1.5" }] })).toEqual({
+      ok: true,
+      delivery: { date: "2026-11-10", notes: null, lines: [{ sourceLineId: "a", quantity: d("2") }, { sourceLineId: "e", quantity: d("1.5") }] },
+    });
+    expect(readDelivery({ date: "10-11-2026" })).toEqual({ ok: false, reason: "Enter the date of the delivery." });
+    expect(readDelivery({ date: "2026-11-10", lines: [{ sourceLineId: "a", quantity: "two" }] })).toEqual({ ok: false, reason: "Line 1, quantity: Enter a plain number without commas, such as 12 or 2.5." });
+    expect(readDelivery({ date: "2026-11-10", lines: [{ sourceLineId: "a", quantity: "1" }, { sourceLineId: "a", quantity: "1" }] })).toEqual({ ok: false, reason: "A line of the order is on the delivery note twice." });
+    expect(readDelivery({ date: "2026-11-10", notes: "  Truck  LEA-123 ", lines: [] })).toMatchObject({ ok: true, delivery: { notes: "Truck LEA-123", lines: [] } });
+  });
+  it("delivers a line of the order in its own unit, at its price and discount, with no tax", () => {
+    expect(stillToDeliver(ordered()).toFixed()).toBe("1.75");
+    expect(stillToDeliver(ordered({ delivered: d("4") })).toFixed()).toBe("0");
+    const worked = deliveryLines([ordered()], [{ sourceLineId: "l1", quantity: d("1.75") }]);
+    expect(worked.ok && worked.lines.map((l) => `${l.sourceLineId} ${l.quantity.toFixed()} x ${l.unitPrice.toFixed(2)} = ${l.gross.toFixed(2)} - ${l.discountAmount.toFixed(2)} | base ${l.baseQuantity.toFixed()} value ${l.value.toFixed(2)} tax ${l.taxAmount.toFixed(2)} total ${l.total.toFixed(2)} ${l.taxKind}`)).toEqual([
+      "l1 1.75 x 1320.00 = 2310.00 - 115.50 | base 21 value 2194.50 tax 0.00 total 2194.50 null",
+    ]);
+  });
+  it("refuses more than the order still has to deliver, and a line that is not the order's", () => {
+    expect(deliveryLines([ordered()], [{ sourceLineId: "l1", quantity: d("1.7501") }])).toEqual({ ok: false, reason: "BP-100: the order has 1.75 still to deliver, not 1.7501." });
+    expect(deliveryLines([ordered({ delivered: d("3") })], [{ sourceLineId: "l1", quantity: d("0.0001") }])).toEqual({ ok: false, reason: "BP-100: the order has 0 still to deliver, not 0.0001." });
+    expect(deliveryLines([ordered()], [{ sourceLineId: "other", quantity: d("1") }])).toEqual({ ok: false, reason: "A line on the delivery note is not a line of its order." });
+  });
+  it("finds the first item the warehouse is short of, adding up the lines of one item", () => {
+    const needs = [{ itemId: "a", itemCode: "A", baseQuantity: d("3") }, { itemId: "b", itemCode: "B", baseQuantity: d("2") }, { itemId: "a", itemCode: "A", baseQuantity: d("3") }];
+    expect(stockShortfall(needs, new Map([["a", d("6")], ["b", d("2")]]))).toBeNull();
+    const short = stockShortfall(needs, new Map([["a", d("5.9999")], ["b", d("2")]]));
+    expect(short && `${short.itemCode} needs ${short.needed.toFixed()} has ${short.onHand.toFixed()}`).toBe("A needs 6 has 5.9999");
+    const none = stockShortfall(needs, new Map([["a", d("6")]]));
+    expect(none && `${none.itemCode} needs ${none.needed.toFixed()} has ${none.onHand.toFixed()}`).toBe("B needs 2 has 0");
+  });
+  it("calls a submitted delivery note posted", () => {
+    expect(statusLabel("delivery", "submitted")).toBe("Posted");
+    expect(statusLabel("order", "submitted")).toBe("Submitted");
+    expect(statusLabel("delivery", "draft")).toBe("Draft");
   });
 });

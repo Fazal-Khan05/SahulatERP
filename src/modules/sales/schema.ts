@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, date, foreignKey, index, integer, numeric, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, date, foreignKey, index, integer, numeric, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { items, units } from "../items/schema";
 import { customers } from "../parties/schema";
 import { taxCategories } from "../tax/schema";
@@ -48,6 +48,10 @@ export const salesDocuments = pgTable(
     // The customer's own order number, and anything to say to the customer.
     customerReference: text("customer_reference"),
     notes: text(),
+    // The document this one was made from and is checked against: for a delivery note, its
+    // sales order. Nothing on a quotation or an order (an order made from a quotation is only
+    // linked to it).
+    sourceDocumentId: uuid("source_document_id"),
     // Whose sale it is: the salesperson with the largest share. A salesperson sees the
     // documents they wrote and the ones that are theirs.
     salespersonId: uuid("salesperson_id"),
@@ -101,6 +105,12 @@ export const salesDocuments = pgTable(
     foreignKey({ name: "sales_documents_warehouse_fk", columns: [t.tenantId, t.warehouseId], foreignColumns: [warehouses.tenantId, warehouses.id] }),
     foreignKey({ name: "sales_documents_branch_fk", columns: [t.tenantId, t.branchId], foreignColumns: [branches.tenantId, branches.id] }),
     foreignKey({ name: "sales_documents_salesperson_fk", columns: [t.tenantId, t.salespersonId], foreignColumns: [memberships.tenantId, memberships.userId] }),
+    foreignKey({ name: "sales_documents_source_fk", columns: [t.tenantId, t.sourceDocumentId], foreignColumns: [t.tenantId, t.id] }),
+    index("sales_documents_tenant_source_idx")
+      .on(t.tenantId, t.sourceDocumentId)
+      .where(sql`${t.sourceDocumentId} is not null`),
+    check("sales_documents_source_only_for_followers", sql`${t.sourceDocumentId} is null or ${t.kind} in ('delivery', 'invoice', 'credit_note')`),
+    check("sales_documents_not_own_source", sql`${t.sourceDocumentId} is distinct from ${t.id}`),
     index("sales_documents_tenant_kind_date_idx").on(t.tenantId, t.kind, t.documentDate),
     index("sales_documents_tenant_customer_idx").on(t.tenantId, t.customerId),
     check("sales_documents_kind_known", sql`${t.kind} in ('quotation', 'order', 'delivery', 'invoice', 'credit_note')`),
@@ -178,6 +188,8 @@ export const salesLines = pgTable(
     sroItemSerial: text("sro_item_serial"),
     fbrUomCode: text("fbr_uom_code"),
     hsCode: text("hs_code"),
+    // On a delivery note: the line of the sales order that this line delivers.
+    sourceLineId: uuid("source_line_id"),
     // The value of the supply before tax and after the discount, and what the buyer pays for the line.
     value: numeric({ precision: 20, scale: 4 }).notNull(),
     total: numeric({ precision: 20, scale: 4 }).notNull(),
@@ -194,6 +206,15 @@ export const salesLines = pgTable(
     foreignKey({ name: "sales_lines_unit_fk", columns: [t.tenantId, t.unitId], foreignColumns: [units.tenantId, units.id] }),
     foreignKey({ name: "sales_lines_tax_category_fk", columns: [t.tenantId, t.taxCategoryId], foreignColumns: [taxCategories.tenantId, taxCategories.id] }),
     index("sales_lines_tenant_item_idx").on(t.tenantId, t.itemId),
+    foreignKey({ name: "sales_lines_source_fk", columns: [t.tenantId, t.sourceLineId], foreignColumns: [t.tenantId, t.id] }),
+    // A document delivers a line of its order on one line of its own, never two.
+    uniqueIndex("sales_lines_document_source_key")
+      .on(t.tenantId, t.documentId, t.sourceLineId)
+      .where(sql`${t.sourceLineId} is not null`),
+    index("sales_lines_tenant_source_idx")
+      .on(t.tenantId, t.sourceLineId)
+      .where(sql`${t.sourceLineId} is not null`),
+    check("sales_lines_not_own_source", sql`${t.sourceLineId} is distinct from ${t.id}`),
     check("sales_lines_line_no_positive", sql`${t.lineNo} >= 1`),
     check("sales_lines_description_length", sql`char_length(btrim(${t.description})) between 1 and 300`),
     check("sales_lines_quantity_positive", sql`${t.quantity} > 0 and ${t.quantity} < 1e12 and ${t.unitFactor} > 0 and ${t.unitFactor} < 1e12`),

@@ -769,3 +769,82 @@ Things noticed while building a step that belong to a later one, or to nobody ye
   home screens are still the same for everyone.
 - **The item screen still shows the tax category, the retail price and FBR's fields to a
   company that is not registered for sales tax.** Sales documents themselves show no tax there.
+- **A weakness in how every table checks role and branch, found in this step's review and
+  dating from Step 2. It needs its own hardening step before launch.** Each table's policy
+  reads "which company" and "which role" (and "which branches") as separate questions, each
+  asked once per statement, the first time it is needed. A member of company T who also owns a
+  company X, and who can run their own SQL as the app's role, can write one statement that
+  changes the session's company to X halfway: "which company" was already answered T, and
+  "which role" is then answered "owner". Shown in the review: a salesperson read a colleague's
+  order, and a warehouse manager read a customer's credit limit and audit rows. It never
+  crosses companies (the company question still needs a real membership), and the app itself
+  never runs such a statement: it needs someone able to run SQL as the app, which nothing
+  offers. Writes to sales documents, their lines and the credit limit are closed in Step 18 by
+  guards that ask company and role together for every row. Reads, and writes to older tables
+  that rely on the policy alone for the role, are not. The fix is to make each policy ask
+  company, role and branches in one go (one function that returns the company only when the
+  role fits, and one that checks the row's company and branch against a single answer), then
+  rewrite every policy to use them, with a test that tries the switch on each table.
+- **Whoever adds a customer by their own SQL, past the app, leaves no audit row for it.** The
+  app writes one. A second customer with nearly the same name and no credit limit is a way
+  round a limit; it shows in the customer list with who added it.
+- **A customer's credit standing shows "0" rather than "0.0000" in two audit rows** when the
+  customer has no entries in the books yet; only how the figure is written differs.
+
+## From Step 19
+
+- **Stock cannot be brought in through the app yet.** Stock is kept as moves (`stock_moves`,
+  with what each warehouse holds beside them in `stock_balances`), and so far the only thing
+  that writes a move is a delivery note, which takes goods out. Goods come in with purchases
+  (Step 24) and opening stock or adjustments (Step 30). Until one of those exists nothing can
+  be delivered on a real company: the tests put stock in directly, signed in as postgres
+  (`tests/support/stock.ts`). **The founder should decide whether to pull the opening-stock
+  screen forward**, so that sales can be tried end to end before purchasing is built.
+- **Only the database's own functions write stock or a delivery's journal**
+  (`app.post_delivery`, `app.cancel_delivery`). The app's role cannot insert a stock move, and
+  a delivery note marked posted or cancelled by hand is refused when the transaction ends,
+  because no stock moved with it. Later documents that move stock (goods received, invoices
+  without a delivery note, returns, transfers, adjustments) should be built the same way.
+- **Cost is the weighted average of what the warehouse holds, item by item, warehouse by
+  warehouse**: the value on hand times the quantity leaving, over the quantity on hand, to the
+  paisa; the last of the stock takes the last of the value. It follows the order in which
+  documents are posted, not their dates: a delivery note dated last week and posted today
+  leaves at today's average.
+- **The cost of goods sold is posted when the goods are delivered, not when they are
+  invoiced.** A delivery in one month invoiced in the next shows its cost a month before its
+  revenue. A list of goods delivered and not yet invoiced is needed at each month end (with the
+  stock reports, Step 31), and the invoice (Step 20) should follow the delivery promptly: in
+  law the tax invoice is due when the goods are supplied.
+- **A delivery note carries no tax and no prices on screen.** Its lines hold the order's price
+  and discount, so the value of goods delivered and not invoiced can be reported, but tax is
+  worked out on the invoice. The warehouse sees quantities only; what the goods cost shows to
+  the owner, an accountant and an auditor. In the database a warehouse manager can still read
+  the lines of a submitted order, prices and all; only the screens leave them out.
+- **What stock is worth cannot be read by the app at all**: the value column of
+  `stock_balances` is closed to the app's role, and the moves, which carry cost, are read only
+  by the owner, an accountant and an auditor. The stock valuation (Step 31) needs a database
+  function that gives the value to those roles.
+- **Cancelling a posted delivery note puts the goods back at exactly what they left at** and
+  reverses its journal on a date given. It is for a note posted by mistake. Goods that come
+  back from a customer after they were invoiced are a sales return (Step 21).
+- **A delivery note delivers from the order's own warehouse**, to the order's customer, each
+  line of the order once per note. Several notes can be drafted for one order at once; the
+  database lets through only what the order still has to deliver when each is posted. There is
+  no delivery address, vehicle or receiver beyond a note field (Step 23 prints the note).
+- **An order that will never be delivered in full stays "to be delivered" for ever.** It cannot
+  be cancelled while it has posted delivery notes, and nothing yet closes it short. Its whole
+  total still counts against the customer's credit limit until invoices exist (Step 20).
+- **Goods that cost nothing leave no journal**, only the stock move. Batches and serial numbers
+  have their columns on every move and are not used yet.
+- **The warehouse has no entry in "Needs attention" yet.** Orders waiting to be delivered are
+  listed at the top of the delivery notes page, which is where the warehouse's menu leads.
+  There is no screen yet that shows what is in stock (Step 31).
+- **"Still to deliver" is the same figure for everyone who can see the order**, whoever wrote
+  the delivery notes: it is asked of a database function (`app.order_delivered`), because a
+  salesperson does not otherwise see a note the warehouse wrote for their order unless the
+  order is filed under them or they wrote it.
+- **The list of orders waiting to be delivered asks the database about every line of every
+  submitted order** each time it is opened. Fine for a pilot; with years of orders it needs a
+  figure kept on the order line, or orders marked complete.
+- **Reversing the Step 19 migration by hand leaves the Step 18 guards to be put back by hand
+  too**; its file says how.

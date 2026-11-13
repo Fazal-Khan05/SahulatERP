@@ -11,26 +11,33 @@ import { todayIso } from "@/lib/format";
 import { AMOUNT_SCALE, formatAmount } from "@/lib/money";
 import { formatIsoDate } from "@/modules/currencies/rules";
 import { submitProblem } from "@/modules/sales/commands";
-import { getCustomerCredit, getLineDefaults, getSalesDocument, listSalesDocuments, listSalesPeople, listSalesWarehouses, type SalesDocument } from "@/modules/sales/queries";
-import { KIND_LABELS, KIND_PLURALS, STATUS_LABELS, creditRefusal, isSalesKind, type CreditFacts, type SalesKind, type SalesStatus } from "@/modules/sales/rules";
+import { getCustomerCredit, getDeliveryRows, getLineDefaults, getOrderDelivery, getSalesDocument, listOrdersToDeliver, listSalesDocuments, listSalesPeople, listSalesWarehouses, type SalesDocument } from "@/modules/sales/queries";
+import { KIND_LABELS, KIND_PLURALS, creditRefusal, isEntryKind, isSalesKind, statusLabel, type CreditFacts, type EntryKind, type SalesKind, type SalesStatus } from "@/modules/sales/rules";
 import { getCompanySetup } from "@/modules/setup/queries";
 import { can } from "@/modules/tenant/rules";
-import { approveSalesAction, cancelSalesAction, discardSalesAction, orderFromQuotationAction, releaseSalesAction, saveSalesAction } from "./actions";
+import { approveSalesAction, cancelDeliveryAction, cancelSalesAction, discardSalesAction, orderFromQuotationAction, releaseSalesAction, saveDeliveryAction, saveSalesAction, startDeliveryAction } from "./actions";
+import { DeliveryForm } from "./delivery-form";
 import { SalesForm } from "./sales-form";
 
 const NO_ACCESS = "Your role does not include sales documents.";
 const SWITCHED_OFF = "Sales is switched off for this company.";
 /** Why this member cannot open the sales screens at all, or null. */
-const closed = (session: Session) => (!session.modules.sales ? SWITCHED_OFF : !can(session.role, "sales.read") ? NO_ACCESS : null);
+const closed = (session: Session) => (!session.modules.sales ? SWITCHED_OFF : !can(session.role, "sales.read") && !can(session.role, "delivery.read") ? NO_ACCESS : null);
 const NO_WRITE = "Your role cannot write sales documents.";
 const plainNumber = (amount: Decimal) => amount.toFixed(AMOUNT_SCALE).replace(/\.?0+$/, "");
-const kindOf = (value: string | string[] | undefined): SalesKind => (isSalesKind(value) ? value : "order");
+/** The kind of document a list shows: the one asked for, where this member may see it. The warehouse starts on delivery notes. */
+const kindOf = (session: Session, value: string | string[] | undefined): SalesKind => {
+  const team = can(session.role, "sales.read");
+  if (isSalesKind(value) && (team || value !== "quotation")) return value;
+  return team ? "order" : "delivery";
+};
+const entryKindOf = (value: string | string[] | undefined): EntryKind => (isEntryKind(value) ? value : "order");
 
-function StatusPill({ status, testId }: { status: SalesStatus; testId?: string }) {
+function StatusPill({ kind, status, testId }: { kind: SalesKind; status: SalesStatus; testId?: string }) {
   const tone = status === "submitted" ? "bg-accent text-accent-foreground" : status === "on_hold" ? "bg-amber-100 text-amber-900" : "bg-muted text-muted-foreground";
   return (
     <span data-testid={testId} className={`rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${tone}`}>
-      {STATUS_LABELS[status]}
+      {statusLabel(kind, status)}
     </span>
   );
 }
@@ -47,9 +54,11 @@ export async function SalesListScreen({ searchParams }: { searchParams: Promise<
     );
   }
   const query = await searchParams;
-  const kind = kindOf(query.kind);
+  const kind = kindOf(session, query.kind);
   const search = typeof query.q === "string" ? query.q : "";
-  const { rows, more } = await listSalesDocuments(session, { kind, search });
+  const [{ rows, more }, toDeliver] = await Promise.all([listSalesDocuments(session, { kind, search }), kind === "delivery" ? listOrdersToDeliver(session) : []]);
+  // A delivery note has no total, and the warehouse is not shown what an order sells for.
+  const showTotals = kind !== "delivery" && can(session.role, "sales.read");
   const tab = (other: SalesKind) => (
     <Link
       href={`/sales?kind=${other}`}
@@ -61,18 +70,43 @@ export async function SalesListScreen({ searchParams }: { searchParams: Promise<
   );
   return (
     <>
-      <PageHead title="Sales" sub="Quotations and sales orders. A sales order is checked against the customer's credit limit when it is submitted." />
+      <PageHead
+        title="Sales"
+        sub={kind === "delivery" ? "Delivery notes are made from submitted sales orders. Posting one takes its goods out of stock." : "Quotations and sales orders. A sales order is checked against the customer's credit limit when it is submitted."}
+      />
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <nav aria-label="Kind of document" className="flex gap-1">
           {tab("order")}
-          {tab("quotation")}
+          {can(session.role, "sales.read") ? tab("quotation") : null}
+          {can(session.role, "delivery.read") ? tab("delivery") : null}
         </nav>
-        {can(session.role, "sales.manage") ? (
+        {isEntryKind(kind) && can(session.role, "sales.manage") ? (
           <Link href={`/sales/new?kind=${kind}`} className={buttonVariants({ className: "ml-auto" })}>
             New {KIND_LABELS[kind].toLowerCase()}
           </Link>
         ) : null}
       </div>
+      {kind === "delivery" ? (
+        <Card title="Orders waiting to be delivered" className="mb-5 max-w-5xl">
+          {toDeliver.length === 0 ? (
+            <Empty>No order is waiting to be delivered.</Empty>
+          ) : (
+            <ul aria-label="Orders waiting to be delivered" className="divide-y text-sm">
+              {toDeliver.map((order) => (
+                <li key={order.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2">
+                  <Link href={`/sales/${order.id}`} className="font-medium underline-offset-4 hover:underline">
+                    {order.number}
+                  </Link>
+                  <span>{order.customerName}</span>
+                  <span className="text-muted-foreground">
+                    {formatIsoDate(order.date)}, {order.lines} {order.lines === 1 ? "line" : "lines"} to deliver
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      ) : null}
       <Card className="max-w-5xl">
         <form className="mb-3 flex max-w-sm gap-2" role="search">
           <input type="hidden" name="kind" value={kind} />
@@ -91,7 +125,7 @@ export async function SalesListScreen({ searchParams }: { searchParams: Promise<
                   <th className="py-2 pr-4 font-medium">Number</th>
                   <th className="py-2 pr-4 font-medium">Date</th>
                   <th className="py-2 pr-4 font-medium">Customer</th>
-                  <th className="py-2 pr-4 text-right font-medium">Total</th>
+                  {showTotals ? <th className="py-2 pr-4 text-right font-medium">Total</th> : null}
                   <th className="py-2 font-medium">Status</th>
                 </tr>
               </thead>
@@ -105,9 +139,9 @@ export async function SalesListScreen({ searchParams }: { searchParams: Promise<
                     </td>
                     <td className="py-2 pr-4 whitespace-nowrap">{formatIsoDate(row.date)}</td>
                     <td className="py-2 pr-4">{row.customerName}</td>
-                    <td className="py-2 pr-4 text-right whitespace-nowrap tabular-nums">{formatAmount(row.total)}</td>
+                    {showTotals ? <td className="py-2 pr-4 text-right whitespace-nowrap tabular-nums">{formatAmount(row.total)}</td> : null}
                     <td className="py-2">
-                      <StatusPill status={row.status} />
+                      <StatusPill kind={row.kind} status={row.status} />
                     </td>
                   </tr>
                 ))}
@@ -137,7 +171,7 @@ function NoWarehouse() {
 
 export async function NewSalesScreen({ searchParams }: { searchParams: Promise<{ kind?: string | string[] }> }) {
   const session = await requireTenant();
-  const kind = kindOf((await searchParams).kind);
+  const kind = entryKindOf((await searchParams).kind);
   const title = `New ${KIND_LABELS[kind].toLowerCase()}`;
   if (closed(session) || !can(session.role, "sales.manage")) {
     return (
@@ -179,8 +213,35 @@ export async function NewSalesScreen({ searchParams }: { searchParams: Promise<{
   );
 }
 
-function LinesTable({ document }: { document: SalesDocument }) {
+/** The lines as written. Without `prices`, for the warehouse: what and how much, nothing of what it sells for. */
+function LinesTable({ document, prices = true }: { document: SalesDocument; prices?: boolean }) {
   const { totals, taxed } = document;
+  if (!prices) {
+    return (
+      <div className="overflow-x-auto">
+        <table aria-label="Lines" className="w-full min-w-[420px] text-left text-sm">
+          <thead className="border-b text-muted-foreground">
+            <tr>
+              <th className="py-2 pr-4 font-medium">Item</th>
+              <th className="py-2 pr-4 font-medium">Description</th>
+              <th className="py-2 text-right font-medium">Quantity</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {document.lines.map((line) => (
+              <tr key={line.id}>
+                <td className="py-2 pr-4 font-medium whitespace-nowrap">{line.itemCode}</td>
+                <td className="py-2 pr-4">{line.description}</td>
+                <td className="py-2 text-right whitespace-nowrap tabular-nums">
+                  {plainNumber(line.quantity)} {line.unitCode}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
   const hasDiscount = !totals.discount.isZero();
   const span = 4 + (hasDiscount ? 1 : 0);
   const sum = (label: string, amount: Decimal, testId?: string, strong = false) => (
@@ -246,16 +307,31 @@ function LinesTable({ document }: { document: SalesDocument }) {
   );
 }
 
-function Facts({ document, team }: { document: SalesDocument; team: { userId: string; email: string }[] }) {
+/** `sales` is false for a reader outside the sales team: who sold it, and any credit approval, are then left out. */
+function Facts({ document, team, customerLink, sales = true }: { document: SalesDocument; team: { userId: string; email: string }[]; customerLink: boolean; sales?: boolean }) {
   const person = (userId: string) => team.find((member) => member.userId === userId)?.email ?? "A former member";
   return (
     <dl className="mb-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
       <dt className="text-muted-foreground">Customer</dt>
       <dd>
-        <Link href={`/customers/${document.customerId}`} className="underline-offset-4 hover:underline">
-          {document.customerName}
-        </Link>
+        {customerLink ? (
+          <Link href={`/customers/${document.customerId}`} className="underline-offset-4 hover:underline">
+            {document.customerName}
+          </Link>
+        ) : (
+          document.customerName
+        )}
       </dd>
+      {document.source ? (
+        <>
+          <dt className="text-muted-foreground">Sales order</dt>
+          <dd>
+            <Link href={`/sales/${document.source.id}`} className="underline-offset-4 hover:underline">
+              {document.source.number}
+            </Link>
+          </dd>
+        </>
+      ) : null}
       <dt className="text-muted-foreground">Date</dt>
       <dd>{formatIsoDate(document.date)}</dd>
       {document.validUntil ? (
@@ -266,7 +342,7 @@ function Facts({ document, team }: { document: SalesDocument; team: { userId: st
       ) : null}
       <dt className="text-muted-foreground">Status</dt>
       <dd>
-        <StatusPill status={document.status} testId="document-status" />
+        <StatusPill kind={document.kind} status={document.status} testId="document-status" />
         {document.status === "cancelled" && document.cancelReason ? <span className="text-muted-foreground"> {document.cancelReason}</span> : null}
       </dd>
       <dt className="text-muted-foreground">Goods leave from</dt>
@@ -277,7 +353,7 @@ function Facts({ document, team }: { document: SalesDocument; team: { userId: st
           <dd>{document.customerReference}</dd>
         </>
       ) : null}
-      {document.shares.length > 0 ? (
+      {sales && document.shares.length > 0 ? (
         <>
           <dt className="text-muted-foreground">Salespeople</dt>
           <dd>{document.shares.map((share) => `${person(share.userId)}${document.shares.length > 1 ? ` ${share.percent.toFixed()}%` : ""}`).join(", ")}</dd>
@@ -289,7 +365,7 @@ function Facts({ document, team }: { document: SalesDocument; team: { userId: st
           <dd>{document.notes}</dd>
         </>
       ) : null}
-      {document.creditOverrideReason ? (
+      {sales && document.creditOverrideReason ? (
         <>
           <dt className="text-muted-foreground">Over the credit limit</dt>
           <dd data-testid="override-reason">Approved by the owner: {document.creditOverrideReason}</dd>
@@ -315,6 +391,8 @@ export async function SalesDocumentScreen({ params, searchParams }: { params: Pr
   if (!document) notFound();
   const manager = can(session.role, "sales.manage");
   const approver = can(session.role, "sales.approve_credit");
+  // The warehouse reads orders to deliver them: what and how much, not what it sells for.
+  const team = can(session.role, "sales.read");
   const loadedAt = document.updatedAt.toISOString();
   const label = KIND_LABELS[document.kind];
   const back = (
@@ -347,7 +425,10 @@ export async function SalesDocumentScreen({ params, searchParams }: { params: Pr
     </>
   );
 
-  if (document.status === "draft" && manager) {
+  if (document.kind === "delivery") return <DeliveryNote session={session} document={document} back={back} />;
+
+  if (document.status === "draft" && manager && isEntryKind(document.kind)) {
+    const entryKind = document.kind;
     const wasRefused = typeof refused === "string" && refused !== "";
     const [choices, credit, problem, defaults] = await Promise.all([
       formChoices(session),
@@ -365,8 +446,8 @@ export async function SalesDocumentScreen({ params, searchParams }: { params: Pr
           {linked}
           <Card>
             <SalesForm
-              action={saveSalesAction.bind(null, document.id, document.kind, loadedAt)}
-              kind={document.kind}
+              action={saveSalesAction.bind(null, document.id, entryKind, loadedAt)}
+              kind={entryKind}
               taxed={choices.taxed}
               pricesIncludeTax={choices.pricesIncludeTax}
               warehouses={warehouses}
@@ -413,8 +494,14 @@ export async function SalesDocumentScreen({ params, searchParams }: { params: Pr
     );
   }
 
-  const [team, credit] = await Promise.all([listSalesPeople(session), document.status === "on_hold" ? getCustomerCredit(session, document.customerId, document.id) : null]);
+  const [people, credit, progress] = await Promise.all([
+    team ? listSalesPeople(session) : [],
+    document.status === "on_hold" ? getCustomerCredit(session, document.customerId, document.id) : null,
+    document.kind === "order" && document.status === "submitted" ? getOrderDelivery(session, document.id) : null,
+  ]);
   const why = credit ? creditRefusal(credit, document.totals.total) : null;
+  const delivered = (progress ?? []).some((line) => line.delivered.gt(0));
+  const toDeliver = (progress ?? []).some((line) => line.remaining.gt(0));
   return (
     <>
       {back}
@@ -422,9 +509,50 @@ export async function SalesDocumentScreen({ params, searchParams }: { params: Pr
       <div className="flex max-w-5xl flex-col gap-5">
         {linked}
         <Card>
-          <Facts document={document} team={team} />
-          <LinesTable document={document} />
+          <Facts document={document} team={people} customerLink={can(session.role, "customer.read")} sales={team} />
+          <LinesTable document={document} prices={team} />
         </Card>
+
+        {progress ? (
+          <Card title="Deliveries">
+            <div className="overflow-x-auto">
+              <table aria-label="Deliveries" className="mb-3 w-full min-w-[420px] text-left text-sm">
+                <thead className="border-b text-muted-foreground">
+                  <tr>
+                    <th className="py-2 pr-4 font-medium">Item</th>
+                    <th className="py-2 pr-4 text-right font-medium">Ordered</th>
+                    <th className="py-2 pr-4 text-right font-medium">Delivered</th>
+                    <th className="py-2 text-right font-medium">Still to deliver</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {progress.map((line) => (
+                    <tr key={line.lineNo}>
+                      <td className="py-2 pr-4">
+                        <span className="font-medium">{line.itemCode}</span> {line.description}
+                      </td>
+                      <td className="py-2 pr-4 text-right whitespace-nowrap tabular-nums">
+                        {plainNumber(line.ordered)} {line.unitCode}
+                      </td>
+                      <td className="py-2 pr-4 text-right whitespace-nowrap tabular-nums">{plainNumber(line.delivered)}</td>
+                      <td className="py-2 text-right whitespace-nowrap tabular-nums" data-testid={`to-deliver-${line.lineNo}`}>
+                        {plainNumber(line.remaining)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {!toDeliver ? (
+              <p className="text-sm text-muted-foreground">Everything on this order has been delivered.</p>
+            ) : can(session.role, "delivery.manage") ? (
+              <>
+                <p className="mb-3 text-sm text-muted-foreground">A delivery note starts with everything still to deliver; bring the quantities down for a part delivery.</p>
+                <ActionForm action={startDeliveryAction.bind(null, document.id)} submitLabel="Make a delivery note" compact />
+              </>
+            ) : null}
+          </Card>
+        ) : null}
 
         {document.status === "on_hold" ? (
           <Card title="Waiting for the owner's approval">
@@ -454,13 +582,132 @@ export async function SalesDocumentScreen({ params, searchParams }: { params: Pr
           </Card>
         ) : null}
 
-        {document.status === "submitted" && manager ? (
+        {document.status === "submitted" && manager && delivered ? (
+          <Card title="Cancel this sales order">
+            <p className="text-sm text-muted-foreground">Goods have been delivered against this order. To cancel it, cancel its delivery notes first.</p>
+          </Card>
+        ) : null}
+        {document.status === "submitted" && manager && !delivered ? (
           <Card title={`Cancel this ${label.toLowerCase()}`}>
             <p className="mb-3 text-sm text-muted-foreground">
               A submitted {label.toLowerCase()} is never changed. Cancelling keeps it, with its number, marked as cancelled
               {document.kind === "order" ? ", and gives the customer's credit room back" : ""}.
             </p>
             <ActionForm action={cancelSalesAction.bind(null, document.id, loadedAt)} submitLabel={`Cancel ${label.toLowerCase()}`}>
+              <Field label="Why it is cancelled" name="reason" maxLength={300} autoComplete="off" required className="max-w-xl" />
+            </ActionForm>
+          </Card>
+        ) : null}
+      </div>
+    </>
+  );
+}
+
+/** A delivery note: a draft to fill in and post, or a posted or cancelled note to read. No prices: it is a goods document. */
+async function DeliveryNote({ session, document, back }: { session: Session; document: NonNullable<Awaited<ReturnType<typeof getSalesDocument>>>; back: React.ReactNode }) {
+  const rows = await getDeliveryRows(session, document);
+  const writer = can(session.role, "delivery.manage");
+  const loadedAt = document.updatedAt.toISOString();
+  const order = document.source;
+  // Stock is kept in the item's own unit; a line sold by the carton shows how many cartons that is.
+  const inUnit = (row: (typeof rows)[number]) => plainNumber(row.onHand.div(row.unitFactor).toDecimalPlaces(4, Decimal.ROUND_DOWN));
+
+  if (document.status === "draft" && writer && order) {
+    return (
+      <>
+        {back}
+        <PageHead title="Draft delivery note" sub={`For sales order ${order.number}, ${document.customerName}. Nothing leaves stock until it is posted.`} />
+        <div className="flex max-w-5xl flex-col gap-5">
+          <p className="text-sm text-muted-foreground">
+            Goods leave from {document.warehouseName}. Made from{" "}
+            <Link href={`/sales/${order.id}`} className="font-medium text-foreground underline underline-offset-4">
+              sales order {order.number}
+            </Link>
+            .
+          </p>
+          <Card>
+            <DeliveryForm
+              action={saveDeliveryAction.bind(null, document.id, loadedAt)}
+              date={document.date}
+              earliest={order.date}
+              notes={document.notes ?? ""}
+              rows={rows.map((row) => ({
+                sourceLineId: row.sourceLineId,
+                itemCode: row.itemCode,
+                description: row.description,
+                unitCode: row.unitCode,
+                ordered: plainNumber(row.ordered),
+                delivered: plainNumber(row.delivered),
+                remaining: plainNumber(Decimal.max(row.ordered.minus(row.delivered), 0)),
+                inStock: inUnit(row),
+                quantity: row.quantity.isZero() ? "" : plainNumber(row.quantity),
+              }))}
+            />
+          </Card>
+          <Card title="Throw this draft away">
+            <p className="mb-3 text-sm text-muted-foreground">A draft has no number and has moved no stock, so removing it leaves nothing behind.</p>
+            <ActionForm action={discardSalesAction.bind(null, document.id, loadedAt)} submitLabel="Discard draft" compact />
+          </Card>
+        </div>
+      </>
+    );
+  }
+
+  const costs = rows.some((row) => row.cost !== null);
+  const totalCost = rows.reduce((sum, row) => sum.plus(row.cost ?? 0), new Decimal(0));
+  const today = todayIso(new Date());
+  return (
+    <>
+      {back}
+      <PageHead title={document.number ?? "Draft delivery note"} sub={`Delivery note for ${document.customerName}`} />
+      <div className="flex max-w-5xl flex-col gap-5">
+        <Card>
+          <Facts document={document} team={[]} customerLink={can(session.role, "customer.read")} sales={false} />
+          <div className="overflow-x-auto">
+            <table aria-label="Lines" className="w-full min-w-[420px] text-left text-sm">
+              <thead className="border-b text-muted-foreground">
+                <tr>
+                  <th className="py-2 pr-4 font-medium">Item</th>
+                  <th className="py-2 pr-4 font-medium">Description</th>
+                  <th className="py-2 pr-4 text-right font-medium">Quantity</th>
+                  {costs ? <th className="py-2 text-right font-medium">Cost of the goods</th> : null}
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {rows.map((row) => (
+                  <tr key={row.sourceLineId}>
+                    <td className="py-2 pr-4 font-medium whitespace-nowrap">{row.itemCode}</td>
+                    <td className="py-2 pr-4">{row.description}</td>
+                    <td className="py-2 pr-4 text-right whitespace-nowrap tabular-nums">
+                      {plainNumber(row.quantity)} {row.unitCode}
+                    </td>
+                    {costs ? <td className="py-2 text-right whitespace-nowrap tabular-nums">{row.cost === null ? "" : formatAmount(row.cost)}</td> : null}
+                  </tr>
+                ))}
+              </tbody>
+              {costs ? (
+                <tfoot className="border-t font-bold">
+                  <tr>
+                    <td className="py-2 pr-4 text-right" colSpan={3}>
+                      Cost of goods sold
+                    </td>
+                    <td className="py-2 text-right whitespace-nowrap tabular-nums" data-testid="delivery-cost">
+                      {formatAmount(totalCost)}
+                    </td>
+                  </tr>
+                </tfoot>
+              ) : null}
+            </table>
+          </div>
+        </Card>
+        {document.status === "submitted" && writer ? (
+          <Card title="Cancel this delivery note">
+            <p className="mb-3 text-sm text-muted-foreground">
+              A posted delivery note is never changed. Cancelling it puts its goods back into stock at what they went out at and reverses its entry in the books, on the date you
+              choose. The order can then be delivered again.
+            </p>
+            <ActionForm action={cancelDeliveryAction.bind(null, document.id, loadedAt)} submitLabel="Cancel delivery note">
+              <Field label="Date the goods came back" name="date" type="date" defaultValue={today < document.date ? document.date : today} min={document.date} required className="max-w-[12rem]" />
               <Field label="Why it is cancelled" name="reason" maxLength={300} autoComplete="off" required className="max-w-xl" />
             </ActionForm>
           </Card>

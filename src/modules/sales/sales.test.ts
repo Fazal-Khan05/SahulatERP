@@ -231,7 +231,8 @@ describe.skipIf(!hasDb)("quotations and sales orders", () => {
     expect(await getSalesDocument(second, mine.id)).toBeNull();
     await expect(saveSalesDraft(second, mine.id, order(city, [line(pad, "9")]))).rejects.toThrow("That document is not in this company.");
     for (const role of ["owner", "accountant", "auditor", "sales_manager"] as const) expect(await getSalesDocument(as[role], theirs.id), role).not.toBeNull();
-    await expect(getSalesDocument(as.warehouse_manager, mine.id)).rejects.toThrow("Your role does not include sales documents.");
+    // The warehouse reads delivery notes and the submitted orders behind them, never a draft order.
+    expect(await getSalesDocument(as.warehouse_manager, mine.id)).toBeNull();
     expect(await withTenant(userIds.warehouse_manager, tenantA, (tx) => tx.select({ id: salesDocuments.id }).from(salesDocuments))).toEqual([]);
     expect(await withTenant(userIds.warehouse_manager, tenantA, (tx) => tx.select({ id: salesLines.id }).from(salesLines))).toEqual([]);
 

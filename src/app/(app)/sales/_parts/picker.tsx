@@ -9,9 +9,23 @@ export type Choice = { id: string; label: string; sub?: string };
 /** Asks the server for the customers or items that match what was typed. */
 export async function lookUp(what: "customers" | "items", typed: string, signal?: AbortSignal): Promise<Choice[]> {
   const response = await fetch(`/sales/lookup?what=${what}&q=${encodeURIComponent(typed)}`, { signal, cache: "no-store" });
-  if (!response.ok) return [];
+  // A failed request is not "nothing matches": the caller decides whether to ask again.
+  if (!response.ok) throw new Error("lookup failed");
   const body = (await response.json()) as { choices?: Choice[] };
   return body.choices ?? [];
+}
+
+/** The same, asked a second time if the first request fails: a dropped request must not look like an unknown code. */
+async function lookUpSurely(what: "customers" | "items", typed: string): Promise<Choice[] | null> {
+  for (const wait of [0, 400]) {
+    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+    try {
+      return await lookUp(what, typed);
+    } catch {
+      // Asked again below, once.
+    }
+  }
+  return null;
 }
 
 type Props = {
@@ -86,7 +100,9 @@ export function Picker({ what, label, value, onPick, placeholder, id, className 
     if (shown.current !== null || typed === "") return;
     if (timer.current) clearTimeout(timer.current);
     pending.current?.abort();
-    const found = await lookUp(what, typed).catch(() => []);
+    const found = (await lookUpSurely(what, typed)) ?? [];
+    // Something else may have been typed or chosen while the answer was on its way.
+    if (shown.current !== null) return;
     const exact = found.find((choice) => choice.label.toLowerCase() === typed.toLowerCase() || choice.sub?.toLowerCase() === typed.toLowerCase());
     const taken = exact ?? (found.length === 1 ? found[0] : null);
     if (taken) take(taken);
@@ -103,6 +119,8 @@ export function Picker({ what, label, value, onPick, placeholder, id, className 
         aria-controls={listId}
         aria-autocomplete="list"
         aria-invalid={unknown || undefined}
+        // Says whether something is chosen, for the form's own styles and for the tests.
+        data-picked={value !== null}
         autoComplete="off"
         placeholder={placeholder}
         value={text}

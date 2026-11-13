@@ -1,6 +1,7 @@
 import "server-only";
 import Decimal from "decimal.js";
 import { and, asc, desc, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { isUuid, withTenant, type Tx } from "@/db";
 import { UserError } from "@/lib/errors";
 import { isIsoDate } from "@/modules/currencies/rules";
@@ -15,11 +16,19 @@ import type { FurtherTaxReason, TaxCategoryKind } from "@/modules/tax/rules";
 import { can, type MemberRole, type TenantContext } from "@/modules/tenant/rules";
 import { branches } from "@/modules/tenant/schema";
 import { warehouses } from "@/modules/warehouses/schema";
-import { type CreditFacts, type DraftLine, type LineItem, type ListPrice, type PricedLine, type SalesKind, type SalesStatus, type Share, type TaxContext, isSalesKind } from "./rules";
+import { selectMoveCosts, selectStockOnHand } from "@/modules/inventory/queries";
+import { type CreditFacts, type DraftLine, type LineItem, type ListPrice, type OrderLineToDeliver, type PricedLine, type SalesKind, type SalesStatus, type Share, type TaxContext, isSalesKind } from "./rules";
 import { salesDocumentLinks, salesDocuments, salesLineSalespeople, salesLines } from "./schema";
+
+const sourceDocuments = alias(salesDocuments, "source_documents");
 
 export function requireSalesAccess(ctx: TenantContext): void {
   if (!can(ctx.role, "sales.read")) throw new UserError("Your role does not include sales documents.");
+}
+
+/** For what the warehouse reads too: delivery notes, and the orders they are made from. */
+export function requireDocumentAccess(ctx: TenantContext): void {
+  if (!can(ctx.role, "sales.read") && !can(ctx.role, "delivery.read")) throw new UserError("Your role does not include sales documents.");
 }
 
 export type StoredLine = {
@@ -47,6 +56,8 @@ export type StoredLine = {
   extraTaxAmount: Decimal;
   value: Decimal;
   total: Decimal;
+  /** On a delivery note: the line of the order this line delivers. */
+  sourceLineId: string | null;
 };
 
 export type SalesDocument = {
@@ -76,6 +87,8 @@ export type SalesDocument = {
   creditExposure: Decimal | null;
   creditOverrideReason: string | null;
   cancelReason: string | null;
+  /** On a delivery note: the sales order it was made from. */
+  source: { id: string; number: string | null; date: string } | null;
   createdBy: string;
   updatedAt: Date;
   lines: StoredLine[];
@@ -121,6 +134,7 @@ export async function selectSalesDocument(tx: Tx, tenantId: string, id: string, 
       creditExposure: salesDocuments.creditExposure,
       creditOverrideReason: salesDocuments.creditOverrideReason,
       cancelReason: salesDocuments.cancelReason,
+      sourceDocumentId: salesDocuments.sourceDocumentId,
       createdBy: salesDocuments.createdBy,
       updatedAt: salesDocuments.updatedAt,
     })
@@ -128,9 +142,12 @@ export async function selectSalesDocument(tx: Tx, tenantId: string, id: string, 
     .where(and(eq(salesDocuments.tenantId, tenantId), eq(salesDocuments.id, id)));
   const [row] = lock ? await header.for("update") : await header;
   if (!row || !isSalesKind(row.kind)) return null;
-  const [[customer], [warehouse], lineRows, shareRows] = await Promise.all([
+  const [[customer], [warehouse], [source], lineRows, shareRows] = await Promise.all([
     tx.select({ name: customers.name, archivedAt: customers.archivedAt }).from(customers).where(and(eq(customers.tenantId, tenantId), eq(customers.id, row.customerId))),
     tx.select({ name: warehouses.name }).from(warehouses).where(and(eq(warehouses.tenantId, tenantId), eq(warehouses.id, row.warehouseId))),
+    row.sourceDocumentId === null
+      ? Promise.resolve([])
+      : tx.select({ id: sourceDocuments.id, number: sourceDocuments.number, date: sourceDocuments.documentDate, buyerName: sourceDocuments.buyerName }).from(sourceDocuments).where(and(eq(sourceDocuments.tenantId, tenantId), eq(sourceDocuments.id, row.sourceDocumentId))),
     tx
       .select({
         id: salesLines.id,
@@ -157,6 +174,7 @@ export async function selectSalesDocument(tx: Tx, tenantId: string, id: string, 
         extraTaxAmount: salesLines.extraTaxAmount,
         value: salesLines.value,
         total: salesLines.total,
+        sourceLineId: salesLines.sourceLineId,
       })
       .from(salesLines)
       .innerJoin(items, and(eq(items.tenantId, salesLines.tenantId), eq(items.id, salesLines.itemId)))
@@ -179,7 +197,8 @@ export async function selectSalesDocument(tx: Tx, tenantId: string, id: string, 
     date: row.date,
     validUntil: row.validUntil,
     customerId: row.customerId,
-    customerName: row.buyerName ?? customer?.name ?? "",
+    // The warehouse does not read customers: a draft delivery note takes the name its order kept.
+    customerName: row.buyerName ?? customer?.name ?? source?.buyerName ?? "",
     customerArchived: customer?.archivedAt != null,
     warehouseId: row.warehouseId,
     warehouseName: warehouse?.name ?? "",
@@ -205,6 +224,7 @@ export async function selectSalesDocument(tx: Tx, tenantId: string, id: string, 
     creditExposure: exact(row.creditExposure),
     creditOverrideReason: row.creditOverrideReason,
     cancelReason: row.cancelReason,
+    source: source ? { id: source.id, number: source.number, date: source.date } : null,
     createdBy: row.createdBy,
     updatedAt: row.updatedAt,
     lines: lineRows.map((line) => ({
@@ -235,7 +255,7 @@ export type LinkedDocument = { id: string; kind: SalesKind; number: string | nul
 
 /** One sales document, with the documents it was made from and the ones made from it. */
 export async function getSalesDocument(ctx: TenantContext, id: string): Promise<(SalesDocument & { madeFrom: LinkedDocument[]; madeInto: LinkedDocument[] }) | null> {
-  requireSalesAccess(ctx);
+  requireDocumentAccess(ctx);
   if (!isUuid(id)) return null;
   return withTenant(ctx.userId, ctx.tenantId, async (tx) => {
     const document = await selectSalesDocument(tx, ctx.tenantId, id);
@@ -265,10 +285,11 @@ export type SalesListRow = { id: string; kind: SalesKind; status: SalesStatus; n
 
 /** The newest documents of one kind, drafts first among those of the same day. `search` matches part of the number or the customer's name. */
 export async function listSalesDocuments(ctx: TenantContext, options: { kind: SalesKind; status?: SalesStatus | null; search?: string }): Promise<{ rows: SalesListRow[]; more: boolean }> {
-  requireSalesAccess(ctx);
+  if (options.kind === "quotation") requireSalesAccess(ctx);
+  else requireDocumentAccess(ctx);
   const term = (options.search ?? "").replace(/[^\P{Cc}]/gu, " ").trim().slice(0, 80);
   const pattern = `%${term.replace(/[\\%_]/g, "\\$&")}%`;
-  const matches: SQL | undefined = term === "" ? undefined : sql`(${salesDocuments.number} ilike ${pattern} or ${customers.name} ilike ${pattern} or ${salesDocuments.buyerName} ilike ${pattern})`;
+  const matches: SQL | undefined = term === "" ? undefined : sql`(${salesDocuments.number} ilike ${pattern} or ${customers.name} ilike ${pattern} or ${salesDocuments.buyerName} ilike ${pattern} or ${sourceDocuments.buyerName} ilike ${pattern})`;
   const found = await withTenant(ctx.userId, ctx.tenantId, (tx) =>
     tx
       .select({
@@ -277,12 +298,14 @@ export async function listSalesDocuments(ctx: TenantContext, options: { kind: Sa
         status: salesDocuments.status,
         number: salesDocuments.number,
         date: salesDocuments.documentDate,
-        customerName: sql<string>`coalesce(${salesDocuments.buyerName}, ${customers.name})`,
+        customerName: sql<string>`coalesce(${salesDocuments.buyerName}, ${customers.name}, ${sourceDocuments.buyerName}, '')`,
         total: salesDocuments.total,
         currency: salesDocuments.currency,
       })
       .from(salesDocuments)
-      .innerJoin(customers, and(eq(customers.tenantId, salesDocuments.tenantId), eq(customers.id, salesDocuments.customerId)))
+      // Left joins: the warehouse reads delivery notes but not customers.
+      .leftJoin(customers, and(eq(customers.tenantId, salesDocuments.tenantId), eq(customers.id, salesDocuments.customerId)))
+      .leftJoin(sourceDocuments, and(eq(sourceDocuments.tenantId, salesDocuments.tenantId), eq(sourceDocuments.id, salesDocuments.sourceDocumentId)))
       .where(and(eq(salesDocuments.tenantId, ctx.tenantId), eq(salesDocuments.kind, options.kind), options.status ? eq(salesDocuments.status, options.status) : undefined, matches))
       .orderBy(desc(salesDocuments.documentDate), desc(salesDocuments.createdAt))
       .limit(SALES_LIST_LIMIT + 1),
@@ -548,4 +571,142 @@ export async function listSalesWarehouses(ctx: TenantContext): Promise<{ id: str
       .where(eq(warehouses.tenantId, ctx.tenantId))
       .orderBy(asc(warehouses.createdAt)),
   );
+}
+
+// ── Delivery notes ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The lines of a sales order as a delivery note needs them, with what posted delivery notes
+ * have already delivered of each, inside a transaction the caller holds. Quantities are in the
+ * unit each line was sold in.
+ */
+export async function selectOrderLinesToDeliver(tx: Tx, tenantId: string, orderId: string): Promise<(OrderLineToDeliver & { lineNo: number; unitCode: string })[]> {
+  const [lines, delivered] = await Promise.all([
+    tx
+      .select({
+        id: salesLines.id,
+        lineNo: salesLines.lineNo,
+        itemId: salesLines.itemId,
+        itemCode: items.code,
+        description: salesLines.description,
+        unitId: salesLines.unitId,
+        unitCode: units.code,
+        unitFactor: salesLines.unitFactor,
+        quantity: salesLines.quantity,
+        unitPrice: salesLines.unitPrice,
+        listPrice: salesLines.listPrice,
+        priceSource: salesLines.priceSource,
+        discountPercent: salesLines.discountPercent,
+      })
+      .from(salesLines)
+      .innerJoin(items, and(eq(items.tenantId, salesLines.tenantId), eq(items.id, salesLines.itemId)))
+      .innerJoin(units, and(eq(units.tenantId, salesLines.tenantId), eq(units.id, salesLines.unitId)))
+      .where(and(eq(salesLines.tenantId, tenantId), eq(salesLines.documentId, orderId)))
+      .orderBy(asc(salesLines.lineNo)),
+    // Asked of the database's own function: the same figure for everyone who may see the order,
+    // whoever wrote the delivery notes.
+    tx.execute<{ source_line_id: string; quantity: string }>(sql`select line_id as source_line_id, quantity::text as quantity from app.order_delivered(${orderId}::uuid)`),
+  ]);
+  const done = new Map(delivered.map((row) => [row.source_line_id, new Decimal(row.quantity)]));
+  return lines.map((line) => ({
+    ...line,
+    unitFactor: new Decimal(line.unitFactor),
+    quantity: new Decimal(line.quantity),
+    unitPrice: new Decimal(line.unitPrice),
+    listPrice: exact(line.listPrice),
+    priceSource: line.priceSource as PriceSource | null,
+    discountPercent: exact(line.discountPercent),
+    delivered: done.get(line.id) ?? new Decimal(0),
+  }));
+}
+
+export type DeliveryProgress = { lineNo: number; itemCode: string; description: string; unitCode: string; ordered: Decimal; delivered: Decimal; remaining: Decimal };
+
+/** How far a sales order has been delivered, line by line. Null when the order is not this company's or not one this member may see. */
+export async function getOrderDelivery(ctx: TenantContext, orderId: string): Promise<DeliveryProgress[] | null> {
+  requireDocumentAccess(ctx);
+  if (!isUuid(orderId)) return null;
+  return withTenant(ctx.userId, ctx.tenantId, async (tx) => {
+    const lines = await selectOrderLinesToDeliver(tx, ctx.tenantId, orderId);
+    return lines.map((line) => ({ lineNo: line.lineNo, itemCode: line.itemCode, description: line.description, unitCode: line.unitCode, ordered: line.quantity, delivered: line.delivered, remaining: Decimal.max(line.quantity.minus(line.delivered), 0) }));
+  });
+}
+
+export type DeliveryRow = {
+  sourceLineId: string;
+  itemId: string;
+  itemCode: string;
+  description: string;
+  unitCode: string;
+  unitFactor: Decimal;
+  ordered: Decimal;
+  /** Delivered by other, posted notes. */
+  delivered: Decimal;
+  /** On this note. */
+  quantity: Decimal;
+  /** What the warehouse holds of the item now, in the item's own unit. */
+  onHand: Decimal;
+  /** What the goods cost when they left, once the note is posted; null to a reader who does not see costs. */
+  cost: Decimal | null;
+};
+
+/**
+ * A delivery note against its order: every line of the order that the note delivers or could
+ * still deliver, with what is ordered, already delivered, on this note and in stock.
+ */
+export async function getDeliveryRows(ctx: TenantContext, delivery: Pick<SalesDocument, "id" | "status" | "warehouseId" | "source" | "lines">): Promise<DeliveryRow[]> {
+  requireDocumentAccess(ctx);
+  if (!delivery.source) return [];
+  const orderId = delivery.source.id;
+  return withTenant(ctx.userId, ctx.tenantId, async (tx) => {
+    const order = await selectOrderLinesToDeliver(tx, ctx.tenantId, orderId);
+    const [onHand, costs] = await Promise.all([
+      selectStockOnHand(tx, ctx.tenantId, delivery.warehouseId, order.map((line) => line.itemId)),
+      can(ctx.role, "stock.cost.read") && delivery.status !== "draft" ? selectMoveCosts(tx, ctx.tenantId, "delivery_note", delivery.id) : new Map<string, Decimal>(),
+    ]);
+    return order
+      .map((line) => {
+        const mine = delivery.lines.find((own) => own.sourceLineId === line.id);
+        // A posted note is itself among the posted notes: what "others" delivered leaves it out.
+        const others = delivery.status === "submitted" && mine ? line.delivered.minus(mine.quantity) : line.delivered;
+        return {
+          sourceLineId: line.id,
+          itemId: line.itemId,
+          itemCode: line.itemCode,
+          description: line.description,
+          unitCode: line.unitCode,
+          unitFactor: line.unitFactor,
+          ordered: line.quantity,
+          delivered: others,
+          quantity: mine?.quantity ?? new Decimal(0),
+          onHand: onHand.get(line.itemId) ?? new Decimal(0),
+          cost: mine ? (costs.get(mine.id) ?? null) : null,
+        };
+      })
+      .filter((row) => delivery.status === "draft" ? row.quantity.gt(0) || row.ordered.gt(row.delivered) : row.quantity.gt(0));
+  });
+}
+
+/** Submitted sales orders with something still to deliver, oldest first: what the warehouse works from. */
+export async function listOrdersToDeliver(ctx: TenantContext): Promise<{ id: string; number: string | null; date: string; customerName: string; lines: number }[]> {
+  requireDocumentAccess(ctx);
+  const rows = await withTenant(ctx.userId, ctx.tenantId, (tx) =>
+    tx.execute<{ id: string; number: string | null; date: string; customer_name: string; lines: number }>(sql`
+      select o.id, o.number, o.document_date::text as date, coalesce(o.buyer_name, '') as customer_name, count(*)::int as lines
+      from public.sales_documents o
+      join public.sales_lines l on l.tenant_id = o.tenant_id and l.document_id = o.id
+      where o.tenant_id = ${ctx.tenantId} and o.kind = 'order' and o.status = 'submitted'
+        and l.base_quantity > coalesce((select d.base_quantity from app.order_delivered(o.id) d where d.line_id = l.id), 0)
+      group by o.id, o.number, o.document_date, o.buyer_name, o.created_at
+      order by o.document_date, o.created_at
+      limit 200`),
+  );
+  return rows.map((row) => ({ id: row.id, number: row.number, date: row.date, customerName: row.customer_name, lines: row.lines }));
+}
+
+/** Whether the company charges sales tax, and whether its prices hold the tax: what every sales document is marked with. */
+export async function selectTaxFlags(tx: Tx, tenantId: string): Promise<{ taxed: boolean; pricesIncludeTax: boolean }> {
+  const [setup] = await tx.select({ salesTaxRegistered: companySetup.salesTaxRegistered, pricesIncludeTax: companySetup.pricesIncludeTax }).from(companySetup).where(eq(companySetup.tenantId, tenantId));
+  const taxed = setup?.salesTaxRegistered ?? false;
+  return { taxed, pricesIncludeTax: taxed && (setup?.pricesIncludeTax ?? false) };
 }

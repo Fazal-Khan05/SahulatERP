@@ -4,8 +4,8 @@ import { refresh } from "next/cache";
 import { requireTenant } from "@/lib/auth/session";
 import { UserError, logFailure } from "@/lib/errors";
 import type { FormState } from "@/lib/form-state";
-import { NeedsReason, cancelSalesDocument, discardSalesDraft, orderFromQuotation, releaseSalesHold, saveSalesDraft, submitSalesDocument } from "@/modules/sales/commands";
-import type { RawDocument, SalesKind } from "@/modules/sales/rules";
+import { NeedsReason, cancelDelivery, cancelSalesDocument, discardSalesDraft, orderFromQuotation, postDelivery, releaseSalesHold, saveDeliveryDraft, saveSalesDraft, startDelivery, submitSalesDocument } from "@/modules/sales/commands";
+import type { EntryKind, RawDocument } from "@/modules/sales/rules";
 
 // The company always comes from the verified session, never from the form. Ids arrive bound to
 // the action and are checked again in the command.
@@ -28,7 +28,7 @@ function refusal(context: string, error: unknown): SalesFormState {
 }
 
 /** The form's rows, in order: each row sends every field, so the lists line up. */
-function readForm(kind: SalesKind, formData: FormData): RawDocument {
+function readForm(kind: EntryKind, formData: FormData): RawDocument {
   const itemIds = formData.getAll("itemId");
   const unitIds = formData.getAll("unitId");
   const quantities = formData.getAll("quantity");
@@ -55,7 +55,7 @@ function readForm(kind: SalesKind, formData: FormData): RawDocument {
  * The draft is saved first, in its own transaction, so nothing typed is lost if the submit is
  * refused.
  */
-export async function saveSalesAction(id: string | null, kind: SalesKind, loadedAt: string, _: SalesFormState, formData: FormData): Promise<SalesFormState> {
+export async function saveSalesAction(id: string | null, kind: EntryKind, loadedAt: string, _: SalesFormState, formData: FormData): Promise<SalesFormState> {
   const submit = formData.get("intent") === "submit";
   let session: Awaited<ReturnType<typeof requireSales>>;
   let savedId: string;
@@ -141,4 +141,57 @@ export async function orderFromQuotationAction(id: string, loadedAt: string): Pr
   } catch (error) {
     return refusal("order from quotation", error);
   }
+}
+
+/** Starts a delivery note from a submitted sales order and opens it. */
+export async function startDeliveryAction(orderId: string): Promise<FormState> {
+  try {
+    const session = await requireSales();
+    const note = await startDelivery(session, orderId);
+    return { location: `/sales/${note.id}` };
+  } catch (error) {
+    return refusal("start delivery note", error);
+  }
+}
+
+/**
+ * Saves a draft delivery note and, when asked, posts it. The draft is saved first, in its own
+ * transaction, so the quantities typed are kept if posting is refused.
+ */
+export async function saveDeliveryAction(id: string, loadedAt: string, _: FormState, formData: FormData): Promise<FormState> {
+  const post = formData.get("intent") === "post";
+  const sourceLineIds = formData.getAll("sourceLineId");
+  const quantities = formData.getAll("quantity");
+  let session: Awaited<ReturnType<typeof requireSales>>;
+  let savedAt: Date;
+  try {
+    session = await requireSales();
+    ({ updatedAt: savedAt } = await saveDeliveryDraft(session, id, { date: formData.get("date"), notes: formData.get("notes"), lines: sourceLineIds.map((sourceLineId, index) => ({ sourceLineId, quantity: quantities[index] })) }, loadedAt));
+  } catch (error) {
+    return refusal("save delivery note", error);
+  }
+  if (!post) {
+    refresh();
+    return { message: "Draft saved." };
+  }
+  try {
+    await postDelivery(session, id, savedAt);
+  } catch (error) {
+    const refused = refusal("post delivery note", error);
+    refresh();
+    return { error: `Saved as a draft, but not posted. ${refused.error}` };
+  }
+  refresh();
+  return {};
+}
+
+export async function cancelDeliveryAction(id: string, loadedAt: string, _: FormState, formData: FormData): Promise<FormState> {
+  try {
+    const session = await requireSales();
+    await cancelDelivery(session, id, { date: formData.get("date"), reason: formData.get("reason") }, loadedAt);
+  } catch (error) {
+    return refusal("cancel delivery note", error);
+  }
+  refresh();
+  return {};
 }

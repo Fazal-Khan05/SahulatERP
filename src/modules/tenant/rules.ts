@@ -62,6 +62,7 @@ const PERMISSIONS = {
   "journal.manage": ["owner", "accountant"],
   "opening.read": ["owner", "accountant", "auditor"],
   "opening.manage": ["owner", "accountant"],
+  "report.read": ["owner", "accountant", "auditor"],
 } as const satisfies Record<string, readonly MemberRole[]>;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -307,7 +308,7 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
         ["Commissions", "commissions"],
         ["Payroll", "payroll"],
         ["Journals", null, "/journals"],
-        ["Reports", null],
+        ["Reports", null, "/reports"],
         ["Settings", null, "/settings"],
       ];
     case "auditor":
@@ -324,7 +325,7 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
         ["Commissions", "commissions"],
         ["Payroll", "payroll"],
         ["Journals", null, "/journals"],
-        ["Reports", null],
+        ["Reports", null, "/reports"],
         ["Settings", null, "/settings"],
       ];
     case "accountant":
@@ -341,7 +342,7 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
         ["Opening balances", null, "/settings/opening-balances"],
         ["Period close", null],
         ["Payroll", "payroll"],
-        ["Reports", null],
+        ["Reports", null, "/reports"],
         ["Exchange rates", null, "/settings/currencies"],
         ["Tax rates", null, "/settings/tax"],
       ];

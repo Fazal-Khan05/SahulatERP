@@ -258,6 +258,13 @@ Things noticed while building a step that belong to a later one, or to nobody ye
   the tax out of it (for 18%, the price divided by 1.18), still showing the tax on the invoice as
   the law requires. Needed in the tax engine and the sales documents (Steps 17 to 20); the plan's
   text does not mention it.
+- **Reports download as real Excel files** (decided 2026-11-13): the library `write-excel-file`
+  was approved for it. It is used on the server only.
+- **One switch per company says whether its prices include sales tax** (decided 2026-11-13),
+  asked at setup of a company registered for sales tax. Not per price list, not per invoice.
+- **An item with no tax category is charged the standard rate** at a company registered for
+  sales tax (decided 2026-11-13). The invoice shows the tax, so a wrong one is seen and put
+  right on the item.
 - **Recommended options are accepted without asking** while the founder is away, including
   applying additive migrations to the dev database and pushing a step once every check passes.
   Anything destructive, or a choice with no clear recommendation, still waits for him.
@@ -594,3 +601,40 @@ Things noticed while building a step that belong to a later one, or to nobody ye
   migration (Step 49) needs a mapping from the old codes to these.
 - **The migration of the pilot's books from Fast Accounts (Step 49)** should produce these three
   files from its export.
+
+## From Step 16
+
+- **The four ledger reports only add up posted journal lines**: trial balance, general ledger,
+  balance sheet, profit and loss, under Reports, for an owner, an accountant or an auditor. Each
+  has a period, a branch, a printed page on the letterhead (`/print/reports/<name>`) and a
+  download as Excel or CSV (`/reports/export`). One table (`ReportTable` in
+  `src/modules/reports/rules.ts`) feeds all four ways of showing a report.
+- **There is no year-end closing entry.** The balance sheet therefore shows, under equity, the
+  profit of earlier fiscal years that nothing has moved into retained earnings and the profit
+  of the current fiscal year so far. Year-end close ("Period close" on the accountant's menu)
+  should post that entry, after which the first of those lines disappears by itself.
+- **"Retained earnings" in the acceptance line means the retained earnings account plus every
+  income and expense balance to date.** A period's profit is the change in it less whatever was
+  posted straight to the retained earnings account (earlier profit brought from old books, a
+  dividend). `retainedEarningsStatement` gives the four figures; no screen shows them yet. A
+  statement of changes in equity would.
+- **Gross profit is a note under the profit and loss**, counting only the Sales account and the
+  Cost of goods sold account. Sales returns, discounts and stock adjustments kept in other
+  accounts are not part of it. Once the sales documents decide where returns and discounts go
+  (Steps 19 and 20), turn the note into a proper section.
+- **A branch's reports hold that branch's journals only**, not the company-wide ones (opening
+  balances are company-wide). A member limited to some branches sees those branches' books
+  whatever they ask for.
+- **The general ledger is one account at a time**, 500 entries to a screen page and 20,000 to a
+  file or a printed page, with no filter by customer or supplier yet. Customer and supplier
+  statements (Step 33) are that filter with their own layout.
+- **Every report reads the company's whole ledger up to its end date**, except profit and loss,
+  which reads its own period. On a few hundred thousand lines that is under half a second; a
+  company with millions of lines will want balances kept per account per month.
+- **Amounts in a file keep every decimal the books hold** (two to four). In an Excel file an
+  amount is a number; one of a hundred billion or more is written as text, so no digit is lost.
+- **The printed page is plain HTML with a Print button.** A real PDF file arrives with Step 23.
+- **No cash flow statement, no comparison with last year, no budget.** No saved filters or column
+  chooser (UI principle 8).
+- **The Reports menu entry for a sales manager is still greyed.** Sales reports come with sales.
+

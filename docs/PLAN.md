@@ -129,7 +129,7 @@ Fifty-two steps in nine phases. Phases finish in order; steps inside a phase mos
 | 13 | Posting engine: `postJournal(tx, source, lines)` inside a transaction; balanced-lines trigger; immutable-posted trigger; one-journal-per-source constraint; reversal | 1,000 random balanced postings succeed; one unbalanced posting is rejected by the database, not the app | Done 2026-11-13 |
 | 14 | Manual journals: draft, submit, reverse; period lock enforcement | Posting into a locked month is refused with a clear message | Done 2026-11-13 |
 | 15 | Opening balances: trial balance import; customer-wise and invoice-wise AR; supplier-wise and bill-wise AP; bank and cash; an opening journal that balances via an equity suspense account | Imported AR ages correctly from the original invoice dates | Done 2026-11-13 |
-| 16 | Reports: trial balance, general ledger, balance sheet, P&L, with date range, branch filter and CSV/Excel export; print with letterhead | TB totals equal; BS balances; P&L net equals change in retained earnings | |
+| 16 | Reports: trial balance, general ledger, balance sheet, P&L, with date range, branch filter and CSV/Excel export; print with letterhead | TB totals equal; BS balances; P&L net equals change in retained earnings | Done 2026-11-13 |
 
 ### Phase 3: Sales and the tax engine
 

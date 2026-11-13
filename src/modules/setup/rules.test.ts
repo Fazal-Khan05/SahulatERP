@@ -27,6 +27,7 @@ describe("readSetup", () => {
         ntn: null,
         strn: null,
         taxRatesConfirmed: false,
+        pricesIncludeTax: false,
         baseCurrency: { code: "PKR", name: "Pakistani Rupee" },
         fiscalYearStart: "2026-07-01",
         bundle: "importer",
@@ -41,8 +42,16 @@ describe("readSetup", () => {
     const registered = { ...answers, salesTaxRegistered: "yes" };
     expect(reason(registered)).toBe("Enter the company's STRN. A company registered for sales tax has one.");
     expect(reason({ ...registered, strn: "11-11-1111-111-11" })).toBe("Tick the box to say you have checked the tax rates. They are listed under Settings, Tax.");
-    const read = readSetup({ ...registered, strn: "11-11-1111-111-11", ntn: "1111111-1", taxRatesConfirmed: "on" });
-    expect(read.ok && [read.setup.salesTaxRegistered, read.setup.strn, read.setup.ntn, read.setup.taxRatesConfirmed]).toEqual([true, "1111111111111", "1111111-1", true]);
+    // Whether its prices include the tax is never assumed either.
+    expect(reason({ ...registered, strn: "11-11-1111-111-11", taxRatesConfirmed: "on" })).toBe("Say whether your prices already include sales tax, or the tax is added on top.");
+    expect(reason({ ...registered, strn: "11-11-1111-111-11", taxRatesConfirmed: "on", pricesIncludeTax: "perhaps" })).toBe("Say whether your prices already include sales tax, or the tax is added on top.");
+    const read = readSetup({ ...registered, strn: "11-11-1111-111-11", ntn: "1111111-1", taxRatesConfirmed: "on", pricesIncludeTax: "yes" });
+    expect(read.ok && [read.setup.salesTaxRegistered, read.setup.strn, read.setup.ntn, read.setup.taxRatesConfirmed, read.setup.pricesIncludeTax]).toEqual([true, "1111111111111", "1111111-1", true, true]);
+    const onTop = readSetup({ ...registered, strn: "11-11-1111-111-11", taxRatesConfirmed: "on", pricesIncludeTax: "no" });
+    expect(onTop.ok && onTop.setup.pricesIncludeTax).toBe(false);
+    // A company that is not registered has no tax in its prices, whatever was chosen.
+    const stray = readSetup({ ...answers, pricesIncludeTax: "yes" });
+    expect(stray.ok && stray.setup.pricesIncludeTax).toBe(false);
     // An unregistered company has no STRN, and its tick means nothing.
     expect(reason({ ...answers, strn: "1111111111111" })).toBe("Only a company registered for sales tax has an STRN.");
     const unregistered = readSetup({ ...answers, taxRatesConfirmed: "on", ntn: "1111111" });

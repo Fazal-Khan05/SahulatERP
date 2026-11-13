@@ -16,6 +16,9 @@ export const companySetup = pgTable(
     // The company's own tax numbers, digits only, for its invoices.
     ntn: text(),
     strn: text(),
+    // Whether the company's prices already include sales tax, or the tax is added on top of them.
+    // Only a company registered for sales tax has tax in its prices.
+    pricesIncludeTax: boolean("prices_include_tax").notNull().default(false),
     // When a registered company said it had checked the starting tax rates.
     taxRatesConfirmedAt: timestamp("tax_rates_confirmed_at", { withTimezone: true }),
     // Which chart of accounts to start from; the accounts are created with the ledger.
@@ -30,6 +33,7 @@ export const companySetup = pgTable(
     check("company_setup_strn_format", sql`${t.strn} ~ '^[0-9]{13}$'`),
     check("company_setup_strn_matches_registration", sql`(${t.strn} is not null) = ${t.salesTaxRegistered}`),
     check("company_setup_rates_confirmed_when_registered", sql`(${t.taxRatesConfirmedAt} is not null) = ${t.salesTaxRegistered}`),
+    check("company_setup_tax_in_price_only_when_registered", sql`not ${t.pricesIncludeTax} or ${t.salesTaxRegistered}`),
     check("company_setup_accounts_template_format", sql`${t.accountsTemplate} ~ '^[a-z_]{2,40}$'`),
   ],
 );

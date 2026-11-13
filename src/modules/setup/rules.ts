@@ -66,6 +66,8 @@ export type SetupInput = {
   strn: string | null;
   /** A registered company says it has checked the starting tax rates. */
   taxRatesConfirmed: boolean;
+  /** Whether the company's prices already include sales tax. Always false when it is not registered. */
+  pricesIncludeTax: boolean;
   baseCurrency: { code: string; name: string };
   /** The first day of the first fiscal year. */
   fiscalYearStart: string;
@@ -75,7 +77,7 @@ export type SetupInput = {
   accountsTemplate: AccountTemplate;
 };
 
-export type RawSetup = Partial<Record<"salesTaxRegistered" | "ntn" | "strn" | "taxRatesConfirmed" | "currencyCode" | "currencyName" | "fiscalMonth" | "fiscalYear" | "bundle" | "branchName" | "warehouseName" | "accountsTemplate", unknown>>;
+export type RawSetup = Partial<Record<"salesTaxRegistered" | "ntn" | "strn" | "taxRatesConfirmed" | "pricesIncludeTax" | "currencyCode" | "currencyName" | "fiscalMonth" | "fiscalYear" | "bundle" | "branchName" | "warehouseName" | "accountsTemplate", unknown>>;
 
 /** Cleans the wizard's answers, or gives the first thing that is wrong in plain words. */
 export function readSetup(raw: RawSetup): { ok: true; setup: SetupInput } | { ok: false; reason: string } {
@@ -98,6 +100,9 @@ export function readSetup(raw: RawSetup): { ok: true; setup: SetupInput } | { ok
   if (!registered && strn !== null) return { ok: false, reason: "Only a company registered for sales tax has an STRN." };
   const confirmed = readYesNo(raw.taxRatesConfirmed) === true;
   if (registered && !confirmed) return { ok: false, reason: "Tick the box to say you have checked the tax rates. They are listed under Settings, Tax." };
+  // Never assumed: a registered company says which way its prices are.
+  const taxInPrice = cleanText(raw.pricesIncludeTax) === "" ? undefined : readYesNo(raw.pricesIncludeTax);
+  if (registered && taxInPrice === undefined) return { ok: false, reason: "Say whether your prices already include sales tax, or the tax is added on top." };
 
   const code = currencyCodeSchema.safeParse(raw.currencyCode);
   if (!code.success) return { ok: false, reason: "Currency: use the three-letter code, such as PKR." };
@@ -121,6 +126,7 @@ export function readSetup(raw: RawSetup): { ok: true; setup: SetupInput } | { ok
       ntn,
       strn,
       taxRatesConfirmed: registered && confirmed,
+      pricesIncludeTax: registered && taxInPrice === true,
       baseCurrency: { code: code.data, name: name.data },
       fiscalYearStart: year.start,
       bundle: raw.bundle,

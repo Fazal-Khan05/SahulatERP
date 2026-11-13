@@ -211,3 +211,209 @@ export function withholdingRuleOn<T extends { code: string; effectiveFrom: strin
 export function withholdingRateFor(rule: { rate: Decimal; rateNonAtl: Decimal | null }, onActiveTaxpayersList: boolean): Decimal {
   return onActiveTaxpayersList || rule.rateNonAtl === null ? rule.rate : rule.rateNonAtl;
 }
+
+// ── The tax engine ──────────────────────────────────────────────────────────────────────────────
+//
+// What one line of a sale carries in tax: given the item, the buyer, the date and the price, it
+// gives the rate, the sales tax, the further tax, the value the tax was worked on and what the
+// buyer pays. It reads nothing and knows no rate: the caller hands it the dated rows, and it
+// picks the one in force on the document's date. Everything is decimal.js; amounts are rounded
+// to the paisa, half up, once, at the end of each line.
+//
+// The law it follows is the Sales Tax Act 1990: section 3(1) for the rate, 3(1A) for further
+// tax, 3(2)(a) and the Third Schedule for goods taxed on their printed retail price, section 4
+// for zero-rating and section 13 for exemption. docs/RATES-REVIEW.md says what was read where.
+
+/** The company making the sale. */
+export type SellerTax = {
+  /** A company not registered for sales tax charges none and shows none. */
+  salesTaxRegistered: boolean;
+  /** Whether its prices already include the tax, or the tax is added on top of them. */
+  pricesIncludeTax: boolean;
+};
+
+/** The buyer, as recorded on the customer. */
+export type BuyerTax = {
+  registrationType: "registered" | "unregistered";
+  /** Whether the buyer is on the Active Taxpayers List: active, inactive, or not yet checked. */
+  atlStatus: "unknown" | "active" | "inactive";
+  /** True when the supply is one the law takes out of further tax (SRO 648(I)/2013), such as a sale to an end consumer. */
+  furtherTaxExcluded?: boolean;
+};
+
+export type TaxCategoryForLine = { id: string; kind: TaxCategoryKind; sroScheduleNo: string | null; sroItemSerial: string | null };
+
+/** The item on the line. `category` is null when none was set on the item. */
+export type ItemTax = {
+  category: TaxCategoryForLine | null;
+  /**
+   * The retail price of one of the item's own unit as the Act defines it (s.2(27)): before sales
+   * tax. Third Schedule goods are taxed on it. A pack that prints one price including the tax
+   * has this price times (100 + rate) / 100 on it.
+   */
+  retailPrice: Decimal | null;
+  /** FBR's name for the kind of sale, when the item carries its own. */
+  saleType: string | null;
+};
+
+export type DatedTaxRate = { categoryId: string; effectiveFrom: string; rate: Decimal; furtherTaxRate: Decimal };
+
+export type TaxLineInput = {
+  seller: SellerTax;
+  buyer: BuyerTax;
+  item: ItemTax;
+  /** The date of the document, as 2026-11-13. The rate in force on that day applies. */
+  date: string;
+  /** The currency of the document. Amounts are worked and rounded in it. */
+  currency: string;
+  /** How many were sold, in the unit they were sold in, and the price of one of that unit. */
+  quantity: Decimal;
+  unitPrice: Decimal;
+  /**
+   * How many of the item's own unit one of the unit sold holds: 12 for a carton of 12, nothing
+   * (one) when the item is sold in its own unit. Used only to bring the retail price, which is
+   * for the item's own unit, to the quantity sold; the line itself is priced as it was entered.
+   */
+  unitsPerUnitSold?: Decimal;
+  /** Taken off the line before tax; nothing when absent. */
+  discount?: Decimal;
+  /** Every dated rate the caller holds; the engine picks by category and date. */
+  rates: readonly DatedTaxRate[];
+  /** What an item with no category of its own is treated as: the company's standard-rate category. It must be one. */
+  standardCategory: TaxCategoryForLine | null;
+};
+
+/** Why further tax was or was not added. */
+export type FurtherTaxReason = "buyer_unregistered" | "buyer_inactive" | "buyer_not_checked" | null;
+
+export type TaxLine = {
+  currency: string;
+  /** False when the seller is not registered: there is no tax to show anywhere. */
+  taxed: boolean;
+  categoryId: string | null;
+  kind: TaxCategoryKind | null;
+  /** The value of the supply before any tax, after the discount. */
+  value: Decimal;
+  /** The day the rate that was used came into force, so the row can be found again. Null when no rate was needed. */
+  rateFrom: string | null;
+  /** Percentages, and the amounts they came to. */
+  rate: Decimal;
+  taxAmount: Decimal;
+  furtherTaxRate: Decimal;
+  furtherTaxAmount: Decimal;
+  furtherTaxReason: FurtherTaxReason;
+  /** Extra tax under section 3(5). No category carries any yet; kept so no document ever lacks the figure. */
+  extraTaxAmount: Decimal;
+  /** For Third Schedule goods, the retail price times the quantity: what the sales tax was worked on. Null otherwise. */
+  retailPriceBase: Decimal | null;
+  /** What the buyer pays for the line: value plus every tax. */
+  total: Decimal;
+  /** FBR's name for the kind of sale, and the schedule or SRO behind a special treatment. */
+  saleType: string | null;
+  sroScheduleNo: string | null;
+  sroItemSerial: string | null;
+};
+
+/** FBR's names for the kinds of sale, by kind of category. An item's own name, when it has one, wins. */
+export const DEFAULT_SALE_TYPES: Record<TaxCategoryKind, string> = {
+  standard: "Goods at standard rate (default)",
+  reduced: "Goods at Reduced Rate",
+  third_schedule: "3rd Schedule Goods",
+  zero_rated: "Goods at zero-rate",
+  exempt: "Exempt goods",
+};
+
+/** Digits after the point that an amount on a document keeps. */
+export const TAX_AMOUNT_SCALE = 2;
+const paisa = (amount: Decimal) => amount.toDecimalPlaces(TAX_AMOUNT_SCALE, Decimal.ROUND_HALF_UP);
+const Wide = Decimal.clone({ precision: 60 });
+const NIL = new Decimal(0);
+
+/**
+ * Whether the buyer attracts further tax, and why. Section 3(1A) puts it on a supply to a person
+ * who has no registration number or is not an active taxpayer. A registered buyer whose status
+ * has not been checked is not known to be an active taxpayer, so further tax is added until
+ * someone checks: the seller answers for further tax it did not charge, with surcharge and
+ * penalty, which is the larger risk. The reason comes back with the line, so that a screen can
+ * say why the tax is there and send the user to check the customer.
+ */
+export function furtherTaxReason(buyer: BuyerTax): FurtherTaxReason {
+  if (buyer.furtherTaxExcluded) return null;
+  if (buyer.registrationType === "unregistered") return "buyer_unregistered";
+  if (buyer.atlStatus === "inactive") return "buyer_inactive";
+  if (buyer.atlStatus === "unknown") return "buyer_not_checked";
+  return null;
+}
+
+/**
+ * The tax on one line of a sale, or why it cannot be worked out. It never guesses: an item
+ * taxed on its retail price needs one, and a category needs a rate in force on the date.
+ */
+export function taxLine(input: TaxLineInput): { ok: true; line: TaxLine } | { ok: false; reason: string } {
+  const { seller, buyer, item, quantity, unitPrice } = input;
+  const discount = input.discount ?? NIL;
+  const perUnitSold = input.unitsPerUnitSold ?? new Decimal(1);
+  if (!quantity.isFinite() || quantity.lte(0)) return { ok: false, reason: "The quantity must be more than zero." };
+  if (!unitPrice.isFinite() || unitPrice.lt(0)) return { ok: false, reason: "The price cannot be negative." };
+  if (!discount.isFinite()) return { ok: false, reason: "The discount is not an amount." };
+  if (discount.lt(0)) return { ok: false, reason: "The discount cannot be negative." };
+  if (!perUnitSold.isFinite() || perUnitSold.lte(0)) return { ok: false, reason: "The size of the unit sold must be more than zero." };
+  // What the line comes to at its price, before anything else is known about it.
+  const priced = paisa(new Wide(quantity).times(unitPrice));
+  const off = paisa(discount);
+  if (off.gt(priced)) return { ok: false, reason: "The discount cannot be more than the line." };
+  const amount = priced.minus(off);
+  const base = { currency: input.currency, extraTaxAmount: NIL };
+  const untaxed = { value: amount, rateFrom: null, rate: NIL, taxAmount: NIL, furtherTaxRate: NIL, furtherTaxAmount: NIL, furtherTaxReason: null, retailPriceBase: null, total: amount };
+
+  if (!seller.salesTaxRegistered) {
+    return { ok: true, line: { ...base, ...untaxed, taxed: false, categoryId: null, kind: null, saleType: null, sroScheduleNo: null, sroItemSerial: null } };
+  }
+
+  const category = item.category ?? input.standardCategory;
+  if (!category) return { ok: false, reason: "This company has no standard-rate tax category to fall back on. Set the item's tax category." };
+  // An item with no category is charged the standard rate, never whatever happens to be handed in.
+  if (item.category === null && category.kind !== "standard") return { ok: false, reason: "The category used for items with none of their own must be a standard-rate one. Set the item's tax category." };
+  const described = { ...base, taxed: true, categoryId: category.id, kind: category.kind, saleType: item.saleType ?? DEFAULT_SALE_TYPES[category.kind], sroScheduleNo: category.sroScheduleNo, sroItemSerial: category.sroItemSerial };
+
+  // Exempt goods carry no tax of any kind, whoever buys them, and need no rate to say so.
+  if (category.kind === "exempt") return { ok: true, line: { ...described, ...untaxed } };
+
+  const row = taxRateOn(input.rates, category.id, input.date);
+  if (!row) return { ok: false, reason: `No tax rate is in force for this item's category on ${input.date.split("-").reverse().join("-")}. Add the rate under Settings, Tax.` };
+  // A row that contradicts its category is not obeyed.
+  if (category.kind === "zero_rated" && !row.rate.isZero()) return { ok: false, reason: "This item's category is zero-rated but its rate is not nil. Correct the rate under Settings, Tax." };
+  if (category.kind !== "zero_rated" && row.rate.lte(0)) return { ok: false, reason: "This item's category has no rate above nil. Correct the rate under Settings, Tax." };
+
+  const reason = row.furtherTaxRate.isZero() ? null : furtherTaxReason(buyer);
+  const furtherRate = reason === null ? NIL : row.furtherTaxRate;
+  const rated = { ...described, rateFrom: row.effectiveFrom, rate: row.rate, furtherTaxRate: furtherRate, furtherTaxReason: reason };
+
+  if (category.kind === "third_schedule") {
+    // Taxed on the retail price, whatever the goods are sold for.
+    if (item.retailPrice === null || item.retailPrice.lte(0)) return { ok: false, reason: "This item is taxed on its retail price. Set the retail price on the item." };
+    const retailPriceBase = paisa(new Wide(quantity).times(perUnitSold).times(item.retailPrice));
+    const taxAmount = paisa(new Wide(retailPriceBase).times(row.rate).div(100));
+    if (seller.pricesIncludeTax) {
+      // The price is what the buyer pays: the tax is a fixed sum inside it, and further tax shares the rest.
+      const afterTax = amount.minus(taxAmount);
+      if (afterTax.lt(0)) return { ok: false, reason: "The price is less than the sales tax on the item's retail price." };
+      const furtherTaxAmount = paisa(new Wide(afterTax).times(furtherRate).div(new Wide(100).plus(furtherRate)));
+      return { ok: true, line: { ...rated, value: afterTax.minus(furtherTaxAmount), taxAmount, furtherTaxAmount, retailPriceBase, total: amount } };
+    }
+    const furtherTaxAmount = paisa(new Wide(amount).times(furtherRate).div(100));
+    return { ok: true, line: { ...rated, value: amount, taxAmount, furtherTaxAmount, retailPriceBase, total: amount.plus(taxAmount).plus(furtherTaxAmount) } };
+  }
+
+  // Standard, reduced and zero-rated goods: a percentage of the value.
+  if (seller.pricesIncludeTax) {
+    // The price already holds the taxes: each is its share of the price, and the value is what is left.
+    const whole = new Wide(100).plus(row.rate).plus(furtherRate);
+    const taxAmount = paisa(new Wide(amount).times(row.rate).div(whole));
+    const furtherTaxAmount = paisa(new Wide(amount).times(furtherRate).div(whole));
+    return { ok: true, line: { ...rated, value: amount.minus(taxAmount).minus(furtherTaxAmount), taxAmount, furtherTaxAmount, retailPriceBase: null, total: amount } };
+  }
+  const taxAmount = paisa(new Wide(amount).times(row.rate).div(100));
+  const furtherTaxAmount = paisa(new Wide(amount).times(furtherRate).div(100));
+  return { ok: true, line: { ...rated, value: amount, taxAmount, furtherTaxAmount, retailPriceBase: null, total: amount.plus(taxAmount).plus(furtherTaxAmount) } };
+}

@@ -7,6 +7,8 @@ import { companySetup } from "./schema";
 
 export type CompanySetup = {
   salesTaxRegistered: boolean;
+  /** Whether the company's prices already include sales tax. False when it is not registered. */
+  pricesIncludeTax: boolean;
   ntn: string | null;
   strn: string | null;
   accountsTemplate: AccountTemplate | null;
@@ -20,7 +22,7 @@ export type CompanySetup = {
 export async function getCompanySetup(ctx: TenantContext): Promise<CompanySetup | null> {
   const [row] = await withTenant(ctx.userId, ctx.tenantId, (tx) =>
     tx
-      .select({ salesTaxRegistered: companySetup.salesTaxRegistered, ntn: companySetup.ntn, strn: companySetup.strn, accountsTemplate: companySetup.accountsTemplate, completedAt: companySetup.completedAt })
+      .select({ salesTaxRegistered: companySetup.salesTaxRegistered, pricesIncludeTax: companySetup.pricesIncludeTax, ntn: companySetup.ntn, strn: companySetup.strn, accountsTemplate: companySetup.accountsTemplate, completedAt: companySetup.completedAt })
       .from(companySetup)
       .where(eq(companySetup.tenantId, ctx.tenantId)),
   );

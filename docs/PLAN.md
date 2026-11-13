@@ -135,7 +135,7 @@ Fifty-two steps in nine phases. Phases finish in order; steps inside a phase mos
 
 | Step | Deliverable | Acceptance | Status |
 | --- | --- | --- | --- |
-| 17 | Tax engine `rules.ts`: given item, buyer, date, currency → rate, tax, further tax, extra tax, retail-price base, sale type code. No I/O | 25-case unit table covering registered/unregistered, ATL/non-ATL, exempt, zero-rated, Third Schedule, reduced-rate with SRO | |
+| 17 | Tax engine `rules.ts`: given item, buyer, date, currency → rate, tax, further tax, extra tax, retail-price base, sale type code. No I/O | 25-case unit table covering registered/unregistered, ATL/non-ATL, exempt, zero-rated, Third Schedule, reduced-rate with SRO | Done 2026-11-13 |
 | 18 | Sales documents table and the one document screen: quotation and sales order (draft/submit, lines, price resolution, line discounts, salesperson splits summing to 100%, credit-limit check with owner override, keyboard entry) | Over-limit sale blocked; override logged with reason | |
 | 19 | Delivery note from order (partial, remaining qty tracked) with stock moves at weighted-average cost | Stock and COGS move; delivering more than ordered is refused | |
 | 20 | Sales invoice from delivery or order; posting: AR, revenue, output tax, further tax, COGS; buyer snapshot stored; FBR fields stored (module off, so not submitted) | Journal matches a hand-worked example for a registered buyer and an unregistered one | |

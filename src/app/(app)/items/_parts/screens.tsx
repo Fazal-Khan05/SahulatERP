@@ -177,7 +177,7 @@ function ItemForm({ id, item, loadedAt, setup }: { id: string | null; item: Item
           </div>
         )}
         <Field label="Selling price" name="defaultPrice" defaultValue={plain(item?.defaultPrice ?? null)} inputMode="decimal" autoComplete="off" hint="For one of the item's own unit, when no price list or special price applies." />
-        <Field label="Retail price" name="retailPrice" defaultValue={plain(item?.retailPrice ?? null)} inputMode="decimal" autoComplete="off" hint="The price printed on the pack, without commas." />
+        <Field label="Retail price" name="retailPrice" defaultValue={plain(item?.retailPrice ?? null)} inputMode="decimal" autoComplete="off" hint="The retail price before sales tax, without commas. A printed price that includes 18% tax is entered divided by 1.18." />
         <Field label="Reorder level" name="reorderLevel" defaultValue={plain(item?.reorderLevel ?? null)} inputMode="decimal" autoComplete="off" hint="Stock at or below this asks to be reordered." />
       </div>
       {id === null ? (

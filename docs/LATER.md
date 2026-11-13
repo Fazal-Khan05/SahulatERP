@@ -638,3 +638,54 @@ Things noticed while building a step that belong to a later one, or to nobody ye
   chooser (UI principle 8).
 - **The Reports menu entry for a sales manager is still greyed.** Sales reports come with sales.
 
+## From Step 17
+
+- **`taxLine` in `src/modules/tax/rules.ts` is the tax engine**: one line of a sale in, the
+  value, the rate, the sales tax, the further tax and the total out. It reads nothing. The
+  caller (the sales documents, Steps 18 to 20) hands it the seller's two answers from
+  `getCompanySetup` (registered; prices include tax), the customer's registration and
+  active-taxpayer status, the item's category, retail price and sale type, the dated rate rows
+  and the company's standard-rate category. `docs/examples/step-17.md` has worked cases,
+  checked by Claude, not by an accountant.
+- **Whether prices include tax is one answer per company**, given at setup by a company
+  registered for sales tax (founder's decision), kept in `company_setup.prices_include_tax`.
+  Like the other setup answers it cannot be changed afterwards yet. Companies set up before
+  Step 17 have "tax is added on top".
+- **The quantity and the price are in the unit the goods were sold in**, so a line of cartons
+  comes to exactly cartons times the carton price. The size of that unit in the item's own
+  unit (`unitsPerUnitSold`, from Step 8's conversions) is passed alongside and is used only to
+  bring the retail price of a Third Schedule item to the quantity sold.
+- **Amounts are rounded to the paisa line by line**, halves up: the line's amount first, then
+  each tax. A document's totals are the sums of its lines, never worked again from the totals.
+- **A registered buyer whose active-taxpayer status was never checked is charged further tax**,
+  and the line says so (`furtherTaxReason: "buyer_not_checked"`). The sales screens should show
+  that reason beside the tax and point at the customer. The automatic check against FBR's list
+  is Step 45.
+- **A sale the law takes out of further tax** (SRO 648(I)/2013, such as a sale to an end
+  consumer) is the input `furtherTaxExcluded`. Nothing stores it yet: the sales documents
+  decide whether it is a mark on the customer, on the document, or both.
+- **Extra tax (section 3(5)) is always nil.** The figure exists on every line so that no
+  document lacks it; no category carries a rate for it.
+- **The engine works in the document's currency and rounds to two decimals whatever the
+  currency.** Foreign-currency sales (Step 22) convert the amounts at posting.
+- **The rate is the one in force on the date the engine is given.** In law that is the time of
+  supply; the sales invoice (Step 20) decides which of its dates that is.
+- **Further tax is its own figure on every line and must be its own figure in the books and in
+  the return.** It cannot be set against input tax. The chart has one account for sales tax
+  payable; Step 20 decides whether further tax needs its own.
+- **The item's retail price is the price before sales tax**, as the Act defines it and as the
+  item screen now says: a printed price that includes 18% tax is entered divided by 1.18. If
+  the pilot's users find that awkward, add a tick on the item for "the printed price includes
+  tax" and let the engine do the division. The item screen also shows the tax category, the
+  retail price and the FBR fields to a company that is not registered for sales tax; hide them
+  there when the sales screens are built (Step 18), to keep "no tax anywhere".
+- **The line says which dated rate it used** (`rateFrom`) and why further tax was added. With
+  prices that include tax, a discount is a figure that includes tax too; the line does not give
+  the discount before tax, which a printed invoice and FBR's format may want (Steps 20 and 23).
+- **A rate row that contradicts its category is refused, not obeyed**: a zero-rated category
+  with a rate, or a taxed one without. An exempt category needs no rate row at all.
+- **FBR's names for the kinds of sale** (`DEFAULT_SALE_TYPES`) were written from memory of
+  FBR's digital invoicing list and must be checked against it in Phase 7.
+- **A company that registers for sales tax later** still cannot say so: the setup answers
+  cannot be changed. It needs a dated record, so that documents before the date carry no tax.
+

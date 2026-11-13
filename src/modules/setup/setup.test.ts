@@ -70,14 +70,17 @@ describe.skipIf(!hasDb)("the setup record", () => {
       actor_role: "owner",
       action: "company.setup",
       // The parts other modules own are recorded as they are, not as they were typed.
-      after: { salesTaxRegistered: false, ntn: "1111111-1", strn: null, taxRatesConfirmed: false, baseCurrency: "USD", fiscalYearStart: "2026-07-01", bundle: "trading", modules: "sales, inventory", branch: "Karachi", warehouse: "Main warehouse", accountsTemplate: "trading" },
+      after: { salesTaxRegistered: false, ntn: "1111111-1", strn: null, taxRatesConfirmed: false, pricesIncludeTax: false, baseCurrency: "USD", fiscalYearStart: "2026-07-01", bundle: "trading", modules: "sales, inventory", branch: "Karachi", warehouse: "Main warehouse", accountsTemplate: "trading" },
     });
   }, 120_000);
 
   it("keeps a registered company's STRN and the moment it confirmed its rates", async () => {
-    await recordSetup(otherOwner, answers({ salesTaxRegistered: "yes", strn: "1111111111111", taxRatesConfirmed: "on" }), facts);
-    const [row] = await admin`select sales_tax_registered, strn, tax_rates_confirmed_at is not null as confirmed, completed_by from public.company_setup where tenant_id = ${tenantB}`;
-    expect(row).toEqual({ sales_tax_registered: true, strn: "1111111111111", confirmed: true, completed_by: ids.ownerB });
+    await recordSetup(otherOwner, answers({ salesTaxRegistered: "yes", strn: "1111111111111", taxRatesConfirmed: "on", pricesIncludeTax: "yes" }), facts);
+    const [row] = await admin`select sales_tax_registered, strn, tax_rates_confirmed_at is not null as confirmed, prices_include_tax, completed_by from public.company_setup where tenant_id = ${tenantB}`;
+    expect(row).toEqual({ sales_tax_registered: true, strn: "1111111111111", confirmed: true, prices_include_tax: true, completed_by: ids.ownerB });
+    // What the tax engine reads: registered, with the tax inside the prices; the other company has neither.
+    expect(await getCompanySetup(otherOwner)).toMatchObject({ salesTaxRegistered: true, pricesIncludeTax: true });
+    expect(await getCompanySetup(owner)).toMatchObject({ salesTaxRegistered: false, pricesIncludeTax: false });
     // Each company sees only its own.
     expect((await getCompanySetup(owner))?.salesTaxRegistered).toBe(false);
     expect(await withTenant(ids.owner, tenantB, (tx) => tx.select().from(companySetup))).toEqual([]);
@@ -92,7 +95,7 @@ describe.skipIf(!hasDb)("the setup record", () => {
     expect(await codeOf(() => withTenant(ids.owner, tenantA, (tx) => tx.delete(companySetup)))).toBe("42501");
     // Registered and STRN go together, as do registered and the confirmation of rates.
     await admin`delete from public.company_setup where tenant_id = ${tenantA}`;
-    for (const bad of [{ salesTaxRegistered: true }, { strn: "1111111111111" }, { strn: "123" }, { ntn: "12" }, { accountsTemplate: "Not A Template" }]) {
+    for (const bad of [{ salesTaxRegistered: true }, { strn: "1111111111111" }, { strn: "123" }, { ntn: "12" }, { accountsTemplate: "Not A Template" }, { pricesIncludeTax: true }]) {
       expect(await codeOf(() => withTenant(ids.owner, tenantA, (tx) => tx.insert(companySetup).values({ ...row, completedBy: ids.owner, ...bad }))), JSON.stringify(bad)).toBe("23514");
     }
     expect(await codeOf(() => withTenant(ids.owner, tenantA, (tx) => tx.insert(companySetup).values({ ...row, completedBy: ids.ownerB })))).toBe("42501");

@@ -32,7 +32,7 @@ export async function completeSetupAction(_: FormState, formData: FormData): Pro
       if (await getCompanySetup(session)) return { error: SETUP_DONE };
 
       const existing = await existingSetupParts(session);
-      const raw: RawSetup = Object.fromEntries(["salesTaxRegistered", "ntn", "strn", "taxRatesConfirmed", "currencyCode", "currencyName", "fiscalMonth", "fiscalYear", "bundle", "branchName", "warehouseName", "accountsTemplate"].map((key) => [key, formData.get(key)]));
+      const raw: RawSetup = Object.fromEntries(["salesTaxRegistered", "ntn", "strn", "taxRatesConfirmed", "pricesIncludeTax", "currencyCode", "currencyName", "fiscalMonth", "fiscalYear", "bundle", "branchName", "warehouseName", "accountsTemplate"].map((key) => [key, formData.get(key)]));
       if (existing.base) Object.assign(raw, { currencyCode: existing.base.code, currencyName: existing.base.name });
       if (existing.firstPeriod) Object.assign(raw, { fiscalMonth: String(Number(existing.firstPeriod.yearStart.slice(5, 7))), fiscalYear: existing.firstPeriod.yearStart.slice(0, 4) });
       if (existing.branch) raw.branchName = existing.branch.name;

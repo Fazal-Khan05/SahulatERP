@@ -42,6 +42,7 @@ export async function recordSetup(ctx: TenantContext, setup: SetupInput, facts: 
           ntn: setup.ntn,
           strn: setup.strn,
           taxRatesConfirmedAt: setup.taxRatesConfirmed ? sql`now()` : null,
+          pricesIncludeTax: setup.pricesIncludeTax,
           accountsTemplate: setup.accountsTemplate,
           completedBy: ctx.userId,
         })
@@ -55,6 +56,7 @@ export async function recordSetup(ctx: TenantContext, setup: SetupInput, facts: 
           ntn: setup.ntn,
           strn: setup.strn,
           taxRatesConfirmed: setup.taxRatesConfirmed,
+          pricesIncludeTax: setup.pricesIncludeTax,
           baseCurrency: facts.baseCurrency,
           fiscalYearStart: facts.fiscalYearStart,
           bundle: setup.bundle,

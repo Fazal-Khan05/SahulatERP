@@ -38,7 +38,7 @@ async function Setup() {
         <PageHead title="Set up" />
         <Card className="max-w-xl">
           <p className="mb-3" data-testid="setup-done">
-            {session.tenantName} is set up. It is {done.salesTaxRegistered ? "registered" : "not registered"} for sales tax
+            {session.tenantName} is set up. It is {done.salesTaxRegistered ? `registered for sales tax, with ${done.pricesIncludeTax ? "prices that include the tax" : "the tax added on top of its prices"}` : "not registered for sales tax"}
             {done.accountsTemplate ? `, and its accounts start from "${ACCOUNT_TEMPLATES[done.accountsTemplate]}"` : ""}.
           </p>
           <p className="mb-4 text-sm text-muted-foreground">Currencies, fiscal periods, modules, branches and warehouses are under Settings.</p>
@@ -81,12 +81,23 @@ async function Setup() {
               <input type="radio" name="salesTaxRegistered" value="yes" required className="mt-0.5 size-4" />
               <span>
                 Registered for sales tax
-                <span className="block text-xs text-muted-foreground">Invoices show sales tax. Fill in the three fields below.</span>
+                <span className="block text-xs text-muted-foreground">Invoices show sales tax. Fill in the fields below.</span>
               </span>
             </label>
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="STRN" name="strn" autoComplete="off" hint="13 digits. Only if registered." />
               <Field label="NTN" name="ntn" autoComplete="off" hint="7 digits, with or without the check digit. Optional." />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="pricesIncludeTax">Prices and sales tax</Label>
+              <select id="pricesIncludeTax" name="pricesIncludeTax" defaultValue="" className={SELECT}>
+                <option value="">Choose, only if registered</option>
+                <option value="no">Sales tax is added on top of my prices</option>
+                <option value="yes">My prices already include sales tax</option>
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Only if registered. With prices that include the tax, the customer pays the price you set and the invoice shows the tax inside it.
+              </p>
             </div>
             <label className="flex items-start gap-2 text-sm">
               <input type="checkbox" name="taxRatesConfirmed" className="mt-0.5 size-4" />

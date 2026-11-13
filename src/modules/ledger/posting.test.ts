@@ -307,7 +307,8 @@ describe.skipIf(!hasDb)("the posting engine", () => {
     await expect(reverse(as.auditor, id)).rejects.toThrow("Your role cannot reverse this.");
     await expect(reverse(as.owner, randomUUID())).rejects.toThrow("That journal is not in this company.");
     await expect(reverse(otherOwner, id)).rejects.toThrow("That journal is not in this company.");
-    const both = await Promise.allSettled([reverse(as.owner, id, "2026-11-20", "Entered twice"), reverse(as.accountant, id, "2026-11-20")]);
+    // Whichever of the two gets there first is the one that is kept.
+    const both = await Promise.allSettled([reverse(as.owner, id, "2026-11-20", "Entered twice"), reverse(as.accountant, id, "2026-11-20", "Entered twice")]);
     expect(both.map((r) => r.status).sort()).toEqual(["fulfilled", "rejected"]);
     expect((both.find((r) => r.status === "rejected") as PromiseRejectedResult).reason.message).toBe("That journal has already been reversed.");
     const reversalId = (both.find((r) => r.status === "fulfilled") as PromiseFulfilledResult<string>).value;

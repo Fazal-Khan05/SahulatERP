@@ -80,6 +80,10 @@ test("a company registered for sales tax gives its STRN and confirms its rates",
   await page.locator('input[name="salesTaxRegistered"][value="yes"]').check();
   await page.locator('input[name="taxRatesConfirmed"]').check();
   await page.getByLabel("STRN").fill("11-11-1111-111-11");
+  // Whether its prices include the tax is never assumed: a registered company has to say.
+  await page.getByRole("button", { name: "Finish setup" }).click();
+  await expect(page.getByTestId("form-error")).toHaveText("Say whether your prices already include sales tax, or the tax is added on top.");
+  await page.getByLabel("Prices and sales tax").selectOption({ label: "My prices already include sales tax" });
   // A year far from today is refused before anything is written: the currency, which could never be undone, is not set.
   await page.getByLabel("Currency code").fill("USD");
   await page.getByLabel("Currency name").fill("US Dollar");
@@ -104,11 +108,11 @@ test("a company registered for sales tax gives its STRN and confirms its rates",
   await expect(page).toHaveURL(/\/inbox$/);
 
   const [state] = await sql`
-    select s.sales_tax_registered as registered, s.strn, s.tax_rates_confirmed_at is not null as confirmed,
+    select s.sales_tax_registered as registered, s.strn, s.tax_rates_confirmed_at is not null as confirmed, s.prices_include_tax as tax_in_price,
       (select to_char(min(starts_on), 'MM-DD') from public.fiscal_periods p where p.tenant_id = s.tenant_id) as year_starts,
       (select string_agg(module::text, ',' order by module::text) from public.modules_enabled m where m.tenant_id = s.tenant_id and enabled) as switched_on
     from public.company_setup s join public.tenants t on t.id = s.tenant_id where t.created_by = ${registeredOwner.id}`;
-  expect(state).toEqual({ registered: true, strn: "1111111111111", confirmed: true, year_starts: "01-01", switched_on: "payroll" });
+  expect(state).toEqual({ registered: true, strn: "1111111111111", confirmed: true, tax_in_price: true, year_starts: "01-01", switched_on: "payroll" });
   expect(await railLabels(page)).toContain("Payroll");
 });
 

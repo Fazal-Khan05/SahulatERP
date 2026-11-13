@@ -107,6 +107,27 @@ The standard rate, as a percent of the value before tax.
 | Khyber Pakhtunkhwa | 15% | Khyber Pakhtunkhwa Sales Tax on Services Act 2022 | KPRA regulation and KPMG; the Act's own section was not read | |
 | Balochistan | 15% | Balochistan Sales Tax on Services Act 2015, s.10(1) | BRA | |
 
+## How the tax engine applies these rates (Step 17)
+
+Decided by Claude from the Act, with an independent second calculation; not reviewed by an
+accountant. `docs/examples/step-17.md` has the worked cases.
+
+- Further tax is added when the buyer has no sales tax registration, when the buyer is
+  registered but marked not active, and when a registered buyer's active-taxpayer status has
+  never been checked. The last is a choice, not the letter of the law: the Act says "not an
+  active taxpayer", and an unchecked buyer is not known to be one.
+- Further tax is a percentage of the value before sales tax.
+- Third Schedule goods are taxed at the rate times the item's retail price times the quantity,
+  whatever they sell for, with the retail price taken as the Act defines it: before sales tax.
+- A zero-rated category carries further tax only if the company has put a further-tax rate on
+  it (none is given by default; see question 2 below).
+- Reduced-rate goods carry further tax like standard-rate goods.
+- An item with no category is charged at the company's standard-rate category (founder's
+  decision, 2026-11-13).
+- With prices that include tax, the price is what the buyer pays and holds the sales tax and
+  any further tax: each is its share of rate over (100 + rate + further rate).
+- Amounts are rounded to the paisa, halves up, line by line.
+
 ## Questions for the accountant
 
 1. **Third Schedule goods and further tax.** The product charges no further tax on them, relying
@@ -119,6 +140,14 @@ The standard rate, as a percent of the value before tax.
    can be set.
 3. **Khyber Pakhtunkhwa.** Please confirm the 15% standard rate and the section that sets it.
 4. **Is anything in "Not included" below needed by the pilot company from its first day?**
+5. **A registered buyer whose active-taxpayer status was never checked.** The product adds
+   further tax until someone marks the customer active. Is that the right way round?
+6. **The retail price on a Third Schedule item.** The product multiplies it by the rate, as
+   section 3(2)(a) says, so it must be the price before sales tax. Packs that print a price
+   including tax need that price divided by 1.18 when it is entered. Is that how the pilot's
+   suppliers print it?
+7. **Sales to end consumers.** The product can leave further tax off a sale marked as one the
+   SRO excludes. Which of the pilot's sales, if any, count?
 
 ## Not included
 

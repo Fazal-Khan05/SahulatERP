@@ -89,6 +89,15 @@ export function periodName(startsOn: string): string {
   return `${MONTHS[month - 1]} ${year}`;
 }
 
+/**
+ * Whether a first fiscal year may start in this calendar year: from two years back to one year
+ * ahead. The first year cannot be moved once opened, so a slip of the keyboard is refused.
+ */
+export function firstYearProblem(start: string, thisYear: number): string | null {
+  const year = Number(start.slice(0, 4));
+  return year < thisYear - 2 || year > thisYear + 1 ? `The first fiscal year must start between ${thisYear - 2} and ${thisYear + 1}.` : null;
+}
+
 /** The first day of a company's first fiscal year, from the month and year it chose. */
 export function readFirstYear(raw: { month?: unknown; year?: unknown }): { ok: true; start: string } | { ok: false; reason: string } {
   const month = typeof raw.month === "string" && /^\d{1,2}$/.test(raw.month.trim()) ? Number(raw.month.trim()) : 0;

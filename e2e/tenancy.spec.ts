@@ -67,6 +67,9 @@ test("owner A signs in for the first time, creates a company and adds branches",
   await page.getByLabel("Company name").fill(ALPHA);
   await page.getByRole("button", { name: "Create company" }).click();
   await expect(page.getByTestId("company-name")).toHaveText(ALPHA);
+  // A new company lands on the setup wizard; this test starts from Home, on a fresh page.
+  await expect(page).toHaveURL(/\/setup$/);
+  await page.goto("/");
   await expect(page.getByText(`Signed in as ${ownerA.email}, Owner at ${ALPHA}.`)).toBeVisible();
 
   await addBranch(page, "Alpha Karachi");
@@ -88,6 +91,8 @@ test("owner B signs in for the first time, creates a company and adds a branch",
   await page.getByLabel("Company name").fill(BETA);
   await page.getByRole("button", { name: "Create company" }).click();
   await expect(page.getByTestId("company-name")).toHaveText(BETA);
+  // A new company lands on the setup wizard; this test starts from Home, on a fresh page.
+  await page.goto("/");
   await addBranch(page, "Beta Lahore");
 
   tenantB = await tenantIdOf(BETA, ownerB);
@@ -174,6 +179,8 @@ test("the switcher moves between the user's own companies and ignores a forged c
   await page.getByLabel("Company name").fill(ALPHA_TWO);
   await page.getByRole("button", { name: "Create company" }).click();
   await expect(page.getByTestId("company-name")).toHaveText(ALPHA_TWO);
+  // A new company lands on the setup wizard; this test starts from Home, on a fresh page.
+  await page.goto("/");
 
   // A real switch.
   const switcher = page.getByLabel("Company");

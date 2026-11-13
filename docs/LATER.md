@@ -361,3 +361,36 @@ Things noticed while building a step that belong to a later one, or to nobody ye
   or one year after today; a wrong one needs the database's undo script.
 - **The Fiscal periods screen shows each counter's next number formatted by the app** (display
   only); the number a document gets always comes from the database function.
+
+## From Step 11
+
+- **A new company lands on the setup wizard** (`/setup`) and its owner is reminded on Home until
+  it is finished. Nothing else is blocked while setup is unfinished; once documents exist they
+  should refuse to post until the company is set up.
+- **The wizard's parts are done one after another, each by its own module's command**, not in
+  one transaction. If it stops half-way, submitting again finishes the rest; what was done stays.
+  The record in `company_setup` is what marks a company as set up.
+- **The recorded answers are a record of what was asked, not the source of truth for the parts
+  other modules own.** The base currency, fiscal year, modules, branches and warehouses are read
+  from their own tables. `company_setup` is the source of truth only for the sales tax
+  registration, the company's own NTN and STRN, and the chosen chart of accounts.
+- **`getCompanySetup(ctx).salesTaxRegistered` is what the tax engine (Step 17) and every sales
+  screen must read**: not registered means no tax is charged or shown anywhere.
+- **The setup answers cannot be changed afterwards.** A company that registers for sales tax
+  later needs a screen (and a dated record) to say so; decide with the tax engine.
+- **The chart of accounts is only chosen, not created.** Step 12 creates the accounts from
+  `accountsTemplate` ("trading" is the only one) for companies that are set up, and at setup
+  from then on.
+- **The owner ticks that the tax rates were checked** only when registered; the moment is kept
+  in `tax_rates_confirmed_at`. The terms of service should say the company is responsible for
+  its rates (launch gate).
+- **Module bundles are a starting point** (Trading; Trading with imports; Everything). Each
+  switch can still be changed under Settings, Modules.
+- **Nothing is assumed about sales tax registration**: the wizard makes the owner choose. A
+  company's own NTN must be 7 digits; a sole proprietor who uses a 13-digit CNIC as the NTN
+  cannot enter it there yet.
+- **One submission of the wizard runs at a time per company** (`withSetupLock`), and everything
+  is checked before the first write, because the base currency and the fiscal year cannot be
+  undone. The lock holds one database connection while the steps use others.
+- **The wizard sets every module to the chosen bundle**, including one switched on by hand before
+  setup was finished.

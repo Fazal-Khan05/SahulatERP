@@ -19,5 +19,6 @@ export async function createCompanyAction(_: FormState, formData: FormData): Pro
     return { error: "We could not create the company. Please try again." };
   }
   (await cookies()).set(ACTIVE_TENANT_COOKIE, tenantId, activeTenantCookieOptions);
-  return { location: "/" };
+  // Straight into the setup wizard: a new company answers its few questions once.
+  return { location: "/setup" };
 }

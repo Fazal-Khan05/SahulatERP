@@ -43,6 +43,7 @@ export async function deleteTenants(sql: AdminSql, tenantIds: string[]): Promise
     await tx`delete from public.modules_enabled where tenant_id = any(${tenantIds})`;
     await tx`delete from public.settings where tenant_id = any(${tenantIds})`;
     await tx`delete from public.invitations where tenant_id = any(${tenantIds})`;
+    await tx`delete from public.company_setup where tenant_id = any(${tenantIds})`;
     await tx`delete from public.number_series where tenant_id = any(${tenantIds})`;
     await tx`delete from public.fiscal_periods where tenant_id = any(${tenantIds})`;
     await tx`delete from public.warehouses where tenant_id = any(${tenantIds})`;

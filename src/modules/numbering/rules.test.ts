@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DOCUMENT_TYPES, fiscalYearCode, fiscalYearLabel, formatDocumentNumber, isDocumentType, isMonthStart, monthlyPeriods, nextDay, periodFor, periodName, readFirstYear } from "./rules";
+import { DOCUMENT_TYPES, firstYearProblem, fiscalYearCode, fiscalYearLabel, formatDocumentNumber, isDocumentType, isMonthStart, monthlyPeriods, nextDay, periodFor, periodName, readFirstYear } from "./rules";
 
 describe("fiscal years", () => {
   it("names a year by where it starts", () => {
@@ -37,6 +37,14 @@ describe("fiscal years", () => {
     expect(isMonthStart("2026-07-01")).toBe(true);
     for (const bad of ["2026-07-02", "2026-13-01", "01-07-2026", "", null]) expect(isMonthStart(bad), String(bad)).toBe(false);
     expect([nextDay("2026-12-31"), nextDay("2028-02-28"), nextDay("2027-02-28")]).toEqual(["2027-01-01", "2028-02-29", "2027-03-01"]);
+  });
+
+  it("lets a first year start only near the present", () => {
+    expect(firstYearProblem("2026-07-01", 2026)).toBeNull();
+    expect(firstYearProblem("2024-01-01", 2026)).toBeNull();
+    expect(firstYearProblem("2027-12-01", 2026)).toBeNull();
+    expect(firstYearProblem("2023-07-01", 2026)).toBe("The first fiscal year must start between 2024 and 2027.");
+    expect(firstYearProblem("2028-01-01", 2026)).toBe("The first fiscal year must start between 2024 and 2027.");
   });
 
   it("reads the month and year a company's first year starts", () => {

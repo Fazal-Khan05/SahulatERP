@@ -63,6 +63,8 @@ test("the owner gets the shell: their menu, an empty inbox and their company in 
   await page.getByLabel("Company name").fill(COMPANY);
   await page.getByRole("button", { name: "Create company" }).click();
   await expect(page.getByTestId("company-name")).toHaveText(COMPANY);
+  // A new company lands on the setup wizard; this test starts from Home, on a fresh page.
+  await page.goto("/");
   await expect(page.getByTestId("product-name")).toHaveText("SahulatERP");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Home");
 

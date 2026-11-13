@@ -52,6 +52,7 @@ const ACTION_LABELS: Record<string, string> = {
   "fiscal_year.open": "Opened a fiscal year",
   "fiscal_period.lock": "Locked a period",
   "fiscal_period.unlock": "Unlocked a period",
+  "company.setup": "Finished setting up the company",
   "job.enqueue": "Queued background work",
 };
 

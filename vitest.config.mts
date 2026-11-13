@@ -22,7 +22,7 @@ export default defineConfig({
     // pool, and stall each other when they run side by side.
     fileParallelism: false,
     // The policy tests talk to the hosted database; each round trip crosses the network.
-    testTimeout: 30_000,
-    hookTimeout: 60_000,
+    testTimeout: 120_000,
+    hookTimeout: 120_000,
   },
 });

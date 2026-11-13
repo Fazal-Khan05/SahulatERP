@@ -71,6 +71,13 @@
       "when": 1794522134400,
       "tag": "0009_numbering_lock",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794524291414,
+      "tag": "0010_setup",
+      "breakpoints": true
     }
   ]
 }

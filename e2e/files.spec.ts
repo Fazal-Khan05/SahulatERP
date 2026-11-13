@@ -37,6 +37,8 @@ test("an owner adds a file and downloads it through a link that the object store
   await page.getByLabel("Company name").fill("E2E Files Traders");
   await page.getByRole("button", { name: "Create company" }).click();
   await expect(page.getByTestId("company-name")).toHaveText("E2E Files Traders");
+  // A new company lands on the setup wizard; this test starts from Home, on a fresh page.
+  await page.goto("/");
   const tenants = await sql<{ id: string }[]>`select id from public.tenants where created_by = ${owner.id}`;
   tenantId = tenants[0].id;
   await sql`insert into public.memberships (tenant_id, user_id, email, role, created_by)
@@ -93,6 +95,8 @@ test("another company's owner and a salesperson cannot see or fetch the file thr
   await page.getByLabel("Company name").fill("E2E Files Rival");
   await page.getByRole("button", { name: "Create company" }).click();
   await expect(page.getByTestId("company-name")).toHaveText("E2E Files Rival");
+  // A new company lands on the setup wizard; this test starts from Home, on a fresh page.
+  await page.goto("/");
   await page.goto("/settings/files");
   await expect(page.getByText("No files yet.")).toBeVisible();
   await expect(page.getByText(NAME)).toHaveCount(0);

@@ -139,13 +139,17 @@ describe.skipIf(!hasDb)("fiscal periods, document numbers and warehouses", () =>
     // A lock waits for a document already on its way in: the document keeps its number, and the
     // lock lands only after it. Nothing gets a number in the month once the lock is in place.
     const order: string[] = [];
+    let numberTaken!: () => void;
+    const hasNumber = new Promise<void>((resolve) => (numberTaken = resolve));
     const slowPost = withTenant(userIds.salesperson, tenantA, async (tx) => {
       const taken = await takeDocumentNumber(tx, "SI", D);
-      await new Promise((resolve) => setTimeout(resolve, 2500));
+      numberTaken();
+      // The document is still being written while the owner reaches for the lock.
+      await new Promise((resolve) => setTimeout(resolve, 3000));
       order.push("document");
       return taken;
     });
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    await hasNumber;
     const locking = setPeriodLocked(as.owner, november.id, true).then(() => order.push("lock"));
     expect(await slowPost).toBe("SI-2627-00039");
     await locking;

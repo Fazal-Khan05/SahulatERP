@@ -33,6 +33,8 @@ test("a new company starts with the tax tables, and its owner changes a rate fro
   await page.getByLabel("Company name").fill("E2E Tax Traders");
   await page.getByRole("button", { name: "Create company" }).click();
   await expect(page.getByTestId("company-name")).toHaveText("E2E Tax Traders");
+  // A new company lands on the setup wizard; this test starts from Home, on a fresh page.
+  await page.goto("/");
   const tenants = await sql<{ id: string }[]>`select id from public.tenants where created_by = ${owner.id}`;
   tenantId = tenants[0].id;
   await sql`insert into public.memberships (tenant_id, user_id, email, role, created_by) values

@@ -34,6 +34,8 @@ test("an owner sets up units and a category, then adds an item sold by the carto
   await page.getByLabel("Company name").fill("E2E Item Traders");
   await page.getByRole("button", { name: "Create company" }).click();
   await expect(page.getByTestId("company-name")).toHaveText("E2E Item Traders");
+  // A new company lands on the setup wizard; this test starts from Home, on a fresh page.
+  await page.goto("/");
   tenantId = (await sql<{ id: string }[]>`select id from public.tenants where created_by = ${owner.id}`)[0].id;
   await sql`insert into public.memberships (tenant_id, user_id, email, role, created_by) values
     (${tenantId}, ${storekeeper.id}, ${storekeeper.email}, 'warehouse_manager', ${owner.id}),

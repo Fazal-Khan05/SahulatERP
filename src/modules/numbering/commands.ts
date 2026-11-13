@@ -4,7 +4,7 @@ import { audit, isUuid, withTenant, type Tx } from "@/db";
 import { UserError, pgCode } from "@/lib/errors";
 import { isIsoDate } from "@/modules/currencies/rules";
 import { can, type TenantContext } from "@/modules/tenant/rules";
-import { fiscalYearLabel, isDocumentType, monthlyPeriods, nextDay, periodName, readFirstYear, type DocumentType } from "./rules";
+import { firstYearProblem, fiscalYearLabel, isDocumentType, monthlyPeriods, nextDay, periodName, readFirstYear, type DocumentType } from "./rules";
 import { fiscalPeriods } from "./schema";
 
 const NO_PERIOD = "SE001";
@@ -34,8 +34,9 @@ export async function takeDocumentNumber(tx: Tx, type: DocumentType, date: strin
 /**
  * Opens a fiscal year: twelve monthly periods. The company's first year starts in the month and
  * year given; every later year starts the day after the last one ends, whatever is given.
+ * With `onlyFirst`, it opens nothing when a year is already open (the setup wizard asks this way).
  */
-export async function openFiscalYear(ctx: TenantContext, raw: { month?: unknown; year?: unknown }): Promise<{ yearStart: string }> {
+export async function openFiscalYear(ctx: TenantContext, raw: { month?: unknown; year?: unknown }, options: { onlyFirst?: boolean } = {}): Promise<{ yearStart: string }> {
   if (!can(ctx.role, "period.manage")) throw new UserError("Only an owner can open a fiscal year.");
   try {
     return await withTenant(ctx.userId, ctx.tenantId, async (tx) => {
@@ -43,14 +44,14 @@ export async function openFiscalYear(ctx: TenantContext, raw: { month?: unknown;
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"fiscal-year:" + ctx.tenantId}, 0))`);
       const [last] = await tx.select({ endsOn: fiscalPeriods.endsOn }).from(fiscalPeriods).where(eq(fiscalPeriods.tenantId, ctx.tenantId)).orderBy(desc(fiscalPeriods.startsOn)).limit(1);
       let yearStart: string;
+      // Asked only for a first year, and one is already open: someone got there first.
+      if (last && options.onlyFirst) return { yearStart: last.endsOn };
       if (last) yearStart = nextDay(last.endsOn);
       else {
         const first = readFirstYear(raw);
         if (!first.ok) throw new UserError(first.reason);
-        // The first year cannot be moved afterwards, so a slip of the keyboard is refused here.
-        const thisYear = new Date().getUTCFullYear();
-        const year = Number(first.start.slice(0, 4));
-        if (year < thisYear - 2 || year > thisYear + 1) throw new UserError(`The first fiscal year must start between ${thisYear - 2} and ${thisYear + 1}.`);
+        const problem = firstYearProblem(first.start, new Date().getUTCFullYear());
+        if (problem) throw new UserError(problem);
         yearStart = first.start;
       }
       await tx.insert(fiscalPeriods).values(monthlyPeriods(yearStart).map((period) => ({ tenantId: ctx.tenantId, yearStart, ...period, createdBy: ctx.userId })));

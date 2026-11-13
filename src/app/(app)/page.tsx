@@ -5,7 +5,9 @@ import { PageLoading } from "@/components/page-loading";
 import { Card, Empty, PageHead } from "@/components/page-parts";
 import { requireTenant } from "@/lib/auth/session";
 import { formatDay } from "@/lib/format";
-import { ROLE_LABELS } from "@/modules/tenant/rules";
+import { buttonVariants } from "@/components/ui/button";
+import { getCompanySetup } from "@/modules/setup/queries";
+import { ROLE_LABELS, can } from "@/modules/tenant/rules";
 
 export const metadata: Metadata = { title: "Home" };
 
@@ -21,12 +23,27 @@ export default function HomePage() {
 
 async function Home() {
   const session = await requireTenant();
+  const setup = await getCompanySetup(session);
   return (
     <>
       <PageHead title="Home" sub={formatDay(new Date())} />
       <p className="mb-4 text-muted-foreground">
         Signed in as {session.email}, {ROLE_LABELS[session.role]} at {session.tenantName}.
       </p>
+      {setup === null ? (
+        <Card title="Finish setting up" className="mb-5">
+          {can(session.role, "setup.complete") ? (
+            <>
+              <p className="mb-3 text-sm text-muted-foreground">A few questions about {session.tenantName}, asked once: sales tax, currency, fiscal year and what the company will use.</p>
+              <Link href="/setup" className={buttonVariants({ size: "sm" })}>
+                Set up {session.tenantName}
+              </Link>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">The owner has not finished setting up {session.tenantName} yet.</p>
+          )}
+        </Card>
+      ) : null}
       <Card title="Needs attention">
         <Empty>Nothing needs your attention.</Empty>
         <p className="text-center text-sm">

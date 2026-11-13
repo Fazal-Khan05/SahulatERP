@@ -92,6 +92,13 @@
       "when": 1794541967603,
       "tag": "0012_ledger",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794542414236,
+      "tag": "0013_manual_journals",
+      "breakpoints": true
     }
   ]
 }

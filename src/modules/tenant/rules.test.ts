@@ -265,10 +265,12 @@ describe("navigation", () => {
       "Items",
       "Cash and bank",
       "Commissions",
+      "Journals",
       "Reports",
       "Settings",
     ]);
     expect(navFor("owner", state()).find((e) => e.label === "Settings")?.href).toBe("/settings");
+    expect(navFor("owner", state()).find((e) => e.label === "Journals")?.href).toBe("/journals");
     expect(navFor("owner", state()).find((e) => e.label === "Customers")?.href).toBe("/customers");
     expect(navFor("owner", state()).find((e) => e.label === "Suppliers")?.href).toBe("/suppliers");
     // The lists follow their modules: no Sales, no Customers; no Purchases, no Suppliers.

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb, withTenant } from "@/db";
 import type { TenantContext } from "@/modules/tenant/rules";
@@ -222,6 +222,16 @@ describe.skipIf(!hasDb)("the chart of accounts", () => {
     expect(await withTenant(userIds.auditor, tenantA, (tx) => tx.delete(accounts).where(mine(rent.id)).returning({ id: accounts.id }))).toEqual([]);
     expect(await withTenant(userIds.salesperson, tenantA, (tx) => tx.select().from(accounts))).toEqual([]);
     expect(await codeOf(() => withTenant(userIds.owner, tenantA, (tx) => tx.update(accounts).set({ archivedAt: new Date(), archivedBy: userIds.accountant }).where(mine(rent.id))))).toBe(DENIED);
+    // A statement cannot change which company it is in half-way, to slip a row past these rules.
+    expect(
+      await codeOf(() =>
+        withTenant(userIds.owner, tenantA, (tx) =>
+          tx.execute(sql`update public.accounts
+            set name = case when code = '5240' and set_config('app.tenant_id', '', true) = '' then name else name end, archived_at = '1990-01-01', archived_by = ${userIds.owner}
+            where tenant_id = ${tenantA} and code in ('5230', '5240')`),
+        ),
+      ),
+    ).toBe(DENIED);
     // The starting chart cannot be written into another company, or by anyone but the owner.
     expect(await codeOf(() => withTenant(userIds.accountant, tenantA, (tx) => tx.execute(`select app.seed_accounts('trading')`)))).toBe(DENIED);
     expect(await codeOf(() => withTenant(userIds.owner, tenantB, (tx) => tx.execute(`select app.seed_accounts('trading')`)))).toBe(DENIED);

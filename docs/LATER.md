@@ -494,3 +494,44 @@ Things noticed while building a step that belong to a later one, or to nobody ye
 - **The fiscal-period messages are shared**: `periodRefusal` in `src/modules/numbering/rules.ts`
   turns the database's SE001 and SE002 into the same words wherever a date is refused.
 
+## From Step 14
+
+- **A manual journal is a document of its own** (`manual_journals`, `manual_journal_lines`), not a
+  row in the ledger. A draft can be changed and thrown away and need not balance. Posting it
+  takes its number (JV-2627-00001) and posts one journal through the engine; from then on the
+  document and its lines never change. The plan's data model lists no such table; the ledger
+  tables stay append-only this way.
+- **An owner or an accountant writes, posts and reverses a journal alone** (founder's decision,
+  2026-11-13). There is no approval step. An auditor reads.
+- **A reversal takes no number of its own** and does not appear as a separate row in the list:
+  the journal's row says "Reversed". Its date and its lines are on the ledger (Step 16 shows
+  them in the general ledger).
+- **A reversed journal cannot be copied into a new draft.** The lines have to be typed again.
+- **Journals have no attachments** (a scan of the voucher) and no print view yet. Print is Step 16
+  onward (`/print/<kind>/<id>`).
+- **The entry form offers every account a manual journal may use in one list.** With a long chart
+  a search box would be quicker; the same picker will serve every document.
+- **Pressing Enter in the form saves the draft; it never posts.** Posting is always a click.
+- **A new journal that cannot be posted is kept as a draft**, and the reason is shown on the
+  draft's own page.
+- **The list shows the newest 200 journals**, with no search, filter or export yet (UI principle
+  8); the general ledger and the reports (Step 16) are where journals are searched.
+- **Recurring journals** (rent every month, depreciation) are not built.
+- **The database does not yet check, when a transaction ends, that every journal has the
+  document it claims to be for.** The manual journal's own row is guarded (it becomes posted
+  only with the journal the engine posted for it, in the same transaction, with the same date,
+  number and lines), but someone able to run their own SQL as the app, as an owner or an
+  accountant, could call `app.post_journal` directly and leave a journal with no posted manual
+  journal behind it, or take a JV number the series has not handed out, after which posting
+  journals in that company fails until it is repaired by hand. The app never does this, and
+  that person may post any manual journal anyway, so today it can only harm their own company's
+  books. It matters more once a role with less trust posts documents. **Before sales invoices
+  post (Step 20), add a deferred constraint trigger on `journals` that, by source type, requires
+  the matching document row to point back at the journal** (and the same for reversals). The
+  engine's tests post unbacked `manual_journal` journals and will need a document behind each
+  one; `docs/PROMPTS.md` has a note for Step 20.
+- **The guards on accounts, manual journals and their lines ask which company the session is in
+  for every row**, and refuse a row from any other; only a session signed in as postgres (a
+  migration, the removal of a test company) is not held to them. A trigger that runs with the
+  table owner's rights must never trust a value read once per statement.
+

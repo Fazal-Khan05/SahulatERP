@@ -92,6 +92,10 @@ npm run owner:create -- <founder's email> --url=https://sahulaterp.vercel.app
 
 Until then, definition-of-done item 5 (the founder clicks through on the dev deployment) is outstanding for Step 2 onwards. Each session proves its step with the automated tests and sends screenshots of the new screens instead.
 
+## Step 20 note
+
+Before the first sales invoice posts, close the gap recorded in docs/LATER.md under "From Step 14": add a deferred constraint trigger on `journals` that requires, by source type, the document row that points back at the journal (and the same for reversals), so that no journal can exist without its document whoever calls `app.post_journal`. Give the engine's own tests a document behind each journal they post. Sales invoices are posted by roles with less trust than an accountant; this must be in place first.
+
 ## Accounting checks
 
 Steps 13, 20, 25, 28, 32 and 41: the session must end by producing a one-page worked example (docs/examples/step-N.md) showing the input document and the exact journal lines. The founder has no accountant (decided 2026-11-13), so Claude checks it: derive the expected journal from the law texts and standard double-entry practice, have an independent reviewer derive it again without seeing the first, compare both with what the software posts, and write in the example that it was checked by Claude, not by an accountant. Open tax questions go in docs/RATES-REVIEW.md. The step is then marked done; it does not wait for anyone.

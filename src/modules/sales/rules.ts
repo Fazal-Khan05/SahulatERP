@@ -16,23 +16,23 @@ import type { TaxCategoryKind } from "@/modules/tax/rules";
 // by anyone. Everything is decimal.js.
 
 /** The kinds of sales document that can be written so far. */
-export const SALES_KINDS = ["quotation", "order", "delivery"] as const;
+export const SALES_KINDS = ["quotation", "order", "delivery", "invoice"] as const;
 export type SalesKind = (typeof SALES_KINDS)[number];
 export const isSalesKind = (value: unknown): value is SalesKind => typeof value === "string" && (SALES_KINDS as readonly string[]).includes(value);
 
-/** The kinds typed from nothing on the entry form. A delivery note is not: it is made from its order. */
+/** The kinds typed from nothing on the entry form. A delivery note and an invoice are not: each is made from what it follows. */
 export const ENTRY_KINDS = ["quotation", "order"] as const;
 export type EntryKind = (typeof ENTRY_KINDS)[number];
 export const isEntryKind = (value: unknown): value is EntryKind => typeof value === "string" && (ENTRY_KINDS as readonly string[]).includes(value);
 
-export const KIND_LABELS: Record<SalesKind, string> = { quotation: "Quotation", order: "Sales order", delivery: "Delivery note" };
-export const KIND_PLURALS: Record<SalesKind, string> = { quotation: "Quotations", order: "Sales orders", delivery: "Delivery notes" };
+export const KIND_LABELS: Record<SalesKind, string> = { quotation: "Quotation", order: "Sales order", delivery: "Delivery note", invoice: "Sales invoice" };
+export const KIND_PLURALS: Record<SalesKind, string> = { quotation: "Quotations", order: "Sales orders", delivery: "Delivery notes", invoice: "Sales invoices" };
 
 export const SALES_STATUSES = ["draft", "on_hold", "submitted", "cancelled"] as const;
 export type SalesStatus = (typeof SALES_STATUSES)[number];
 export const STATUS_LABELS: Record<SalesStatus, string> = { draft: "Draft", on_hold: "Waiting for approval", submitted: "Submitted", cancelled: "Cancelled" };
-/** A delivery note that is submitted has moved its goods: it is "posted". */
-export const statusLabel = (kind: SalesKind, status: SalesStatus) => (kind === "delivery" && status === "submitted" ? "Posted" : STATUS_LABELS[status]);
+/** A delivery note that is submitted has moved its goods, and an invoice is in the books: they are "posted". */
+export const statusLabel = (kind: SalesKind, status: SalesStatus) => ((kind === "delivery" || kind === "invoice") && status === "submitted" ? "Posted" : STATUS_LABELS[status]);
 
 /** A document typed by hand can hold this many lines. */
 export const MAX_SALES_LINES = 200;
@@ -423,8 +423,8 @@ export type RawDelivery = { date?: unknown; notes?: unknown; lines?: readonly { 
 export type DeliveryDraft = { date: string; notes: string | null; lines: { sourceLineId: string; quantity: Decimal }[] };
 
 /** Cleans what was typed for a delivery note: a date, and how much of each line of the order to deliver now. A line left empty or at nil is not delivered. */
-export function readDelivery(raw: RawDelivery): { ok: true; delivery: DeliveryDraft } | { ok: false; reason: string } {
-  if (!isIsoDate(raw.date)) return { ok: false, reason: "Enter the date of the delivery." };
+export function readDelivery(raw: RawDelivery, what: "delivery" | "invoice" = "delivery"): { ok: true; delivery: DeliveryDraft } | { ok: false; reason: string } {
+  if (!isIsoDate(raw.date)) return { ok: false, reason: `Enter the date of the ${what}.` };
   const notes = cleanText(raw.notes);
   if (notes.length > 1000) return { ok: false, reason: "Notes: use at most 1,000 characters." };
   const lines: DeliveryDraft["lines"] = [];
@@ -434,7 +434,7 @@ export function readDelivery(raw: RawDelivery): { ok: true; delivery: DeliveryDr
     if (sourceLineId === "" || typed === "" || /^0+(\.0+)?$/.test(typed)) continue;
     const parsed = parseQuantity(typed);
     if (!parsed.ok) return { ok: false, reason: `Line ${lines.length + 1}, quantity: ${parsed.reason}` };
-    if (lines.some((line) => line.sourceLineId === sourceLineId)) return { ok: false, reason: "A line of the order is on the delivery note twice." };
+    if (lines.some((line) => line.sourceLineId === sourceLineId)) return { ok: false, reason: `A line of the order is on the ${what === "delivery" ? "delivery note" : "invoice"} twice.` };
     lines.push({ sourceLineId, quantity: parsed.value });
   }
   if (lines.length > MAX_SALES_LINES) return { ok: false, reason: `A document can have at most ${MAX_SALES_LINES} lines.` };
@@ -515,4 +515,39 @@ export function stockShortfall(needs: readonly { itemId: string; itemCode: strin
     if (need.quantity.gt(held)) return { itemCode: need.itemCode, needed: need.quantity, onHand: held };
   }
   return null;
+}
+
+// ── Sales invoices ──────────────────────────────────────────────────────────────────────────────
+//
+// A sales invoice is made from a posted delivery note, which it bills exactly, or straight from
+// a sales order, which it delivers and bills at once. Its lines keep the price and discount of
+// the lines they follow; the tax is worked out afresh by the tax engine for the invoice's own
+// date and the buyer as the buyer then stands. Posting it is the database's act: it posts the
+// receivable, the sales, the sales tax and the further tax, and, when the invoice delivers the
+// goods itself, takes them out of stock at their cost.
+
+/** True when two worked lines come to the same money: price, discount, value and every tax, to the paisa. */
+export function sameFigures(
+  a: Pick<PricedLine, "baseQuantity" | "unitPrice" | "discountAmount" | "value" | "taxRate" | "taxAmount" | "furtherTaxRate" | "furtherTaxAmount" | "extraTaxAmount" | "total">,
+  b: Pick<PricedLine, "baseQuantity" | "unitPrice" | "discountAmount" | "value" | "taxRate" | "taxAmount" | "furtherTaxRate" | "furtherTaxAmount" | "extraTaxAmount" | "total">,
+): boolean {
+  return (
+    a.baseQuantity.eq(b.baseQuantity) &&
+    a.unitPrice.eq(b.unitPrice) &&
+    a.discountAmount.eq(b.discountAmount) &&
+    a.value.eq(b.value) &&
+    a.taxRate.eq(b.taxRate) &&
+    a.taxAmount.eq(b.taxAmount) &&
+    a.furtherTaxRate.eq(b.furtherTaxRate) &&
+    a.furtherTaxAmount.eq(b.furtherTaxAmount) &&
+    a.extraTaxAmount.eq(b.extraTaxAmount) &&
+    a.total.eq(b.total)
+  );
+}
+
+/** The day an invoice falls due: its own date plus the customer's credit days. Dates are YYYY-MM-DD. */
+export function dueDate(date: string, creditDays: number | null): string {
+  const [year, month, day] = date.split("-").map(Number);
+  const due = new Date(Date.UTC(year, month - 1, day + (creditDays ?? 0)));
+  return `${due.getUTCFullYear()}-${String(due.getUTCMonth() + 1).padStart(2, "0")}-${String(due.getUTCDate()).padStart(2, "0")}`;
 }

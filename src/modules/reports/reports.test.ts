@@ -3,12 +3,12 @@ import Decimal from "decimal.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb, withTenant } from "@/db";
 import { seedAccounts } from "@/modules/ledger/commands";
-import { postJournal, reverseJournal } from "@/modules/ledger/posting";
 import { listAccounts } from "@/modules/ledger/queries";
 import type { AccountNode } from "@/modules/ledger/rules";
 import { openFiscalYear } from "@/modules/numbering/commands";
 import type { TenantContext } from "@/modules/tenant/rules";
 import { adminSql, deleteTenants, hasAdminDb, type AdminSql } from "../../../tests/support/admin-db";
+import { postBacked, reverseBacked } from "../../../tests/support/journal";
 import { getBalanceSheet, getGeneralLedger, getProfitAndLoss, getRetainedEarnings, getRetainedEarningsStatement, getTrialBalance, getYearStart, listLedgerAccounts } from "./queries";
 import type { ReportFilter, ReportTable } from "./rules";
 
@@ -60,7 +60,7 @@ describe.skipIf(!hasDb)("the ledger reports", () => {
 
     const post = (date: string, debit: string, credit: string, amount: string, more: { branchId?: string; number?: string; memo?: string } = {}) =>
       withTenant(userIds.accountant, tenantA, (tx) =>
-        postJournal(tx, { type: "manual_journal", id: randomUUID(), date, branchId: more.branchId, documentNumber: more.number, memo: more.memo }, [
+        postBacked(tx, as.accountant, { date, branchId: more.branchId, documentNumber: more.number, memo: more.memo }, [
           { accountId: account(debit), debit: d(amount) },
           { accountId: account(credit), credit: d(amount) },
         ]),
@@ -74,7 +74,7 @@ describe.skipIf(!hasDb)("the ledger reports", () => {
     await post("2027-07-15", "1111", "4100", "80000.25", { branchId: mainBranch });
     await post("2027-07-20", "5230", "1111", "10000", { branchId: mainBranch, number: "JV-2728-00001", memo: "July rent" });
     const twice = await post("2027-07-20", "5230", "1111", "10000", { branchId: mainBranch, number: "JV-2728-00002", memo: "July rent" });
-    await withTenant(userIds.accountant, tenantA, (tx) => reverseJournal(tx, twice, { date: "2027-07-25", memo: "Entered twice" }));
+    await withTenant(userIds.accountant, tenantA, (tx) => reverseBacked(tx, as.accountant, twice, { date: "2027-07-25", memo: "Entered twice" }));
     await post("2027-08-01", "1111", "4200", "1500");
   });
 
@@ -155,7 +155,7 @@ describe.skipIf(!hasDb)("the ledger reports", () => {
   it("still accounts for the change when something is posted straight to retained earnings", async () => {
     // Earlier profit brought from old books, credited to retained earnings in August 2027.
     await withTenant(userIds.accountant, tenantA, (tx) =>
-      postJournal(tx, { type: "manual_journal", id: randomUUID(), date: "2027-08-20", memo: "Profit of earlier years, from the old books" }, [
+      postBacked(tx, as.accountant, { date: "2027-08-20", memo: "Profit of earlier years, from the old books" }, [
         { accountId: account("1230"), debit: d("300000") },
         { accountId: account("3300"), credit: d("300000") },
       ]),

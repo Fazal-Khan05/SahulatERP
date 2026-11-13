@@ -42,7 +42,7 @@ test("a company starts with a chart of accounts and adds a sub-account under Exp
   await expect(chart.getByRole("row").nth(1)).toHaveText(/1000\s*Assets/);
   await expect(chart.getByRole("row").filter({ hasText: "Trade receivables" })).toContainText("Locked");
   // This company is not registered for sales tax: its chart has no sales tax accounts.
-  await expect(chart.getByRole("row")).toHaveCount(1 + 65 - 3);
+  await expect(chart.getByRole("row")).toHaveCount(1 + 66 - 4);
   await expect(chart).not.toContainText("Sales tax");
   // A locked account is not a link; the company's own accounts are.
   await expect(chart.getByRole("link", { name: "Trade receivables" })).toHaveCount(0);

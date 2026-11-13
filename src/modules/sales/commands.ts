@@ -15,6 +15,7 @@ import {
   sameAsStored,
   selectBaseCurrency,
   selectCustomerCredit,
+  selectInvoicesOf,
   selectLineItems,
   selectOrderLinesToDeliver,
   selectSalesCustomer,
@@ -36,6 +37,8 @@ import {
   readDelivery,
   readDraft,
   readReason,
+  sameFigures,
+  stillToDeliver,
   stockShortfall,
   type Draft,
   type DraftLine,
@@ -80,10 +83,15 @@ async function lockDocument(tx: Tx, ctx: TenantContext, id: unknown, loadedAt?: 
 type Worked = { lines: PricedLine[]; totals: Totals; customer: SalesCustomer; branchId: string; currency: string; taxed: boolean; pricesIncludeTax: boolean };
 
 /** Everything a document's lines are worked out from, read afresh, and the lines worked out. */
-async function workOut(tx: Tx, ctx: TenantContext, facts: { customerId: string; warehouseId: string; date: string; furtherTaxExcluded: boolean; lines: readonly DraftLine[] }): Promise<Worked> {
+async function workOut(
+  tx: Tx,
+  ctx: TenantContext,
+  /** `delivered`: the goods have already left, on a posted delivery note. They are billed even if the customer or an item has been archived since. */
+  facts: { customerId: string; warehouseId: string; date: string; furtherTaxExcluded: boolean; lines: readonly DraftLine[]; delivered?: boolean },
+): Promise<Worked> {
   const customer = await selectSalesCustomer(tx, ctx.tenantId, facts.customerId);
   if (!customer) throw new UserError("Choose the customer.");
-  if (customer.archived) throw new UserError(`${customer.name} is archived. Restore the customer before selling to it.`);
+  if (customer.archived && !facts.delivered) throw new UserError(`${customer.name} is archived. Restore the customer before selling to it.`);
   if (!isUuid(facts.warehouseId)) throw new UserError("Choose the warehouse the goods leave from.");
   // Row-level security already hides the warehouses of branches this member does not work in.
   const [warehouse] = await tx.select({ branchId: warehouses.branchId }).from(warehouses).where(and(eq(warehouses.tenantId, ctx.tenantId), eq(warehouses.id, facts.warehouseId)));
@@ -96,7 +104,7 @@ async function workOut(tx: Tx, ctx: TenantContext, facts: { customerId: string; 
   for (const [index, line] of facts.lines.entries()) {
     const item = items.get(line.itemId);
     if (!item) throw new UserError(`Line ${index + 1}: choose an item.`);
-    const priced = priceLine(line, item, prices.get(item.id) ?? null, context);
+    const priced = priceLine(line, facts.delivered ? { ...item, archived: false } : item, prices.get(item.id) ?? null, context);
     if (!priced.ok) throw new UserError(`Line ${index + 1}: ${priced.reason}`);
     lines.push(priced.line);
   }
@@ -320,6 +328,7 @@ async function submitIn(tx: Tx, ctx: TenantContext, id: unknown, loadedAt: unkno
   const document = await lockDocument(tx, ctx, id, loadedAt);
   const label = KIND_LABELS[document.kind];
   if (document.kind === "delivery") throw new UserError("A delivery note is posted from its own page, which takes its goods out of stock.");
+  if (document.kind === "invoice") throw new UserError("A sales invoice is posted from its own page, which puts it into the books.");
   if (document.status === "submitted" || document.status === "cancelled") throw new UserError(`This ${label.toLowerCase()} is already submitted.`);
   if (document.status === "on_hold" && !can(ctx.role, "sales.approve_credit")) throw new UserError("This order is waiting for the owner's approval.");
   if (document.lines.length === 0) throw new UserError(`A ${label.toLowerCase()} needs at least one line.`);
@@ -393,11 +402,13 @@ export async function cancelSalesDocument(ctx: TenantContext, id: unknown, raw: 
   await withTenant(ctx.userId, ctx.tenantId, async (tx) => {
     const document = await lockDocument(tx, ctx, id, loadedAt);
     if (document.kind === "delivery") throw new UserError("A delivery note is cancelled from its own page, which puts its goods back into stock.");
+    if (document.kind === "invoice") throw new UserError("A posted sales invoice is not cancelled. It is corrected by a credit note.");
     if (document.status === "cancelled") throw new UserError("This document is already cancelled.");
     if (document.status !== "submitted") throw new UserError("Only a submitted document is cancelled. A draft is simply thrown away.");
     if (document.kind === "order") {
-      const delivered = (await selectOrderLinesToDeliver(tx, ctx.tenantId, document.id)).some((line) => line.delivered.gt(0));
-      if (delivered) throw new UserError("Goods have been delivered against this order. Cancel its delivery notes first.");
+      const lines = await selectOrderLinesToDeliver(tx, ctx.tenantId, document.id);
+      if (lines.some((line) => line.invoiced.gt(0))) throw new UserError("This order has been invoiced. It can no longer be cancelled.");
+      if (lines.some((line) => line.delivered.gt(0))) throw new UserError("Goods have been delivered against this order. Cancel its delivery notes first.");
     }
     await tx
       .update(salesDocuments)
@@ -541,6 +552,7 @@ function deliveryRefusal(error: unknown, date: string): UserError | null {
   if (code === "SE066" || code === "SE067") return new UserError("The order behind this delivery note is no longer open, or is dated after the note.");
   if (code === "SE064") return new UserError("The chart of accounts has no stock or cost of goods sold account. Set the company up first.");
   if (code === "SE009") return new UserError("A delivery note is cancelled on or after its own date.");
+  if (code === "SE073") return new UserError("This delivery note has been invoiced. It can no longer be cancelled.");
   if (code === "SE050" || code === "SE052" || code === "SE056" || code === "SE063" || code === "SE068") return new UserError("This delivery note could not be posted as it stands. Open it again, save it, and post it once more.");
   return null;
 }
@@ -592,10 +604,218 @@ export async function cancelDelivery(ctx: TenantContext, id: unknown, raw: { dat
     if (document.status === "cancelled") throw new UserError("This delivery note is already cancelled.");
     if (document.status !== "submitted") throw new UserError("Only a posted delivery note is cancelled. A draft is simply thrown away.");
     if (date < document.date) throw new UserError("A delivery note is cancelled on or after its own date.");
+    const invoiced = (await selectInvoicesOf(tx, ctx.tenantId, document.id)).find((invoice) => invoice.status === "submitted");
+    if (invoiced) throw new UserError(`This delivery note has been invoiced (${invoiced.number}). It can no longer be cancelled.`);
     try {
       await tx.execute(sql`select app.cancel_delivery(${document.id}::uuid, ${date}::date, ${reason.reason})`);
     } catch (error) {
       throw deliveryRefusal(error, date) ?? error;
+    }
+  });
+}
+
+// ── Sales invoices ──────────────────────────────────────────────────────────────────────────────
+
+type Billed = { sourceLineId: string; line: DraftLine; listPrice: Decimal | null; priceSource: PricedLine["priceSource"] };
+
+/**
+ * What an invoice is made from, read afresh: the delivery note or the order it follows, the
+ * order behind it, and the lines it may bill. From a delivery note: the note's own lines, as
+ * they are. From an order: each line with what has not yet left the warehouse.
+ */
+async function invoiceBasis(tx: Tx, ctx: TenantContext, sourceId: string): Promise<{ source: SalesDocument; order: SalesDocument; direct: boolean; billable: (Billed & { itemCode: string; left: Decimal })[] }> {
+  const source = await selectSalesDocument(tx, ctx.tenantId, sourceId);
+  if (!source || (source.kind !== "delivery" && source.kind !== "order")) throw new UserError("A sales invoice is made from a sales order or a delivery note.");
+  if (source.kind === "order") {
+    const lines = await selectOrderLinesToDeliver(tx, ctx.tenantId, source.id);
+    const billable = lines.map((line) => ({ sourceLineId: line.id, itemCode: line.itemCode, left: stillToDeliver(line), listPrice: line.listPrice, priceSource: line.priceSource, line: { itemId: line.itemId, description: line.description, unitId: line.unitId, quantity: stillToDeliver(line), unitPrice: line.unitPrice, discountPercent: line.discountPercent } }));
+    return { source, order: source, direct: true, billable };
+  }
+  const order = source.source ? await selectSalesDocument(tx, ctx.tenantId, source.source.id) : null;
+  if (!order) throw new UserError("The order behind this delivery note is not one you can see.");
+  const billable = source.lines.map((line) => ({ sourceLineId: line.id, itemCode: line.itemCode, left: line.quantity, listPrice: line.listPrice, priceSource: line.priceSource, line: asDraftLine(line) }));
+  return { source, order, direct: false, billable };
+}
+
+/** The lines of an invoice worked out by the tax engine for a date, each keeping the list price its source line recorded. */
+async function workOutInvoice(tx: Tx, ctx: TenantContext, basis: { source: SalesDocument; order: SalesDocument; direct: boolean }, date: string, billed: readonly Billed[]): Promise<Worked & { lines: (PricedLine & { sourceLineId: string })[] }> {
+  const worked = await workOut(tx, ctx, { customerId: basis.source.customerId, warehouseId: basis.source.warehouseId, date, furtherTaxExcluded: basis.order.furtherTaxExcluded, lines: billed.map((b) => b.line), delivered: !basis.direct });
+  // The price lists may have moved since the order: the invoice says what the order said.
+  const lines = worked.lines.map((line, index) => ({ ...line, listPrice: billed[index].listPrice, priceSource: billed[index].priceSource, sourceLineId: billed[index].sourceLineId }));
+  return { ...worked, lines };
+}
+
+const invoiceHeader = (worked: Worked) => ({
+  taxed: worked.taxed,
+  pricesIncludeTax: worked.pricesIncludeTax,
+  grossTotal: money(worked.totals.gross),
+  discountTotal: money(worked.totals.discount),
+  valueTotal: money(worked.totals.value),
+  taxTotal: money(worked.totals.tax),
+  furtherTaxTotal: money(worked.totals.furtherTax),
+  extraTaxTotal: money(worked.totals.extraTax),
+  total: money(worked.totals.total),
+});
+
+/**
+ * Starts a sales invoice, as a draft dated today, from a posted delivery note (it bills exactly
+ * what the note delivered) or from a submitted sales order (it bills, and will deliver, what
+ * has not yet left the warehouse). A delivery note that already has a draft invoice opens that
+ * draft again. Nothing reaches the books until the invoice is posted.
+ */
+export async function startInvoice(ctx: TenantContext, sourceId: unknown): Promise<{ id: string }> {
+  requireManager(ctx);
+  if (!isUuid(sourceId)) throw new UserError(NOT_HERE);
+  return withTenant(ctx.userId, ctx.tenantId, async (tx) => {
+    const basis = await invoiceBasis(tx, ctx, sourceId);
+    const { source, order } = basis;
+    if (source.status !== "submitted") throw new UserError(source.kind === "order" ? (source.status === "cancelled" ? "This order is cancelled." : "Submit the order before invoicing it.") : source.status === "cancelled" ? "This delivery note is cancelled." : "Post the delivery note before invoicing it.");
+    if (!basis.direct) {
+      const existing = await selectInvoicesOf(tx, ctx.tenantId, source.id);
+      const posted = existing.find((invoice) => invoice.status === "submitted");
+      if (posted) throw new UserError(`This delivery note has already been invoiced (${posted.number}).`);
+      const draft = existing.find((invoice) => invoice.status === "draft");
+      if (draft) return { id: draft.id };
+    }
+    const billed = basis.billable.filter((line) => line.left.gt(0));
+    if (billed.length === 0) throw new UserError("Everything on this order has left the warehouse. Invoice its delivery notes instead.");
+    const today = todayIso(new Date());
+    const date = today < source.date ? source.date : today;
+    const worked = await workOutInvoice(tx, ctx, basis, date, billed);
+    const [row] = await tx
+      .insert(salesDocuments)
+      .values({
+        tenantId: ctx.tenantId,
+        kind: "invoice",
+        documentDate: date,
+        customerId: source.customerId,
+        warehouseId: source.warehouseId,
+        branchId: worked.branchId,
+        currency: worked.currency,
+        exchangeRate: "1",
+        furtherTaxExcluded: order.furtherTaxExcluded,
+        customerReference: order.customerReference,
+        sourceDocumentId: source.id,
+        ...invoiceHeader(worked),
+        createdBy: ctx.userId,
+        updatedBy: ctx.userId,
+      })
+      .returning({ id: salesDocuments.id });
+    // The salespeople of the order are the salespeople of its invoices: commission follows the
+    // invoice. They are shown on the draft here; the database writes them itself when it posts.
+    await writeLines(tx, ctx, row.id, worked.lines, order.shares);
+    await tx.insert(salesDocumentLinks).values({ tenantId: ctx.tenantId, fromDocumentId: source.id, toDocumentId: row.id, createdBy: ctx.userId });
+    await audit(tx, ctx, { action: "sales_invoice.create", entity: "sales_document", entityId: row.id, after: { from: source.number, customer: worked.customer.name, lines: worked.lines.length, total: money(worked.totals.total) } });
+    return row;
+  });
+}
+
+/**
+ * Saves a draft invoice: its date and notes, and, for an invoice made straight from an order,
+ * how much of each line it bills. An invoice made from a delivery note always bills the whole
+ * note. The tax is worked out again for the date. `changed` says whether the date, the lines or
+ * any figure is now different from what was saved before.
+ */
+export async function saveInvoiceDraft(ctx: TenantContext, id: unknown, raw: RawDelivery, loadedAt?: unknown): Promise<{ id: string; updatedAt: Date; changed: boolean }> {
+  requireManager(ctx);
+  const read = readDelivery(raw, "invoice");
+  if (!read.ok) throw new UserError(read.reason);
+  const typed = read.delivery;
+  return withTenant(ctx.userId, ctx.tenantId, async (tx) => {
+    const document = await lockDocument(tx, ctx, id, loadedAt);
+    if (document.kind !== "invoice" || !document.source) throw new UserError("That is not a sales invoice.");
+    if (document.status !== "draft") throw new UserError("This invoice is posted and cannot be changed. It is corrected by a credit note.");
+    if (typed.date < document.source.date) throw new UserError(`An invoice is dated on or after the ${document.source.kind === "order" ? "order" : "delivery note"} it was made from.`);
+    const basis = await invoiceBasis(tx, ctx, document.source.id);
+    let billed: Billed[];
+    if (basis.direct) {
+      billed = [];
+      for (const want of typed.lines) {
+        const line = basis.billable.find((candidate) => candidate.sourceLineId === want.sourceLineId);
+        if (!line) throw new UserError("A line on the invoice is not a line of its order.");
+        if (want.quantity.gt(line.left)) throw new UserError(`${line.itemCode}: the order has ${line.left.toFixed()} still to deliver, not ${want.quantity.toFixed()}.`);
+        billed.push({ ...line, line: { ...line.line, quantity: want.quantity } });
+      }
+    } else {
+      billed = basis.billable;
+    }
+    const worked = await workOutInvoice(tx, ctx, basis, typed.date, billed);
+    await writeLines(tx, ctx, document.id, worked.lines, basis.order.shares);
+    const [saved] = await tx
+      .update(salesDocuments)
+      .set({ documentDate: typed.date, notes: typed.notes, ...invoiceHeader(worked), updatedAt: sql`now()`, updatedBy: ctx.userId })
+      .where(and(eq(salesDocuments.tenantId, ctx.tenantId), eq(salesDocuments.id, document.id)))
+      .returning({ id: salesDocuments.id, updatedAt: salesDocuments.updatedAt });
+    await audit(tx, ctx, { action: "sales_invoice.update", entity: "sales_document", entityId: document.id, before: { date: document.date, lines: document.lines.length, total: money(document.totals.total) }, after: { date: typed.date, lines: worked.lines.length, total: money(worked.totals.total) } });
+    // Whether what the invoice comes to is still what the page showed before this save.
+    const changed = document.date !== typed.date || document.lines.length !== worked.lines.length || document.lines.some((line, index) => line.sourceLineId !== worked.lines[index].sourceLineId || line.taxKind !== worked.lines[index].taxKind || !sameFigures(line, worked.lines[index]));
+    return { ...saved, changed };
+  });
+}
+
+/** What the database's refusals of an invoice mean, for the few that can still happen after the checks here. */
+function invoiceRefusal(error: unknown, date: string): UserError | null {
+  const code = pgCode(error);
+  const closed = periodRefusal(code, date);
+  if (closed) return new UserError(closed);
+  if (code === "SE015") return new UserError("That date is before the day the books were opened.");
+  if (code === "SE051") return new UserError("This invoice comes to more than its order did, and takes the customer over the credit limit. Only the owner can post it.");
+  if (code === "SE060") return new UserError("There is not enough in stock for this invoice. Stock is entered first; a sale never takes it below zero.");
+  if (code === "SE061") return new UserError("This invoice asks for more than its order still has to deliver. Open it again and check the quantities.");
+  if (code === "SE064") return new UserError("The chart of accounts is missing an account that invoices post to. Set the company up first.");
+  if (code === "SE066" || code === "SE067") return new UserError("What this invoice was made from is no longer open, or is dated after the invoice.");
+  if (code === "SE070") return new UserError("This delivery note has already been invoiced, or is no longer posted.");
+  if (code === "SE071") return new UserError("This invoice no longer matches its delivery note. Throw the draft away and make the invoice again.");
+  if (code === "SE050" || code === "SE052" || code === "SE056" || code === "SE063" || code === "SE068" || code === "SE074") return new UserError("This invoice could not be posted as it stands. Open it again, save it, and post it once more.");
+  return null;
+}
+
+/**
+ * Posts a sales invoice: it takes its number and goes into the books in one act of the
+ * database. The customer owes its total; sales, sales tax and further tax are credited; and an
+ * invoice made straight from an order takes its goods out of stock at their cost. The figures
+ * are worked out once more first: if a tax rate or the buyer's tax status has changed since
+ * the draft was saved, the post is refused so that nobody posts figures they did not see.
+ */
+export async function postInvoice(ctx: TenantContext, id: unknown, loadedAt?: unknown): Promise<{ number: string; dueDate: string }> {
+  requireManager(ctx);
+  return withTenant(ctx.userId, ctx.tenantId, async (tx) => {
+    const document = await lockDocument(tx, ctx, id, loadedAt);
+    if (document.kind !== "invoice" || !document.source) throw new UserError("That is not a sales invoice.");
+    if (document.status !== "draft") throw new UserError("This invoice is already posted.");
+    if (document.lines.length === 0) throw new UserError("Enter how much of at least one line to invoice.");
+    const basis = await invoiceBasis(tx, ctx, document.source.id);
+    const billed: Billed[] = [];
+    for (const line of document.lines) {
+      const from = basis.billable.find((candidate) => candidate.sourceLineId === line.sourceLineId);
+      if (!from) throw new UserError("A line on the invoice is not a line of what it was made from. Throw the draft away and make the invoice again.");
+      if (basis.direct && line.quantity.gt(from.left)) throw new UserError(`${from.itemCode}: the order has ${from.left.toFixed()} still to deliver, not ${line.quantity.toFixed()}.`);
+      if (!basis.direct && !line.quantity.eq(from.left)) throw new UserError("This invoice no longer matches its delivery note. Throw the draft away and make the invoice again.");
+      billed.push({ ...from, line: asDraftLine(line) });
+    }
+    if (!basis.direct) {
+      if (billed.length !== basis.billable.length) throw new UserError("This invoice no longer matches its delivery note. Throw the draft away and make the invoice again.");
+      const posted = (await selectInvoicesOf(tx, ctx.tenantId, basis.source.id)).find((invoice) => invoice.status === "submitted");
+      if (posted) throw new UserError(`This delivery note has already been invoiced (${posted.number}).`);
+    }
+    const worked = await workOutInvoice(tx, ctx, basis, document.date, billed);
+    if (worked.taxed !== document.taxed || worked.pricesIncludeTax !== document.pricesIncludeTax || document.lines.some((line, index) => line.taxKind !== worked.lines[index].taxKind || !sameFigures(line, worked.lines[index]))) {
+      throw new UserError("A tax rate or the customer's tax status has changed since this invoice was saved. Check it and save it again.");
+    }
+    if (basis.direct) {
+      const onHand = await selectStockOnHand(tx, ctx.tenantId, document.warehouseId, document.lines.map((line) => line.itemId));
+      const short = stockShortfall(document.lines, onHand);
+      if (short) {
+        throw new UserError(`Not enough ${short.itemCode} in stock at ${document.warehouseName}: ${short.onHand.toFixed()} on hand, ${short.needed.toFixed()} needed. Stock is entered first; a sale never takes it below zero.`);
+      }
+    }
+    try {
+      const rows = await tx.execute<{ number: string }>(sql`select number from app.post_sales_invoice(${document.id}::uuid)`);
+      // The day it falls due is the database's own answer, from the customer's credit days as it posted.
+      const [posted] = await tx.select({ dueDate: salesDocuments.dueDate }).from(salesDocuments).where(and(eq(salesDocuments.tenantId, ctx.tenantId), eq(salesDocuments.id, document.id)));
+      return { number: rows[0].number, dueDate: posted?.dueDate ?? document.date };
+    } catch (error) {
+      throw invoiceRefusal(error, document.date) ?? error;
     }
   });
 }

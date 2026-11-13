@@ -1,7 +1,7 @@
 import Decimal from "decimal.js";
 import { describe, expect, it } from "vitest";
 import type { DatedTaxRate, TaxCategoryForLine } from "@/modules/tax/rules";
-import { creditCheck, creditRefusal, deliveryLines, documentTotals, leadSalesperson, parsePercent, priceLine, readDelivery, readDraft, readReason, readShares, statusLabel, stillToDeliver, stockShortfall, type DraftLine, type LineItem, type OrderLineToDeliver, type TaxContext } from "./rules";
+import { creditCheck, creditRefusal, deliveryLines, documentTotals, dueDate, leadSalesperson, parsePercent, priceLine, readDelivery, readDraft, readReason, readShares, sameFigures, statusLabel, stillToDeliver, stockShortfall, type DraftLine, type LineItem, type OrderLineToDeliver, type TaxContext } from "./rules";
 
 const d = (value: string) => new Decimal(value);
 const STANDARD: TaxCategoryForLine = { id: "standard", kind: "standard", sroScheduleNo: null, sroItemSerial: null };
@@ -181,5 +181,30 @@ describe("delivery notes", () => {
     expect(statusLabel("delivery", "submitted")).toBe("Posted");
     expect(statusLabel("order", "submitted")).toBe("Submitted");
     expect(statusLabel("delivery", "draft")).toBe("Draft");
+  });
+});
+
+describe("sales invoices", () => {
+  it("falls due after the customer's credit days, across months and years", () => {
+    expect(dueDate("2026-11-12", 30)).toBe("2026-12-12");
+    expect(dueDate("2026-11-13", null)).toBe("2026-11-13");
+    expect(dueDate("2026-12-20", 15)).toBe("2027-01-04");
+    expect(dueDate("2028-02-28", 1)).toBe("2028-02-29");
+  });
+  it("knows when figures worked out again are the figures that were saved", () => {
+    const worked = (rate: string) => {
+      const result = priceLine(typed({ quantity: d("2"), unitPrice: d("1000") }), item(), null, context({ seller: { salesTaxRegistered: true, pricesIncludeTax: false }, rates: [{ categoryId: "standard", effectiveFrom: "2026-07-01", rate: d(rate), furtherTaxRate: d("4") }] }));
+      if (!result.ok) throw new Error(result.reason);
+      return result.line;
+    };
+    expect(sameFigures(worked("18"), worked("18"))).toBe(true);
+    expect(sameFigures(worked("18"), worked("17"))).toBe(false);
+    // The price lists' price is not part of it: an invoice keeps the list price its order recorded.
+    const relisted = { ...worked("18"), listPrice: d("1") };
+    expect(sameFigures(worked("18"), relisted)).toBe(true);
+  });
+  it("reads an invoice's date in its own words and calls a posted invoice posted", () => {
+    expect(readDelivery({ date: "" }, "invoice")).toEqual({ ok: false, reason: "Enter the date of the invoice." });
+    expect(statusLabel("invoice", "submitted")).toBe("Posted");
   });
 });

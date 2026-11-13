@@ -11,11 +11,12 @@ import { todayIso } from "@/lib/format";
 import { AMOUNT_SCALE, formatAmount } from "@/lib/money";
 import { formatIsoDate } from "@/modules/currencies/rules";
 import { submitProblem } from "@/modules/sales/commands";
-import { getCustomerCredit, getDeliveryRows, getLineDefaults, getOrderDelivery, getSalesDocument, listOrdersToDeliver, listSalesDocuments, listSalesPeople, listSalesWarehouses, type SalesDocument } from "@/modules/sales/queries";
+import { getDocumentJournal, type Journal } from "@/modules/ledger/queries";
+import { getCustomerCredit, getDeliveryRows, getLineDefaults, getOrderDelivery, getSalesDocument, listInvoicesOf, listOrdersToDeliver, listSalesDocuments, listSalesPeople, listSalesWarehouses, type SalesDocument } from "@/modules/sales/queries";
 import { KIND_LABELS, KIND_PLURALS, creditRefusal, isEntryKind, isSalesKind, statusLabel, type CreditFacts, type EntryKind, type SalesKind, type SalesStatus } from "@/modules/sales/rules";
 import { getCompanySetup } from "@/modules/setup/queries";
 import { can } from "@/modules/tenant/rules";
-import { approveSalesAction, cancelDeliveryAction, cancelSalesAction, discardSalesAction, orderFromQuotationAction, releaseSalesAction, saveDeliveryAction, saveSalesAction, startDeliveryAction } from "./actions";
+import { approveSalesAction, cancelDeliveryAction, cancelSalesAction, discardSalesAction, orderFromQuotationAction, releaseSalesAction, saveDeliveryAction, saveInvoiceAction, saveSalesAction, startDeliveryAction, startInvoiceAction } from "./actions";
 import { DeliveryForm } from "./delivery-form";
 import { SalesForm } from "./sales-form";
 
@@ -28,7 +29,7 @@ const plainNumber = (amount: Decimal) => amount.toFixed(AMOUNT_SCALE).replace(/\
 /** The kind of document a list shows: the one asked for, where this member may see it. The warehouse starts on delivery notes. */
 const kindOf = (session: Session, value: string | string[] | undefined): SalesKind => {
   const team = can(session.role, "sales.read");
-  if (isSalesKind(value) && (team || value !== "quotation")) return value;
+  if (isSalesKind(value) && (team || (value !== "quotation" && value !== "invoice"))) return value;
   return team ? "order" : "delivery";
 };
 const entryKindOf = (value: string | string[] | undefined): EntryKind => (isEntryKind(value) ? value : "order");
@@ -72,13 +73,20 @@ export async function SalesListScreen({ searchParams }: { searchParams: Promise<
     <>
       <PageHead
         title="Sales"
-        sub={kind === "delivery" ? "Delivery notes are made from submitted sales orders. Posting one takes its goods out of stock." : "Quotations and sales orders. A sales order is checked against the customer's credit limit when it is submitted."}
+        sub={
+          kind === "delivery"
+            ? "Delivery notes are made from submitted sales orders. Posting one takes its goods out of stock."
+            : kind === "invoice"
+              ? "Sales invoices are made from a posted delivery note, or straight from a sales order. Posting one puts it into the books."
+              : "Quotations and sales orders. A sales order is checked against the customer's credit limit when it is submitted."
+        }
       />
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <nav aria-label="Kind of document" className="flex gap-1">
           {tab("order")}
           {can(session.role, "sales.read") ? tab("quotation") : null}
           {can(session.role, "delivery.read") ? tab("delivery") : null}
+          {can(session.role, "sales.read") ? tab("invoice") : null}
         </nav>
         {isEntryKind(kind) && can(session.role, "sales.manage") ? (
           <Link href={`/sales/new?kind=${kind}`} className={buttonVariants({ className: "ml-auto" })}>
@@ -324,7 +332,7 @@ function Facts({ document, team, customerLink, sales = true }: { document: Sales
       </dd>
       {document.source ? (
         <>
-          <dt className="text-muted-foreground">Sales order</dt>
+          <dt className="text-muted-foreground">{KIND_LABELS[document.source.kind]}</dt>
           <dd>
             <Link href={`/sales/${document.source.id}`} className="underline-offset-4 hover:underline">
               {document.source.number}
@@ -338,6 +346,12 @@ function Facts({ document, team, customerLink, sales = true }: { document: Sales
         <>
           <dt className="text-muted-foreground">Valid until</dt>
           <dd>{formatIsoDate(document.validUntil)}</dd>
+        </>
+      ) : null}
+      {document.dueDate ? (
+        <>
+          <dt className="text-muted-foreground">Due</dt>
+          <dd data-testid="due-date">{formatIsoDate(document.dueDate)}</dd>
         </>
       ) : null}
       <dt className="text-muted-foreground">Status</dt>
@@ -426,6 +440,7 @@ export async function SalesDocumentScreen({ params, searchParams }: { params: Pr
   );
 
   if (document.kind === "delivery") return <DeliveryNote session={session} document={document} back={back} />;
+  if (document.kind === "invoice") return <Invoice session={session} document={document} back={back} />;
 
   if (document.status === "draft" && manager && isEntryKind(document.kind)) {
     const entryKind = document.kind;
@@ -501,6 +516,7 @@ export async function SalesDocumentScreen({ params, searchParams }: { params: Pr
   ]);
   const why = credit ? creditRefusal(credit, document.totals.total) : null;
   const delivered = (progress ?? []).some((line) => line.delivered.gt(0));
+  const invoiced = (progress ?? []).some((line) => line.invoiced.gt(0));
   const toDeliver = (progress ?? []).some((line) => line.remaining.gt(0));
   return (
     <>
@@ -514,7 +530,7 @@ export async function SalesDocumentScreen({ params, searchParams }: { params: Pr
         </Card>
 
         {progress ? (
-          <Card title="Deliveries">
+          <Card title={team ? "Deliveries and invoices" : "Deliveries"}>
             <div className="overflow-x-auto">
               <table aria-label="Deliveries" className="mb-3 w-full min-w-[420px] text-left text-sm">
                 <thead className="border-b text-muted-foreground">
@@ -522,7 +538,8 @@ export async function SalesDocumentScreen({ params, searchParams }: { params: Pr
                     <th className="py-2 pr-4 font-medium">Item</th>
                     <th className="py-2 pr-4 text-right font-medium">Ordered</th>
                     <th className="py-2 pr-4 text-right font-medium">Delivered</th>
-                    <th className="py-2 text-right font-medium">Still to deliver</th>
+                    <th className="py-2 pr-4 text-right font-medium">Still to deliver</th>
+                    {team ? <th className="py-2 text-right font-medium">Invoiced</th> : null}
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -535,22 +552,37 @@ export async function SalesDocumentScreen({ params, searchParams }: { params: Pr
                         {plainNumber(line.ordered)} {line.unitCode}
                       </td>
                       <td className="py-2 pr-4 text-right whitespace-nowrap tabular-nums">{plainNumber(line.delivered)}</td>
-                      <td className="py-2 text-right whitespace-nowrap tabular-nums" data-testid={`to-deliver-${line.lineNo}`}>
+                      <td className="py-2 pr-4 text-right whitespace-nowrap tabular-nums" data-testid={`to-deliver-${line.lineNo}`}>
                         {plainNumber(line.remaining)}
                       </td>
+                      {team ? (
+                        <td className="py-2 text-right whitespace-nowrap tabular-nums" data-testid={`invoiced-${line.lineNo}`}>
+                          {plainNumber(line.invoiced)}
+                        </td>
+                      ) : null}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
             {!toDeliver ? (
-              <p className="text-sm text-muted-foreground">Everything on this order has been delivered.</p>
-            ) : can(session.role, "delivery.manage") ? (
-              <>
-                <p className="mb-3 text-sm text-muted-foreground">A delivery note starts with everything still to deliver; bring the quantities down for a part delivery.</p>
-                <ActionForm action={startDeliveryAction.bind(null, document.id)} submitLabel="Make a delivery note" compact />
-              </>
-            ) : null}
+              <p className="text-sm text-muted-foreground">Everything on this order has been delivered. A delivery note is invoiced from its own page.</p>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {can(session.role, "delivery.manage") ? (
+                  <div>
+                    <p className="mb-2 text-sm text-muted-foreground">A delivery note starts with everything still to deliver; bring the quantities down for a part delivery.</p>
+                    <ActionForm action={startDeliveryAction.bind(null, document.id)} submitLabel="Make a delivery note" compact />
+                  </div>
+                ) : null}
+                {manager ? (
+                  <div>
+                    <p className="mb-2 text-sm text-muted-foreground">Or invoice straight from the order, with no delivery note: the goods leave stock when the invoice is posted.</p>
+                    <ActionForm action={startInvoiceAction.bind(null, document.id)} submitLabel="Invoice and deliver now" compact />
+                  </div>
+                ) : null}
+              </div>
+            )}
           </Card>
         ) : null}
 
@@ -584,7 +616,9 @@ export async function SalesDocumentScreen({ params, searchParams }: { params: Pr
 
         {document.status === "submitted" && manager && delivered ? (
           <Card title="Cancel this sales order">
-            <p className="text-sm text-muted-foreground">Goods have been delivered against this order. To cancel it, cancel its delivery notes first.</p>
+            <p className="text-sm text-muted-foreground">
+              {invoiced ? "This order has been invoiced. It can no longer be cancelled." : "Goods have been delivered against this order. To cancel it, cancel its delivery notes first."}
+            </p>
           </Card>
         ) : null}
         {document.status === "submitted" && manager && !delivered ? (
@@ -605,8 +639,11 @@ export async function SalesDocumentScreen({ params, searchParams }: { params: Pr
 
 /** A delivery note: a draft to fill in and post, or a posted or cancelled note to read. No prices: it is a goods document. */
 async function DeliveryNote({ session, document, back }: { session: Session; document: NonNullable<Awaited<ReturnType<typeof getSalesDocument>>>; back: React.ReactNode }) {
-  const rows = await getDeliveryRows(session, document);
+  const [rows, invoices, journal] = await Promise.all([getDeliveryRows(session, document), listInvoicesOf(session, document.id), document.status === "draft" ? null : getDocumentJournal(session, "delivery_note", document.id)]);
   const writer = can(session.role, "delivery.manage");
+  const biller = can(session.role, "sales.manage");
+  const billed = invoices.find((invoice) => invoice.status === "submitted");
+  const drafted = invoices.find((invoice) => invoice.status === "draft");
   const loadedAt = document.updatedAt.toISOString();
   const order = document.source;
   // Stock is kept in the item's own unit; a line sold by the carton shows how many cartons that is.
@@ -700,7 +737,33 @@ async function DeliveryNote({ session, document, back }: { session: Session; doc
             </table>
           </div>
         </Card>
-        {document.status === "submitted" && writer ? (
+        {document.status === "submitted" && (billed || biller) ? (
+          <Card title="Invoice">
+            {billed ? (
+              <p className="text-sm">
+                Invoiced on{" "}
+                <Link href={`/sales/${billed.id}`} className="font-medium underline underline-offset-4">
+                  {billed.number}
+                </Link>
+                .
+              </p>
+            ) : (
+              <>
+                <p className="mb-3 text-sm text-muted-foreground">
+                  {drafted ? "A draft invoice for this delivery note is waiting to be posted." : "Not invoiced yet. The invoice bills exactly what this note delivered, with the tax worked out for the invoice's own date."}
+                </p>
+                <ActionForm action={startInvoiceAction.bind(null, document.id)} submitLabel={drafted ? "Open the draft invoice" : "Make a sales invoice"} compact />
+              </>
+            )}
+          </Card>
+        ) : null}
+        {journal ? <Books journal={journal} /> : null}
+        {document.status === "submitted" && writer && billed ? (
+          <Card title="Cancel this delivery note">
+            <p className="text-sm text-muted-foreground">This delivery note has been invoiced. It can no longer be cancelled.</p>
+          </Card>
+        ) : null}
+        {document.status === "submitted" && writer && !billed ? (
           <Card title="Cancel this delivery note">
             <p className="mb-3 text-sm text-muted-foreground">
               A posted delivery note is never changed. Cancelling it puts its goods back into stock at what they went out at and reverses its entry in the books, on the date you
@@ -711,6 +774,119 @@ async function DeliveryNote({ session, document, back }: { session: Session; doc
               <Field label="Why it is cancelled" name="reason" maxLength={300} autoComplete="off" required className="max-w-xl" />
             </ActionForm>
           </Card>
+        ) : null}
+      </div>
+    </>
+  );
+}
+
+/** What a document put into the books: its journal, for those who read the ledger. */
+function Books({ journal }: { journal: Journal }) {
+  const total = journal.lines.reduce((sum, line) => sum.plus(line.debit), new Decimal(0));
+  return (
+    <Card title="In the books">
+      <div className="overflow-x-auto">
+        <table aria-label="In the books" className="w-full min-w-[420px] text-left text-sm">
+          <thead className="border-b text-muted-foreground">
+            <tr>
+              <th className="py-2 pr-4 font-medium">Account</th>
+              <th className="py-2 pr-4 text-right font-medium">Debit</th>
+              <th className="py-2 text-right font-medium">Credit</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {journal.lines.map((line) => (
+              <tr key={line.lineNo}>
+                <td className="py-2 pr-4">
+                  <span className="font-medium tabular-nums">{line.accountCode}</span> {line.accountName}
+                </td>
+                <td className="py-2 pr-4 text-right whitespace-nowrap tabular-nums">{line.debit.isZero() ? "" : formatAmount(line.debit)}</td>
+                <td className="py-2 text-right whitespace-nowrap tabular-nums">{line.credit.isZero() ? "" : formatAmount(line.credit)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot className="border-t font-bold">
+            <tr>
+              <td className="py-2 pr-4">Total</td>
+              <td className="py-2 pr-4 text-right whitespace-nowrap tabular-nums">{formatAmount(total)}</td>
+              <td className="py-2 text-right whitespace-nowrap tabular-nums">{formatAmount(total)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+/** A sales invoice: a draft to check and post, or a posted invoice to read, with what it put into the books. */
+async function Invoice({ session, document, back }: { session: Session; document: NonNullable<Awaited<ReturnType<typeof getSalesDocument>>>; back: React.ReactNode }) {
+  const manager = can(session.role, "sales.manage");
+  const loadedAt = document.updatedAt.toISOString();
+  const source = document.source;
+  const direct = source?.kind === "order";
+
+  if (document.status === "draft" && manager && source) {
+    // Made straight from an order, the quantities can be brought down; made from a delivery note, it bills the whole note.
+    const rows = direct ? await getDeliveryRows(session, document) : [];
+    return (
+      <>
+        {back}
+        <PageHead title="Draft sales invoice" sub={`For ${document.customerName}. Nothing reaches the books until it is posted.`} />
+        <div className="flex max-w-5xl flex-col gap-5">
+          <p className="text-sm text-muted-foreground">
+            Made from{" "}
+            <Link href={`/sales/${source.id}`} className="font-medium text-foreground underline underline-offset-4">
+              {KIND_LABELS[source.kind].toLowerCase()} {source.number}
+            </Link>
+            . {direct ? `The goods leave ${document.warehouseName} when the invoice is posted.` : "It bills exactly what that note delivered."}
+          </p>
+          <Card>
+            <DeliveryForm
+              action={saveInvoiceAction.bind(null, document.id, loadedAt)}
+              date={document.date}
+              earliest={source.date}
+              notes={document.notes ?? ""}
+              words={{ date: "Date of invoice", quantity: "Invoice now", post: "Post invoice", notes: "Anything to say to the customer" }}
+              rows={rows.map((row) => ({
+                sourceLineId: row.sourceLineId,
+                itemCode: row.itemCode,
+                description: row.description,
+                unitCode: row.unitCode,
+                ordered: plainNumber(row.ordered),
+                delivered: plainNumber(row.delivered),
+                remaining: plainNumber(Decimal.max(row.ordered.minus(row.delivered), 0)),
+                inStock: plainNumber(row.onHand.div(row.unitFactor).toDecimalPlaces(4, Decimal.ROUND_DOWN)),
+                quantity: row.quantity.isZero() ? "" : plainNumber(row.quantity),
+              }))}
+            />
+          </Card>
+          {document.lines.length > 0 ? (
+            <Card title="As saved">
+              <LinesTable document={document} />
+            </Card>
+          ) : null}
+          <Card title="Throw this draft away">
+            <p className="mb-3 text-sm text-muted-foreground">A draft has no number and is not in the books, so removing it leaves nothing behind.</p>
+            <ActionForm action={discardSalesAction.bind(null, document.id, loadedAt)} submitLabel="Discard draft" compact />
+          </Card>
+        </div>
+      </>
+    );
+  }
+
+  const [people, journal] = await Promise.all([listSalesPeople(session), document.status === "draft" ? null : getDocumentJournal(session, "sales_invoice", document.id)]);
+  return (
+    <>
+      {back}
+      <PageHead title={document.number ?? "Draft sales invoice"} sub={`Sales invoice for ${document.customerName}`} />
+      <div className="flex max-w-5xl flex-col gap-5">
+        <Card>
+          <Facts document={document} team={people} customerLink={can(session.role, "customer.read")} />
+          <LinesTable document={document} />
+        </Card>
+        {journal ? <Books journal={journal} /> : null}
+        {document.status === "submitted" ? (
+          <p className="text-sm text-muted-foreground">A posted invoice is never changed or cancelled. A mistake on it is put right with a credit note, which comes with sales returns.</p>
         ) : null}
       </div>
     </>

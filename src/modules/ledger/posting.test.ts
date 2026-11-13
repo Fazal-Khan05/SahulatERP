@@ -7,8 +7,8 @@ import { openFiscalYear, setPeriodLocked } from "@/modules/numbering/commands";
 import { listFiscalPeriods } from "@/modules/numbering/queries";
 import type { TenantContext } from "@/modules/tenant/rules";
 import { adminSql, deleteTenants, hasAdminDb, type AdminSql } from "../../../tests/support/admin-db";
+import { postBacked, reverseBacked } from "../../../tests/support/journal";
 import { addAccount, deleteAccount, seedAccounts, setAccountArchived } from "./commands";
-import { postJournal, reverseJournal } from "./posting";
 import { getJournal, listAccounts } from "./queries";
 import { JOURNAL_SOURCES, type AccountNode, type JournalLineInput } from "./rules";
 import { journalLines, journals } from "./schema";
@@ -52,10 +52,10 @@ async function codeOf(run: () => Promise<unknown>): Promise<string | undefined> 
   }
 }
 
-/** Posts one manual-journal source in its own transaction, as the app would. */
+/** Posts one manual-journal source in its own transaction, with its manual journal behind it, as the app would. */
 const post = (who: TenantContext, lines: JournalLineInput[], more: { id?: string; date?: string; branchId?: string | null; memo?: string; documentNumber?: string } = {}) =>
-  withTenant(who.userId, who.tenantId, (tx) => postJournal(tx, { type: "manual_journal", id: more.id ?? randomUUID(), date: more.date ?? D, branchId: more.branchId, memo: more.memo, documentNumber: more.documentNumber }, lines));
-const reverse = (who: TenantContext, journalId: string, date = D, memo?: string) => withTenant(who.userId, who.tenantId, (tx) => reverseJournal(tx, journalId, { date, memo }));
+  withTenant(who.userId, who.tenantId, (tx) => postBacked(tx, who, { id: more.id, date: more.date ?? D, branchId: more.branchId, memo: more.memo, documentNumber: more.documentNumber }, lines));
+const reverse = (who: TenantContext, journalId: string, date = D, memo?: string) => withTenant(who.userId, who.tenantId, (tx) => reverseBacked(tx, who, journalId, { date, memo }));
 /** Calls the database function directly, past the app's own checks. */
 const rawPost = (who: TenantContext, lines: unknown, sourceType = "manual_journal", date = D) =>
   withTenant(who.userId, who.tenantId, (tx) => tx.execute(sql`select app.post_journal(${date}::date, ${sourceType}, ${randomUUID()}::uuid, ${JSON.stringify(lines)}::jsonb)`));
@@ -141,7 +141,7 @@ describe.skipIf(!hasDb)("the posting engine", () => {
       for (let batch = batches.pop(); batch; batch = batches.pop()) {
         const mine = batch;
         await withTenant(userIds.accountant, tenantA, async (tx) => {
-          for (const journal of mine) await postJournal(tx, { type: "manual_journal", id: journal.id, date: journal.date }, journal.lines);
+          for (const journal of mine) await postBacked(tx, as.accountant, { id: journal.id, date: journal.date }, journal.lines);
         });
       }
     };
@@ -166,7 +166,8 @@ describe.skipIf(!hasDb)("the posting engine", () => {
     const balances = await admin<{ account_id: string; net: string }[]>`select account_id, (sum(debit) - sum(credit))::text as net from public.journal_lines where tenant_id = ${tenantA} group by account_id`;
     expect(balances).toHaveLength(expected.size);
     for (const row of balances) expect(row.net, row.account_id).toBe(expected.get(row.account_id)!.toFixed(4));
-  });
+    // A thousand journals, each with its document, against a database that may be a continent away.
+  }, 600_000);
 
   it("has the database, not the app, reject a journal that does not balance", async () => {
     // The app's own check comes first and says why.
@@ -177,16 +178,25 @@ describe.skipIf(!hasDb)("the posting engine", () => {
     expect(await codeOf(() => rawPost(as.accountant, [{ account_id: account("5230"), debit: "100" }, { account_id: account("1111"), credit: "99.99" }]))).toBe("SE003");
     expect(await codeOf(() => rawPost(as.accountant, [{ account_id: account("5230"), debit: "100" }]))).toBe("SE003");
     // Past the function too, writing the rows directly as postgres, the commit is refused.
-    const direct = (lines: { debit: string; credit: string }[], more: (tx: AdminSql) => Promise<unknown> = async () => {}) =>
+    // Each of these has a manual journal behind it, written directly too, so that what is refused is the balance.
+    const direct = (lines: { debit: string; credit: string }[], more: (tx: AdminSql) => Promise<unknown> = async () => {}, documented = true) =>
       codeOf(() =>
         admin.begin(async (tx) => {
-          const [journal] = await tx`insert into public.journals (tenant_id, journal_date, source_type, source_id, created_by) values (${tenantA}, ${D}, 'manual_journal', ${randomUUID()}, ${userIds.owner}) returning id`;
+          const source = randomUUID();
+          const [journal] = await tx`insert into public.journals (tenant_id, journal_date, source_type, source_id, created_by) values (${tenantA}, ${D}, 'manual_journal', ${source}, ${userIds.owner}) returning id`;
           for (const [index, line] of lines.entries()) {
             await tx`insert into public.journal_lines (tenant_id, journal_id, line_no, account_id, debit, credit) values (${tenantA}, ${journal.id}, ${index + 1}, ${account(index === 0 ? "5230" : "1111")}, ${line.debit}, ${line.credit})`;
+          }
+          if (documented) {
+            await tx`insert into public.manual_journals (id, tenant_id, status, journal_date, memo, number, journal_id, posted_at, posted_by, created_by, updated_by)
+              values (${source}, ${tenantA}, 'posted', ${D}, 'Written directly', ${"JV-0000-" + String(Date.now()).slice(-10)}, ${journal.id}, now(), ${userIds.owner}, ${userIds.owner}, ${userIds.owner})`;
           }
           await more(tx as unknown as AdminSql);
         }),
       );
+    // A journal that balances but has no document behind it is not kept either, whoever writes it.
+    expect(await direct([{ debit: "100", credit: "0" }, { debit: "0", credit: "100" }], undefined, false)).toBe("SE074");
+    expect(await codeOf(() => rawPost(as.accountant, [{ account_id: account("5230"), debit: "100" }, { account_id: account("1111"), credit: "100" }]))).toBe("SE074");
     expect(await direct([{ debit: "100", credit: "0" }, { debit: "0", credit: "90" }])).toBe("SE003");
     expect(await direct([{ debit: "100", credit: "0" }])).toBe("SE003");
     expect(await direct([])).toBe("SE003");
@@ -232,7 +242,7 @@ describe.skipIf(!hasDb)("the posting engine", () => {
     // The check at the end of the transaction is the engine's own, whatever the caller set before.
     const early = await withTenant(userIds.accountant, tenantA, async (tx) => {
       await tx.execute(sql`set constraints all immediate`);
-      return postJournal(tx, { type: "manual_journal", id: randomUUID(), date: D }, rent("3"));
+      return postBacked(tx, as.accountant, { date: D }, rent("3"));
     });
     expect((await getJournal(as.owner, early))?.lines).toHaveLength(2);
     // Text that is too long is refused in words, before the database is asked.
@@ -292,13 +302,9 @@ describe.skipIf(!hasDb)("the posting engine", () => {
     const both = await Promise.allSettled([post(as.owner, rent("7"), { id: again }), post(as.accountant, rent("7"), { id: again })]);
     expect(both.map((r) => r.status).sort()).toEqual(["fulfilled", "rejected"]);
     expect((await admin`select count(*)::int as n from public.journals where tenant_id = ${tenantA} and source_id in (${source}, ${again})`)[0].n).toBe(2);
-    // The same document id in another company is that company's own.
-    const elsewhere = await withTenant(ownerB, tenantB, async (tx) => {
-      const theirs = await tx.execute<{ id: string; code: string }>(sql`select id, code from public.accounts where code in ('5230', '1111')`);
-      const of = (code: string) => theirs.find((a) => a.code === code)!.id;
-      return postJournal(tx, { type: "manual_journal", id: source, date: D }, [{ accountId: of("5230"), debit: d("100") }, { accountId: of("1111"), credit: d("100") }]);
-    });
-    expect(elsewhere).not.toBeNull();
+    // One journal per document within a company: the key carries the company, so two companies never collide.
+    const [key] = await admin`select pg_get_constraintdef(oid) as def from pg_constraint where conname = 'journals_source_key'`;
+    expect(key.def).toBe("UNIQUE (tenant_id, source_type, source_id)");
   });
 
   it("reverses a journal once, with every debit and credit swapped", async () => {
@@ -385,7 +391,7 @@ describe.skipIf(!hasDb)("the posting engine", () => {
     let locked = false;
     let lock: Promise<void> = Promise.resolve();
     const id = await withTenant(userIds.accountant, tenantA, async (tx) => {
-      const journal = await postJournal(tx, { type: "manual_journal", id: randomUUID(), date: "2026-12-05" }, rent("9"));
+      const journal = await postBacked(tx, as.accountant, { date: "2026-12-05" }, rent("9"));
       // The journal is written but its transaction is still open: the lock has to wait for it.
       lock = setPeriodLocked(as.owner, december.id, true).then(() => void (locked = true));
       await new Promise((resolve) => setTimeout(resolve, 400));
@@ -449,7 +455,7 @@ describe.skipIf(!hasDb)("the posting engine", () => {
     const theirs = await listAccounts(otherOwner);
     const of = (code: string) => theirs.find((a) => a.code === code)!.id;
     const bank = await addAccount(otherOwner, { parentId: of("1120"), name: "HBL current account", code: "", kind: "account" });
-    const run = (id: string, date: string, memo: string, lines: JournalLineInput[]) => withTenant(ownerB, tenantB, (tx) => postJournal(tx, { type: "manual_journal", id, date, memo }, lines));
+    const run = (id: string, date: string, memo: string, lines: JournalLineInput[]) => withTenant(ownerB, tenantB, (tx) => postBacked(tx, otherOwner, { id, date, memo }, lines));
     const before = (await admin`select count(*)::int as n from public.journals where tenant_id = ${tenantB}`)[0].n;
     const rentId = await run(randomUUID(), "2026-11-02", "Shop rent for November 2026, paid in cash", [
       { accountId: of("5230"), debit: d("40000") },
@@ -460,7 +466,7 @@ describe.skipIf(!hasDb)("the posting engine", () => {
       { accountId: of("1111"), debit: d("50000") },
       { accountId: of("3100"), credit: d("500000") },
     ]);
-    const reversalId = await withTenant(ownerB, tenantB, (tx) => reverseJournal(tx, rentId, { date: "2026-11-10", memo: "Rent was entered twice" }));
+    const reversalId = await withTenant(ownerB, tenantB, (tx) => reverseBacked(tx, otherOwner, rentId, { date: "2026-11-10", memo: "Rent was entered twice" }));
     expect((await admin`select count(*)::int as n from public.journals where tenant_id = ${tenantB}`)[0].n).toBe(before + 3);
     const reversal = await getJournal(otherOwner, reversalId);
     expect(reversal?.lines.map((l) => `${l.accountCode} ${l.accountName} | ${l.debit.toFixed(2)} | ${l.credit.toFixed(2)}`)).toEqual(["5230 Rent | 0.00 | 40000.00", "1111 Cash in hand | 40000.00 | 0.00"]);

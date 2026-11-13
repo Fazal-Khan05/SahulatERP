@@ -788,8 +788,6 @@ Things noticed while building a step that belong to a later one, or to nobody ye
 - **Whoever adds a customer by their own SQL, past the app, leaves no audit row for it.** The
   app writes one. A second customer with nearly the same name and no credit limit is a way
   round a limit; it shows in the customer list with who added it.
-- **A customer's credit standing shows "0" rather than "0.0000" in two audit rows** when the
-  customer has no entries in the books yet; only how the figure is written differs.
 
 ## From Step 19
 
@@ -848,3 +846,72 @@ Things noticed while building a step that belong to a later one, or to nobody ye
   figure kept on the order line, or orders marked complete.
 - **Reversing the Step 19 migration by hand leaves the Step 18 guards to be put back by hand
   too**; its file says how.
+
+## From Step 20
+
+- **An invoice is made from one delivery note, or straight from one order.** From a delivery
+  note it bills exactly that note, once: not part of it, and not several notes on one invoice.
+  Straight from an order it bills and delivers what has not yet left the warehouse, all or part.
+  One invoice for a month's deliveries to a customer is not built; ask the pilot's users.
+- **The price on an invoice is the order's.** It cannot be changed on the invoice, and the list
+  price it shows is the one the order recorded. The tax is worked out afresh for the invoice's
+  own date and the buyer as recorded that day, so an invoice can carry a different tax from
+  its order when a rate or the buyer's status has changed between them.
+- **A posted invoice is never changed or cancelled.** A wrong one is corrected by a credit note
+  (Step 21). Until then a mistake on a posted invoice can only be put right in the books by a
+  manual journal, which does not touch the invoice or the stock.
+- **A delivery note that has been invoiced, and an order with anything delivered or invoiced,
+  cannot be cancelled.**
+- **Every journal now needs its document.** The database refuses, when a transaction ends, a
+  journal with no standing document behind it: a manual journal or the opening balances must
+  name it, a delivery note or an invoice must carry its number, and a reversal must belong to
+  the document whose journal it reverses. This closes the gap noted under Step 14. Each later
+  kind of document adds itself to `app.check_journal_backed`.
+- **Only `app.post_sales_invoice` writes an invoice's journal**, with the goods when the invoice
+  delivers them. An invoice marked posted by hand has no journal and is refused. The database
+  does not work the tax out again: the tax on the lines is the tax engine's, written by the
+  app. Someone running their own SQL as the app could save a draft with a wrong tax figure and
+  post it; the journal would still balance and agree with the invoice, which shows the figure.
+- **Further tax is posted to its own locked account, 2205 Further tax payable**, new in every
+  chart (a company that already had an account numbered 2205 gets it as 2205-FT). Extra tax,
+  if a category ever carries any, goes with ordinary output tax.
+- **An invoice falls due on its date plus the customer's credit days as they stood when it was
+  posted**; with none set it is due the same day. Receipts and ageing (Steps 32 and 33) read
+  this date.
+- **What counts against a credit limit** is now the receivable plus the part of each submitted
+  order that has not been invoiced (the order's total less the totals of its invoices, never
+  below nil). An invoice is not weighed against the limit again when it is posted: its order
+  was. An order submitted under the limit can therefore be invoiced after the customer has
+  gone over it by other means.
+- **The salespeople of an order are the salespeople of its invoices**, copied line by line when
+  the invoice is made, for the commission that accrues on invoices (Step 38). A change of
+  salespeople after the order is submitted has no screen.
+- **FBR's fields are on every invoice and empty.** Nothing submits an invoice to FBR until the
+  FBR module is built (Phase 7); the buyer's details FBR needs are kept on the invoice as they
+  stood when it was posted. An invoice to an unregistered buyer does not yet ask for the
+  buyer's CNIC, which the law requires above a value.
+- **The invoice has no print or PDF yet** (Step 23). Its page shows the tax on each line and,
+  to those who read the ledger, the journal it posted.
+- **Tax is charged by the invoice's date, not the delivery's.** See question 8 in
+  `docs/RATES-REVIEW.md`: an invoice dated in the month after its delivery puts the output tax
+  in the later month's books.
+- **Pressing "Post invoice" posts only what the page already showed.** If saving the draft
+  changes its date, a quantity or its tax, the new figures are shown and the invoice is posted
+  on the next press. An order's "Submit" still saves and submits in one go: an order can be
+  cancelled, an invoice cannot.
+- **An invoice that comes to more than its order still had to bill is weighed against the
+  credit limit for the difference** (a tax rate that rose, say), and over the limit only an
+  owner posts it. No reason is asked for, unlike an order.
+- **Goods already delivered are billed even if the customer or the item has been archived
+  since**, and the invoice keeps the order's salespeople even if one has left the sales team.
+  A new sale to an archived customer, or of an archived item, is still refused.
+- **Nothing closes an order that is partly delivered or invoiced and will go no further.** Its
+  remainder stays in the warehouse's list and against the customer's credit limit. A "close
+  this order short" action is needed.
+- **The warehouse is shown the cancel form on a delivery note that has been invoiced**, because
+  it does not see invoices; the cancel is then refused with a plain message.
+- **For FBR (Phase 7):** the `fbr_*` fields of a posted invoice can only be written by a
+  database function of their own, since a posted document is otherwise closed. An invoice that
+  FBR rejects after posting cannot be undone, only credited: validate with FBR before posting.
+- **Credit notes (Step 21) must come out of what an order has invoiced and of what a customer
+  owes**, and the rule that only an invoice has a due date will need widening if they have one.

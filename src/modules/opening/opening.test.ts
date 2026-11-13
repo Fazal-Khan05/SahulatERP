@@ -10,6 +10,7 @@ import type { AccountNode } from "@/modules/ledger/rules";
 import { openFiscalYear } from "@/modules/numbering/commands";
 import type { TenantContext } from "@/modules/tenant/rules";
 import { adminSql, deleteTenants, hasAdminDb, type AdminSql } from "../../../tests/support/admin-db";
+import { postBacked } from "../../../tests/support/journal";
 import { addOpenDocument, discardOpening, importOpeningLines, postOpening, removeOpeningLine, reverseOpening, setAccountBalance, setOpeningDate, startOpening } from "./commands";
 import { ageOpening, getOpening } from "./queries";
 import { openingBalances, openingEntries } from "./schema";
@@ -311,13 +312,13 @@ describe.skipIf(!hasDb)("opening balances", () => {
     const rent = [{ accountId: account("5230"), debit: new Decimal("10") }, { accountId: account("1111"), credit: new Decimal("10") }];
     await admin`update public.fiscal_periods set locked_at = null where tenant_id = ${tenantA}`;
     await openFiscalYearBefore();
-    await expect(withTenant(userIds.accountant, tenantA, (tx) => postJournal(tx, { type: "manual_journal", id: randomUUID(), date: "2026-06-30" }, rent))).rejects.toThrow("That date is before the day the books were opened here.");
-    await withTenant(userIds.accountant, tenantA, (tx) => postJournal(tx, { type: "manual_journal", id: randomUUID(), date: OPENING }, rent));
+    await expect(withTenant(userIds.accountant, tenantA, (tx) => postBacked(tx, as.accountant, { date: "2026-06-30" }, rent))).rejects.toThrow("That date is before the day the books were opened here.");
+    await withTenant(userIds.accountant, tenantA, (tx) => postBacked(tx, as.accountant, { date: OPENING }, rent));
     // And opening balances cannot be dated after journals already in the books (the other company).
     const theirs = await listAccounts(otherOwner);
     const of = (code: string) => theirs.find((a) => a.code === code)!.id;
     await openFiscalYear(otherOwner, { month: "7", year: "2026" });
-    await withTenant(ownerB, tenantB, (tx) => postJournal(tx, { type: "manual_journal", id: randomUUID(), date: "2026-07-10" }, [{ accountId: of("5230"), debit: new Decimal("10") }, { accountId: of("1111"), credit: new Decimal("10") }]));
+    await withTenant(ownerB, tenantB, (tx) => postBacked(tx, otherOwner, { date: "2026-07-10" }, [{ accountId: of("5230"), debit: new Decimal("10") }, { accountId: of("1111"), credit: new Decimal("10") }]));
     await startOpening(otherOwner, { date: "2026-08-01" });
     await setAccountBalance(otherOwner, { accountId: of("1111"), debit: "100", credit: "" });
     await expect(postOpening(otherOwner)).rejects.toThrow("The books already hold journals dated before 01-08-2026.");

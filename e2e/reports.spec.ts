@@ -42,11 +42,15 @@ test("an owner reads the books: trial balance, balance sheet, profit and loss, a
       await tx`select set_config('app.user_id', ${owner.id}, true), set_config('app.tenant_id', ${tenantId}, true)`;
       // Sent as text and read as JSON by the database: the driver would otherwise wrap it in quotes again.
       const lines = JSON.stringify([{ account_id: accounts[debit], debit: amount }, { account_id: accounts[credit], credit: amount }]);
-      await tx`select app.post_journal(${today}::date, 'manual_journal', gen_random_uuid(), (${lines}::text)::jsonb, ${memo}, null, ${number})`;
+      const [document] = await tx`select gen_random_uuid() as id`;
+      const [journal] = await tx`select app.post_journal(${today}::date, 'manual_journal', ${document.id}::uuid, (${lines}::text)::jsonb, ${memo}, null, ${number}) as id`;
+      // The database keeps a journal only with its document: the manual journal it was posted for, written here directly.
+      await tx`insert into public.manual_journals (id, tenant_id, status, journal_date, memo, number, journal_id, posted_at, posted_by, created_by, updated_by)
+        values (${document.id}, ${tenantId}, 'posted', ${today}, ${memo}, ${number}, ${journal.id}, now(), ${owner.id}, ${owner.id}, ${owner.id})`;
     });
-  await post("1111", "3100", "500000", "JV-0001", "Owner's money put in");
-  await post("5230", "1111", "40000", "JV-0002", "Shop rent");
-  await post("1111", "4100", "12500.50", "JV-0003", "Cash sale");
+  await post("1111", "3100", "500000", "JV-2627-00001", "Owner's money put in");
+  await post("5230", "1111", "40000", "JV-2627-00002", "Shop rent");
+  await post("1111", "4100", "12500.50", "JV-2627-00003", "Cash sale");
 
   await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Reports" }).click();
   await expect(page.getByRole("list", { name: "Ledger reports" }).getByRole("link")).toHaveText(["Trial balance", "General ledger", "Balance sheet", "Profit and loss"]);
@@ -101,9 +105,9 @@ test("an owner reads the books: trial balance, balance sheet, profit and loss, a
   await expect(ledger.getByRole("row")).toHaveText([
     /Date\s*Document\s*Description\s*Debit\s*Credit\s*Balance/,
     /Opening balance\s*Nil/,
-    new RegExp(`${shown}\\s*JV-0001\\s*Owner's money put in\\s*5,00,000.00\\s*5,00,000.00 Dr`),
-    new RegExp(`${shown}\\s*JV-0002\\s*Shop rent\\s*40,000.00\\s*4,60,000.00 Dr`),
-    new RegExp(`${shown}\\s*JV-0003\\s*Cash sale\\s*12,500.50\\s*4,72,500.50 Dr`),
+    new RegExp(`${shown}\\s*JV-2627-00001\\s*Owner's money put in\\s*5,00,000.00\\s*5,00,000.00 Dr`),
+    new RegExp(`${shown}\\s*JV-2627-00002\\s*Shop rent\\s*40,000.00\\s*4,60,000.00 Dr`),
+    new RegExp(`${shown}\\s*JV-2627-00003\\s*Cash sale\\s*12,500.50\\s*4,72,500.50 Dr`),
     /Closing balance\s*5,12,500.50\s*40,000.00\s*4,72,500.50 Dr/,
   ]);
 });

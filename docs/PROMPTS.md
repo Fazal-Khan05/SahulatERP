@@ -94,6 +94,11 @@ Until then, definition-of-done item 5 (the founder clicks through on the dev dep
 
 ## Step 20 note
 
+Done with Step 20 on 2026-11-13: the constraint trigger `journals_with_document`
+(`drizzle/0018_sales_invoices.sql`) refuses any journal that has no standing document behind
+it, and the tests that post journals of their own give each one a manual journal
+(`tests/support/journal.ts`). The note is kept for the record:
+
 Before the first sales invoice posts, close the gap recorded in docs/LATER.md under "From Step 14": add a deferred constraint trigger on `journals` that requires, by source type, the document row that points back at the journal (and the same for reversals), so that no journal can exist without its document whoever calls `app.post_journal`. Give the engine's own tests a document behind each journal they post. Sales invoices are posted by roles with less trust than an accountant; this must be in place first.
 
 ## Accounting checks

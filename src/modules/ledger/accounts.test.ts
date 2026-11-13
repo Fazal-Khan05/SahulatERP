@@ -66,11 +66,11 @@ describe.skipIf(!hasDb)("the chart of accounts", () => {
     await expect(seedAccounts(as.owner, "manufacturing")).rejects.toThrow("Choose a chart of accounts to start from.");
     // Two clicks at the same moment make one chart, not two.
     const twice = await Promise.all([seedAccounts(as.owner, "trading"), seedAccounts(as.owner, "trading")]);
-    expect(twice.map((r) => r.created).sort((a, b) => a - b)).toEqual([0, 65]);
+    expect(twice.map((r) => r.created).sort((a, b) => a - b)).toEqual([0, 66]);
     expect((await seedAccounts(as.owner, "trading")).created).toBe(0);
 
     const chart = await listAccounts(as.auditor);
-    expect(chart).toHaveLength(65);
+    expect(chart).toHaveLength(66);
     expect(chart.filter((a) => a.depth === 0).map((a) => `${a.code} ${a.name} ${a.type}`)).toEqual(["1000 Assets asset", "2000 Liabilities liability", "3000 Equity equity", "4000 Income income", "5000 Expenses expense"]);
     // Every account a posting must find is there once, locked; headings are locked too.
     const locked = chart.filter((a) => a.isControl && a.controlType !== null);
@@ -84,7 +84,7 @@ describe.skipIf(!hasDb)("the chart of accounts", () => {
     }
     expect(chart.find((a) => a.code === "1111")).toMatchObject({ name: "Cash in hand", controlType: "cash", isControl: false });
     const [audited] = await admin`select actor_role, after from public.audit_log where tenant_id = ${tenantA} and action = 'accounts.seed'`;
-    expect(audited).toEqual({ actor_role: "owner", after: { template: "trading", accounts: 65 } });
+    expect(audited).toEqual({ actor_role: "owner", after: { template: "trading", accounts: 66 } });
     // The other company has none, and sees none of these.
     expect(await hasAccounts(otherOwner)).toBe(false);
     expect(await withTenant(ownerB, tenantA, (tx) => tx.select().from(accounts))).toEqual([]);

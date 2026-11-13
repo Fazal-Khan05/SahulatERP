@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, date, foreignKey, index, integer, numeric, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, date, foreignKey, index, integer, numeric, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { items, units } from "../items/schema";
 import { customers } from "../parties/schema";
 import { taxCategories } from "../tax/schema";
@@ -49,9 +49,12 @@ export const salesDocuments = pgTable(
     customerReference: text("customer_reference"),
     notes: text(),
     // The document this one was made from and is checked against: for a delivery note, its
-    // sales order. Nothing on a quotation or an order (an order made from a quotation is only
+    // sales order; for an invoice, the delivery note it bills or the sales order it delivers and
+    // bills at once. Nothing on a quotation or an order (an order made from a quotation is only
     // linked to it).
     sourceDocumentId: uuid("source_document_id"),
+    // On an invoice: the day it falls due, from the customer's credit days when it was posted.
+    dueDate: date("due_date", { mode: "string" }),
     // Whose sale it is: the salesperson with the largest share. A salesperson sees the
     // documents they wrote and the ones that are theirs.
     salespersonId: uuid("salesperson_id"),
@@ -88,6 +91,10 @@ export const salesDocuments = pgTable(
     fbrSubmissionId: text("fbr_submission_id"),
     fbrStatus: text("fbr_status"),
     offlineFlag: boolean("offline_flag").notNull().default(false),
+    // Set only by the database's own posting functions, to the transaction that posted a
+    // delivery note or an invoice: the app's role cannot write it, so a document marked posted
+    // by hand does not have it.
+    postedTxid: bigint("posted_txid", { mode: "number" }),
     submittedAt: timestamp("submitted_at", { withTimezone: true }),
     submittedBy: uuid("submitted_by"),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
@@ -111,6 +118,8 @@ export const salesDocuments = pgTable(
       .where(sql`${t.sourceDocumentId} is not null`),
     check("sales_documents_source_only_for_followers", sql`${t.sourceDocumentId} is null or ${t.kind} in ('delivery', 'invoice', 'credit_note')`),
     check("sales_documents_not_own_source", sql`${t.sourceDocumentId} is distinct from ${t.id}`),
+    check("sales_documents_due_date_order", sql`${t.dueDate} >= ${t.documentDate}`),
+    check("sales_documents_due_date_only_on_invoices", sql`${t.dueDate} is null or ${t.kind} = 'invoice'`),
     index("sales_documents_tenant_kind_date_idx").on(t.tenantId, t.kind, t.documentDate),
     index("sales_documents_tenant_customer_idx").on(t.tenantId, t.customerId),
     check("sales_documents_kind_known", sql`${t.kind} in ('quotation', 'order', 'delivery', 'invoice', 'credit_note')`),
@@ -188,7 +197,8 @@ export const salesLines = pgTable(
     sroItemSerial: text("sro_item_serial"),
     fbrUomCode: text("fbr_uom_code"),
     hsCode: text("hs_code"),
-    // On a delivery note: the line of the sales order that this line delivers.
+    // On a delivery note: the line of the sales order that this line delivers. On an invoice:
+    // the line of the delivery note or of the sales order that this line bills.
     sourceLineId: uuid("source_line_id"),
     // The value of the supply before tax and after the discount, and what the buyer pays for the line.
     value: numeric({ precision: 20, scale: 4 }).notNull(),

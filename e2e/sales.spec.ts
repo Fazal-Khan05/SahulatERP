@@ -145,7 +145,7 @@ test("the owner finds the order in the inbox and approves it with a reason", asy
   expect(logged).toMatchObject({
     actor_user_id: owner.id,
     actor_role: "owner",
-    before: { creditLimit: "50000.0000", owed: "0", otherOrders: "1890.0000" },
+    before: { creditLimit: "50000.0000", owed: "0.0000", otherOrders: "1890.0000" },
     after: { orderTotal: "55000.0000", over: "6890.0000", reason: "Cheque for 20,000 arrives on Monday" },
   });
   await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Needs attention" }).click();

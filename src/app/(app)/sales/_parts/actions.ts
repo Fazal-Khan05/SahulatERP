@@ -4,7 +4,7 @@ import { refresh } from "next/cache";
 import { requireTenant } from "@/lib/auth/session";
 import { UserError, logFailure } from "@/lib/errors";
 import type { FormState } from "@/lib/form-state";
-import { NeedsReason, cancelDelivery, cancelSalesDocument, discardSalesDraft, orderFromQuotation, postDelivery, releaseSalesHold, saveDeliveryDraft, saveSalesDraft, startDelivery, submitSalesDocument } from "@/modules/sales/commands";
+import { NeedsReason, cancelDelivery, cancelSalesDocument, discardSalesDraft, orderFromQuotation, postDelivery, postInvoice, releaseSalesHold, saveDeliveryDraft, saveInvoiceDraft, saveSalesDraft, startDelivery, startInvoice, submitSalesDocument } from "@/modules/sales/commands";
 import type { EntryKind, RawDocument } from "@/modules/sales/rules";
 
 // The company always comes from the verified session, never from the form. Ids arrive bound to
@@ -191,6 +191,55 @@ export async function cancelDeliveryAction(id: string, loadedAt: string, _: Form
     await cancelDelivery(session, id, { date: formData.get("date"), reason: formData.get("reason") }, loadedAt);
   } catch (error) {
     return refusal("cancel delivery note", error);
+  }
+  refresh();
+  return {};
+}
+
+/** Starts a sales invoice from a posted delivery note, or straight from a submitted order, and opens it. */
+export async function startInvoiceAction(sourceId: string): Promise<FormState> {
+  try {
+    const session = await requireSales();
+    const invoice = await startInvoice(session, sourceId);
+    return { location: `/sales/${invoice.id}` };
+  } catch (error) {
+    return refusal("start sales invoice", error);
+  }
+}
+
+/**
+ * Saves a draft invoice and, when asked, posts it. The draft is saved first, in its own
+ * transaction, so what was typed is kept if posting is refused.
+ */
+export async function saveInvoiceAction(id: string, loadedAt: string, _: FormState, formData: FormData): Promise<FormState> {
+  const post = formData.get("intent") === "post";
+  const sourceLineIds = formData.getAll("sourceLineId");
+  const quantities = formData.getAll("quantity");
+  let session: Awaited<ReturnType<typeof requireSales>>;
+  let savedAt: Date;
+  let changed: boolean;
+  try {
+    session = await requireSales();
+    ({ updatedAt: savedAt, changed } = await saveInvoiceDraft(session, id, { date: formData.get("date"), notes: formData.get("notes"), lines: sourceLineIds.map((sourceLineId, index) => ({ sourceLineId, quantity: quantities[index] })) }, loadedAt));
+  } catch (error) {
+    return refusal("save sales invoice", error);
+  }
+  if (!post) {
+    refresh();
+    return { message: "Draft saved." };
+  }
+  // An invoice cannot be taken back once posted, so it is posted only as the page showed it.
+  // If saving changed a date, a quantity or the tax, the new figures are shown first.
+  if (changed) {
+    refresh();
+    return { message: "Saved, not posted yet: the figures below have changed. Check them, then post the invoice." };
+  }
+  try {
+    await postInvoice(session, id, savedAt);
+  } catch (error) {
+    const refused = refusal("post sales invoice", error);
+    refresh();
+    return { error: `Saved as a draft, but not posted. ${refused.error}` };
   }
   refresh();
   return {};

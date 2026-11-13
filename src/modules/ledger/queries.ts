@@ -131,3 +131,15 @@ export async function getJournal(ctx: TenantContext, id: string): Promise<Journa
   if (!isUuid(id)) return null;
   return withTenant(ctx.userId, ctx.tenantId, (tx) => selectJournal(tx, ctx.tenantId, id));
 }
+
+/**
+ * The journal a document posted, found by the document: for the "in the books" part of a
+ * document's own page. Null when it posted none, or when the reader does not read the ledger.
+ */
+export async function getDocumentJournal(ctx: TenantContext, sourceType: string, sourceId: string): Promise<Journal | null> {
+  if (!can(ctx.role, "account.read") || !isUuid(sourceId)) return null;
+  return withTenant(ctx.userId, ctx.tenantId, async (tx) => {
+    const [found] = await tx.select({ id: journals.id }).from(journals).where(and(eq(journals.tenantId, ctx.tenantId), eq(journals.sourceType, sourceType), eq(journals.sourceId, sourceId)));
+    return found ? selectJournal(tx, ctx.tenantId, found.id) : null;
+  });
+}

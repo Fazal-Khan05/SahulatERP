@@ -87,8 +87,10 @@ export type SalesDocument = {
   creditExposure: Decimal | null;
   creditOverrideReason: string | null;
   cancelReason: string | null;
-  /** On a delivery note: the sales order it was made from. */
-  source: { id: string; number: string | null; date: string } | null;
+  /** What a delivery note or an invoice was made from: a sales order, or for an invoice perhaps a delivery note. */
+  source: { id: string; kind: SalesKind; number: string | null; date: string; sourceDocumentId: string | null } | null;
+  /** On a posted invoice: the day it falls due. */
+  dueDate: string | null;
   createdBy: string;
   updatedAt: Date;
   lines: StoredLine[];
@@ -135,6 +137,7 @@ export async function selectSalesDocument(tx: Tx, tenantId: string, id: string, 
       creditOverrideReason: salesDocuments.creditOverrideReason,
       cancelReason: salesDocuments.cancelReason,
       sourceDocumentId: salesDocuments.sourceDocumentId,
+      dueDate: salesDocuments.dueDate,
       createdBy: salesDocuments.createdBy,
       updatedAt: salesDocuments.updatedAt,
     })
@@ -147,7 +150,7 @@ export async function selectSalesDocument(tx: Tx, tenantId: string, id: string, 
     tx.select({ name: warehouses.name }).from(warehouses).where(and(eq(warehouses.tenantId, tenantId), eq(warehouses.id, row.warehouseId))),
     row.sourceDocumentId === null
       ? Promise.resolve([])
-      : tx.select({ id: sourceDocuments.id, number: sourceDocuments.number, date: sourceDocuments.documentDate, buyerName: sourceDocuments.buyerName }).from(sourceDocuments).where(and(eq(sourceDocuments.tenantId, tenantId), eq(sourceDocuments.id, row.sourceDocumentId))),
+      : tx.select({ id: sourceDocuments.id, kind: sourceDocuments.kind, number: sourceDocuments.number, date: sourceDocuments.documentDate, buyerName: sourceDocuments.buyerName, sourceDocumentId: sourceDocuments.sourceDocumentId }).from(sourceDocuments).where(and(eq(sourceDocuments.tenantId, tenantId), eq(sourceDocuments.id, row.sourceDocumentId))),
     tx
       .select({
         id: salesLines.id,
@@ -224,7 +227,8 @@ export async function selectSalesDocument(tx: Tx, tenantId: string, id: string, 
     creditExposure: exact(row.creditExposure),
     creditOverrideReason: row.creditOverrideReason,
     cancelReason: row.cancelReason,
-    source: source ? { id: source.id, number: source.number, date: source.date } : null,
+    source: source && isSalesKind(source.kind) ? { id: source.id, kind: source.kind, number: source.number, date: source.date, sourceDocumentId: source.sourceDocumentId } : null,
+    dueDate: row.dueDate,
     createdBy: row.createdBy,
     updatedAt: row.updatedAt,
     lines: lineRows.map((line) => ({
@@ -285,7 +289,7 @@ export type SalesListRow = { id: string; kind: SalesKind; status: SalesStatus; n
 
 /** The newest documents of one kind, drafts first among those of the same day. `search` matches part of the number or the customer's name. */
 export async function listSalesDocuments(ctx: TenantContext, options: { kind: SalesKind; status?: SalesStatus | null; search?: string }): Promise<{ rows: SalesListRow[]; more: boolean }> {
-  if (options.kind === "quotation") requireSalesAccess(ctx);
+  if (options.kind === "quotation" || options.kind === "invoice") requireSalesAccess(ctx);
   else requireDocumentAccess(ctx);
   const term = (options.search ?? "").replace(/[^\P{Cc}]/gu, " ").trim().slice(0, 80);
   const pattern = `%${term.replace(/[\\%_]/g, "\\$&")}%`;
@@ -576,11 +580,12 @@ export async function listSalesWarehouses(ctx: TenantContext): Promise<{ id: str
 // ── Delivery notes ──────────────────────────────────────────────────────────────────────────────
 
 /**
- * The lines of a sales order as a delivery note needs them, with what posted delivery notes
- * have already delivered of each, inside a transaction the caller holds. Quantities are in the
- * unit each line was sold in.
+ * The lines of a sales order as a delivery note or an invoice needs them, with how much of each
+ * has already left the warehouse (posted delivery notes, and invoices made straight from the
+ * order) and how much has been invoiced, inside a transaction the caller holds. Quantities are
+ * in the unit each line was sold in.
  */
-export async function selectOrderLinesToDeliver(tx: Tx, tenantId: string, orderId: string): Promise<(OrderLineToDeliver & { lineNo: number; unitCode: string })[]> {
+export async function selectOrderLinesToDeliver(tx: Tx, tenantId: string, orderId: string): Promise<(OrderLineToDeliver & { lineNo: number; unitCode: string; invoiced: Decimal })[]> {
   const [lines, delivered] = await Promise.all([
     tx
       .select({
@@ -605,9 +610,10 @@ export async function selectOrderLinesToDeliver(tx: Tx, tenantId: string, orderI
       .orderBy(asc(salesLines.lineNo)),
     // Asked of the database's own function: the same figure for everyone who may see the order,
     // whoever wrote the delivery notes.
-    tx.execute<{ source_line_id: string; quantity: string }>(sql`select line_id as source_line_id, quantity::text as quantity from app.order_delivered(${orderId}::uuid)`),
+    tx.execute<{ source_line_id: string; quantity: string; invoiced: string }>(sql`select line_id as source_line_id, delivered::text as quantity, invoiced::text as invoiced from app.order_progress(${orderId}::uuid)`),
   ]);
   const done = new Map(delivered.map((row) => [row.source_line_id, new Decimal(row.quantity)]));
+  const billed = new Map(delivered.map((row) => [row.source_line_id, new Decimal(row.invoiced)]));
   return lines.map((line) => ({
     ...line,
     unitFactor: new Decimal(line.unitFactor),
@@ -617,10 +623,11 @@ export async function selectOrderLinesToDeliver(tx: Tx, tenantId: string, orderI
     priceSource: line.priceSource as PriceSource | null,
     discountPercent: exact(line.discountPercent),
     delivered: done.get(line.id) ?? new Decimal(0),
+    invoiced: billed.get(line.id) ?? new Decimal(0),
   }));
 }
 
-export type DeliveryProgress = { lineNo: number; itemCode: string; description: string; unitCode: string; ordered: Decimal; delivered: Decimal; remaining: Decimal };
+export type DeliveryProgress = { lineNo: number; itemCode: string; description: string; unitCode: string; ordered: Decimal; delivered: Decimal; remaining: Decimal; invoiced: Decimal };
 
 /** How far a sales order has been delivered, line by line. Null when the order is not this company's or not one this member may see. */
 export async function getOrderDelivery(ctx: TenantContext, orderId: string): Promise<DeliveryProgress[] | null> {
@@ -628,7 +635,7 @@ export async function getOrderDelivery(ctx: TenantContext, orderId: string): Pro
   if (!isUuid(orderId)) return null;
   return withTenant(ctx.userId, ctx.tenantId, async (tx) => {
     const lines = await selectOrderLinesToDeliver(tx, ctx.tenantId, orderId);
-    return lines.map((line) => ({ lineNo: line.lineNo, itemCode: line.itemCode, description: line.description, unitCode: line.unitCode, ordered: line.quantity, delivered: line.delivered, remaining: Decimal.max(line.quantity.minus(line.delivered), 0) }));
+    return lines.map((line) => ({ lineNo: line.lineNo, itemCode: line.itemCode, description: line.description, unitCode: line.unitCode, ordered: line.quantity, delivered: line.delivered, remaining: Decimal.max(line.quantity.minus(line.delivered), 0), invoiced: line.invoiced }));
   });
 }
 
@@ -651,10 +658,11 @@ export type DeliveryRow = {
 };
 
 /**
- * A delivery note against its order: every line of the order that the note delivers or could
- * still deliver, with what is ordered, already delivered, on this note and in stock.
+ * A delivery note, or an invoice made straight from an order, against its order: every line of
+ * the order that the document delivers or could still deliver, with what is ordered, already
+ * gone, on this document and in stock.
  */
-export async function getDeliveryRows(ctx: TenantContext, delivery: Pick<SalesDocument, "id" | "status" | "warehouseId" | "source" | "lines">): Promise<DeliveryRow[]> {
+export async function getDeliveryRows(ctx: TenantContext, delivery: Pick<SalesDocument, "id" | "kind" | "status" | "warehouseId" | "source" | "lines">): Promise<DeliveryRow[]> {
   requireDocumentAccess(ctx);
   if (!delivery.source) return [];
   const orderId = delivery.source.id;
@@ -662,7 +670,7 @@ export async function getDeliveryRows(ctx: TenantContext, delivery: Pick<SalesDo
     const order = await selectOrderLinesToDeliver(tx, ctx.tenantId, orderId);
     const [onHand, costs] = await Promise.all([
       selectStockOnHand(tx, ctx.tenantId, delivery.warehouseId, order.map((line) => line.itemId)),
-      can(ctx.role, "stock.cost.read") && delivery.status !== "draft" ? selectMoveCosts(tx, ctx.tenantId, "delivery_note", delivery.id) : new Map<string, Decimal>(),
+      can(ctx.role, "stock.cost.read") && delivery.status !== "draft" ? selectMoveCosts(tx, ctx.tenantId, delivery.kind === "invoice" ? "sales_invoice" : "delivery_note", delivery.id) : new Map<string, Decimal>(),
     ]);
     return order
       .map((line) => {
@@ -696,7 +704,7 @@ export async function listOrdersToDeliver(ctx: TenantContext): Promise<{ id: str
       from public.sales_documents o
       join public.sales_lines l on l.tenant_id = o.tenant_id and l.document_id = o.id
       where o.tenant_id = ${ctx.tenantId} and o.kind = 'order' and o.status = 'submitted'
-        and l.base_quantity > coalesce((select d.base_quantity from app.order_delivered(o.id) d where d.line_id = l.id), 0)
+        and l.base_quantity > coalesce((select d.delivered_base from app.order_progress(o.id) d where d.line_id = l.id), 0)
       group by o.id, o.number, o.document_date, o.buyer_name, o.created_at
       order by o.document_date, o.created_at
       limit 200`),
@@ -709,4 +717,22 @@ export async function selectTaxFlags(tx: Tx, tenantId: string): Promise<{ taxed:
   const [setup] = await tx.select({ salesTaxRegistered: companySetup.salesTaxRegistered, pricesIncludeTax: companySetup.pricesIncludeTax }).from(companySetup).where(eq(companySetup.tenantId, tenantId));
   const taxed = setup?.salesTaxRegistered ?? false;
   return { taxed, pricesIncludeTax: taxed && (setup?.pricesIncludeTax ?? false) };
+}
+
+// ── Sales invoices ──────────────────────────────────────────────────────────────────────────────
+
+/** The invoices made from one document, drafts included, oldest first, inside a transaction the caller holds. */
+export async function selectInvoicesOf(tx: Tx, tenantId: string, sourceId: string): Promise<{ id: string; number: string | null; status: SalesStatus }[]> {
+  const rows = await tx
+    .select({ id: salesDocuments.id, number: salesDocuments.number, status: salesDocuments.status })
+    .from(salesDocuments)
+    .where(and(eq(salesDocuments.tenantId, tenantId), eq(salesDocuments.kind, "invoice"), eq(salesDocuments.sourceDocumentId, sourceId)))
+    .orderBy(asc(salesDocuments.createdAt));
+  return rows.map((row) => ({ ...row, status: row.status as SalesStatus }));
+}
+
+/** The invoices made from a delivery note or straight from an order: what its page links to. */
+export async function listInvoicesOf(ctx: TenantContext, sourceId: string): Promise<{ id: string; number: string | null; status: SalesStatus }[]> {
+  if (!can(ctx.role, "sales.read") || !isUuid(sourceId)) return [];
+  return withTenant(ctx.userId, ctx.tenantId, (tx) => selectInvoicesOf(tx, ctx.tenantId, sourceId));
 }

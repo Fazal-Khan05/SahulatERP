@@ -149,6 +149,23 @@ accountant. `docs/examples/step-17.md` has the worked cases.
 7. **Sales to end consumers.** The product can leave further tax off a sale marked as one the
    SRO excludes. Which of the pilot's sales, if any, count?
 
+8. **The date of supply when the invoice follows the delivery.** The product lets goods be
+   delivered on one day and invoiced on a later one, and works the tax out for the invoice's
+   date. In law the time of supply is the delivery (section 2(44)) and the tax invoice is due
+   then (section 23). When the two fall in different months, the output tax belongs in the
+   delivery month's return. Should the product refuse an invoice dated after the month of its
+   delivery, or only warn?
+9. **Bike parts sold in retail packing.** Auto parts and accessories sold in retail packing
+   were, as far as could be recalled, added to the Third Schedule. If the pilot's helmets or
+   chains fall there, the tax is on the printed retail price and no further tax applies. The
+   product does this only for an item put in a Third Schedule category by the company.
+10. **The buyer's status on the day of supply.** Further tax depends on whether the buyer is
+    registered and an active taxpayer. The product reads the customer as recorded on the day
+    the invoice is saved and posted, not on the delivery date.
+11. **Advance income tax on sales to dealers and retailers** (Income Tax Ordinance, sections
+    236G and 236H) is not worked out on sales invoices. Is the pilot company in a sector it
+    applies to?
+
 ## Not included
 
 These exist in the law and are not in a new company's tables. A company can add a sales tax

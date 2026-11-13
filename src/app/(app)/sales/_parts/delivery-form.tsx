@@ -11,15 +11,21 @@ export type DeliveryFormProps = {
   /** The order's date: a delivery note is never dated before it. */
   earliest: string;
   notes: string;
+  /** What the form calls things: it serves a delivery note and a sales invoice. */
+  words?: { date: string; quantity: string; post: string; notes: string };
+  /** The lines whose quantity can be typed. An invoice made from a delivery note has none: it bills the whole note. */
   rows: { sourceLineId: string; itemCode: string; description: string; unitCode: string; ordered: string; delivered: string; remaining: string; inStock: string; quantity: string }[];
 };
 
 /**
- * A draft delivery note: the date, and how much of each line of the order leaves now. Every
- * line of the order that still has something to deliver is listed; a line left empty is not
- * delivered. Saving keeps the draft; posting takes the goods out of stock.
+ * A draft delivery note, or a draft sales invoice: the date, and how much of each line of the
+ * order leaves (or is billed) now. Every line of the order that still has something to deliver
+ * is listed; a line left empty is left out. Saving keeps the draft; posting a delivery note
+ * takes the goods out of stock, and posting an invoice puts it into the books.
  */
-export function DeliveryForm({ action, date, earliest, notes, rows }: DeliveryFormProps) {
+const DELIVERY_WORDS = { date: "Date of delivery", quantity: "Deliver now", post: "Post delivery note", notes: "Such as: vehicle number, who received the goods" };
+
+export function DeliveryForm({ action, date, earliest, notes, rows, words = DELIVERY_WORDS }: DeliveryFormProps) {
   const { state, ready, busy, run } = useFormAction(action);
   return (
     <form
@@ -34,14 +40,15 @@ export function DeliveryForm({ action, date, earliest, notes, rows }: DeliveryFo
     >
       <div className="grid gap-4 sm:grid-cols-[10rem_1fr]">
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="date">Date of delivery</Label>
+          <Label htmlFor="date">{words.date}</Label>
           <Input id="date" name="date" type="date" defaultValue={date} min={earliest} required />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="notes">Notes</Label>
-          <Input id="notes" name="notes" defaultValue={notes} maxLength={1000} autoComplete="off" placeholder="Such as: vehicle number, who received the goods" />
+          <Input id="notes" name="notes" defaultValue={notes} maxLength={1000} autoComplete="off" placeholder={words.notes} />
         </div>
       </div>
+      {rows.length === 0 ? null : (
       <div className="overflow-x-auto">
         <table aria-label="Lines to deliver" className="w-full min-w-[640px] text-left text-sm">
           <thead className="border-b text-muted-foreground">
@@ -51,7 +58,7 @@ export function DeliveryForm({ action, date, earliest, notes, rows }: DeliveryFo
               <th className="py-2 pr-4 text-right font-medium">Ordered</th>
               <th className="py-2 pr-4 text-right font-medium">Already delivered</th>
               <th className="py-2 pr-4 text-right font-medium">In stock</th>
-              <th className="w-28 py-2 pr-2 text-right font-medium">Deliver now</th>
+              <th className="w-28 py-2 pr-2 text-right font-medium">{words.quantity}</th>
               <th className="py-2 font-medium">Unit</th>
             </tr>
           </thead>
@@ -67,7 +74,7 @@ export function DeliveryForm({ action, date, earliest, notes, rows }: DeliveryFo
                 </td>
                 <td className="py-1 pr-2">
                   <input type="hidden" name="sourceLineId" value={row.sourceLineId} />
-                  <Input name="quantity" aria-label={`Deliver now, line ${index + 1}`} defaultValue={row.quantity} inputMode="decimal" autoComplete="off" className="text-right tabular-nums" />
+                  <Input name="quantity" aria-label={`${words.quantity}, line ${index + 1}`} defaultValue={row.quantity} inputMode="decimal" autoComplete="off" className="text-right tabular-nums" />
                 </td>
                 <td className="py-2 text-muted-foreground">{row.unitCode}</td>
               </tr>
@@ -75,6 +82,7 @@ export function DeliveryForm({ action, date, earliest, notes, rows }: DeliveryFo
           </tbody>
         </table>
       </div>
+      )}
       {state.error ? (
         <p role="alert" data-testid="form-error" className="text-sm text-destructive">
           {state.error}
@@ -91,7 +99,7 @@ export function DeliveryForm({ action, date, earliest, notes, rows }: DeliveryFo
           Save as draft
         </Button>
         <Button type="submit" name="intent" value="post" disabled={!ready || busy} className="order-1">
-          {busy ? "Working…" : "Post delivery note"}
+          {busy ? "Working…" : words.post}
         </Button>
       </div>
     </form>

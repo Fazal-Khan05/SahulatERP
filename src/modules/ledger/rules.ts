@@ -37,6 +37,7 @@ export const CONTROL_TYPES = {
   grni: "Goods received not invoiced",
   customer_advances: "Advances from customers",
   output_tax: "Sales tax payable (output tax)",
+  further_tax: "Further tax payable",
   wht_income_tax: "Income tax withheld payable",
   wht_sales_tax: "Sales tax withheld payable",
   wht_provincial_tax: "Provincial sales tax withheld payable",
@@ -57,7 +58,7 @@ export type ControlType = keyof typeof CONTROL_TYPES;
 export const isControlType = (value: unknown): value is ControlType => typeof value === "string" && Object.hasOwn(CONTROL_TYPES, value);
 
 /** Accounts that exist only for sales tax. A company not registered for sales tax never sees them. */
-export const SALES_TAX_CONTROLS: readonly ControlType[] = ["input_tax", "output_tax", "wht_sales_tax"];
+export const SALES_TAX_CONTROLS: readonly ControlType[] = ["input_tax", "output_tax", "further_tax", "wht_sales_tax"];
 
 /** How deep the tree may go below a root; the database enforces the same. */
 export const MAX_DEPTH = 5;

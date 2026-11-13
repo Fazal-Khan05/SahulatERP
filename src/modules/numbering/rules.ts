@@ -1,4 +1,7 @@
 import { isIsoDate } from "@/modules/currencies/rules";
+import * as money from "@/tracks/money";
+import * as selling from "@/tracks/selling";
+import * as stock from "@/tracks/stock";
 
 // Pure rules for fiscal years, fiscal periods and document numbers. No I/O.
 //
@@ -9,7 +12,7 @@ import { isIsoDate } from "@/modules/currencies/rules";
 // the transaction that writes the document; nothing here computes the next number.
 
 /** The kinds of document that are numbered, with the letters that start their numbers. */
-export const DOCUMENT_TYPES = {
+export const CORE_DOCUMENT_TYPES = {
   QT: "Quotation",
   SO: "Sales order",
   DN: "Delivery note",
@@ -26,6 +29,10 @@ export const DOCUMENT_TYPES = {
   SA: "Stock adjustment",
   EX: "Expense",
 } as const;
+
+// A step built in one of the three tracks adds the kinds it numbers in its own file in
+// src/tracks, never to the list above (docs/PARALLEL.md).
+export const DOCUMENT_TYPES = { ...CORE_DOCUMENT_TYPES, ...selling.documents, ...stock.documents, ...money.documents } as const;
 export type DocumentType = keyof typeof DOCUMENT_TYPES;
 export const isDocumentType = (value: unknown): value is DocumentType => typeof value === "string" && Object.hasOwn(DOCUMENT_TYPES, value);
 

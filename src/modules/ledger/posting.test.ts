@@ -480,4 +480,45 @@ describe.skipIf(!hasDb)("the posting engine", () => {
       group by a.code order by a.code`;
     expect(balances.map((b) => `${b.code} ${b.net}`)).toEqual(["1111 50000.0000", "1121 450000.0000", "3100 -500000.0000", "5230 0.0000"]);
   });
+
+  // drizzle/0019_journal_documents.sql: a later step adds its kind of document by adding one
+  // function of its own, and touches nothing that another step wrote. Kept last: it leaves a
+  // journal of a made-up kind in the first company.
+  it("asks each kind of document whether a journal is its own, and refuses a kind nobody answers for", async () => {
+    const lines = (tx: AdminSql, journalId: string, debit: number, credit: number) =>
+      tx`insert into public.journal_lines (tenant_id, journal_id, line_no, account_id, debit, credit)
+        values (${tenantA}, ${journalId}, 1, ${account("5230")}, ${debit}, ${credit}), (${tenantA}, ${journalId}, 2, ${account("1111")}, ${credit}, ${debit})`;
+    // A balanced journal of a kind with no function of its own, written directly as postgres.
+    const write = () =>
+      codeOf(() =>
+        admin.begin(async (tx) => {
+          const [journal] = await tx`insert into public.journals (tenant_id, journal_date, source_type, source_id, created_by) values (${tenantA}, ${D}, 'zz_test_kind', ${randomUUID()}, ${userIds.owner}) returning id`;
+          await lines(tx as unknown as AdminSql, journal.id, 5, 0);
+        }),
+      );
+    const reverseIt = (originalId: string) =>
+      codeOf(() =>
+        admin.begin(async (tx) => {
+          const [reversal] = await tx`insert into public.journals (tenant_id, journal_date, source_type, source_id, reverses_journal_id, created_by) values (${tenantA}, ${D}, 'reversal', ${originalId}, ${originalId}, ${userIds.owner}) returning id`;
+          await lines(tx as unknown as AdminSql, reversal.id, 0, 5);
+        }),
+      );
+    await admin.unsafe("drop function if exists app.reversal_backed_zz_test_kind(public.journals, public.journals)");
+    await admin.unsafe("drop function if exists app.journal_backed_zz_test_kind(public.journals)");
+    expect(await write()).toBe("SE074");
+    await admin.unsafe("create function app.journal_backed_zz_test_kind(p_journal public.journals) returns boolean language sql stable as 'select p_journal.journal_date is not null'");
+    try {
+      expect(await write()).toBeUndefined();
+      // Its journals have no reversal until it says so.
+      const [posted] = await admin`select id from public.journals where tenant_id = ${tenantA} and source_type = 'zz_test_kind'`;
+      expect(await reverseIt(posted.id)).toBe("SE074");
+      await admin.unsafe("create function app.reversal_backed_zz_test_kind(p_reversal public.journals, p_original public.journals) returns boolean language sql stable as 'select p_reversal.reverses_journal_id = p_original.id'");
+      expect(await reverseIt(posted.id)).toBeUndefined();
+    } finally {
+      await admin.unsafe("drop function if exists app.reversal_backed_zz_test_kind(public.journals, public.journals)");
+      await admin.unsafe("drop function if exists app.journal_backed_zz_test_kind(public.journals)");
+    }
+    // With the function gone, the kind is unknown again.
+    expect(await write()).toBe("SE074");
+  });
 });

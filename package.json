@@ -15,11 +15,15 @@
     "test:e2e": "playwright test",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:set-aside": "node scripts/migration-aside.mjs set-aside",
+    "db:undo-aside": "node --env-file-if-exists=.env.local scripts/migration-aside.mjs undo-aside",
+    "db:put-back": "node scripts/migration-aside.mjs put-back",
+    "check:migrations": "node scripts/check-migrations.mjs",
     "db:runtime-password": "node --env-file-if-exists=.env.local scripts/db-runtime-password.mjs",
     "owner:create": "node --env-file-if-exists=.env.local scripts/owner-create.mjs",
     "invites:send": "node --env-file-if-exists=.env.local scripts/invites-send.mjs",
     "worker": "node --env-file-if-exists=.env.local scripts/worker.mjs",
-    "check": "npm run typecheck && npm run lint && npm run test"
+    "check": "npm run check:migrations && npm run typecheck && npm run lint && npm run test"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

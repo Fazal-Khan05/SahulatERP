@@ -179,7 +179,18 @@ describe.skipIf(!hasDb)("fiscal periods, document numbers and warehouses", () =>
     // An auditor takes no numbers; a kind the database does not know is refused.
     expect(await codeOf(() => post(as.auditor, "SI", D))).toBe(DENIED);
     expect(await codeOf(() => withTenant(owner, tenantA, (tx) => tx.execute(`select app.next_document_number('si', '2026-11-13')`)))).toBe(CHECK);
-    expect(await codeOf(() => withTenant(owner, tenantA, (tx) => tx.execute(`select app.next_document_number('ZZ', '2026-11-13')`)))).toBe(CHECK);
+    const zz = () => withTenant(owner, tenantA, (tx) => tx.execute(`select app.next_document_number('ZZ', '2026-11-13') as number`));
+    expect(await codeOf(zz)).toBe(CHECK);
+    // A later step numbers a kind of its own by adding one function (drizzle/0019_journal_documents.sql).
+    await admin.unsafe("drop function if exists app.document_type_zz()");
+    await admin.unsafe("create function app.document_type_zz() returns text language sql immutable as 'select ''Test document'''");
+    try {
+      expect(String((await zz())[0].number)).toMatch(/^ZZ-\d{4}-00001$/);
+    } finally {
+      await admin.unsafe("drop function if exists app.document_type_zz()");
+    }
+    expect(await codeOf(zz)).toBe(CHECK);
+    expect(await codeOf(() => withTenant(owner, tenantA, (tx) => tx.execute(`select app.next_document_number('Z1', '2026-11-13')`)))).toBe(CHECK);
     // A period sits only where its year and number put it.
     expect(
       await codeOf(() => withTenant(owner, tenantA, (tx) => tx.insert(fiscalPeriods).values({ tenantId: tenantA, yearStart: "2028-07-01", periodNo: 7, startsOn: "2030-02-01", endsOn: "2030-02-28", createdBy: owner }))),

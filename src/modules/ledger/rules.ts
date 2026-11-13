@@ -2,6 +2,9 @@ import Decimal from "decimal.js";
 import { AMOUNT_SCALE, formatAmount } from "@/lib/money";
 import { cleanText } from "@/lib/text";
 import type { MemberRole } from "@/modules/tenant/rules";
+import * as money from "@/tracks/money";
+import * as selling from "@/tracks/selling";
+import * as stock from "@/tracks/stock";
 
 // Pure rules for the chart of accounts. No I/O.
 //
@@ -23,7 +26,7 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
  * What a locked account is for. A posting finds its account by one of these, never by a code or
  * a name. `bank` and `cash` sit on a heading and on every account the company adds beneath it.
  */
-export const CONTROL_TYPES = {
+export const CORE_CONTROL_TYPES = {
   cash: "Cash accounts",
   bank: "Bank accounts",
   cheques_in_hand: "Cheques in hand",
@@ -54,6 +57,10 @@ export const CONTROL_TYPES = {
   bank_charges: "Bank charges",
   fx_gain_loss: "Exchange gain or loss",
 } as const;
+
+// A step built in one of the three tracks adds its locked accounts in its own file in
+// src/tracks, never to the list above (docs/PARALLEL.md).
+export const CONTROL_TYPES = { ...CORE_CONTROL_TYPES, ...selling.controls, ...stock.controls, ...money.controls } as const;
 export type ControlType = keyof typeof CONTROL_TYPES;
 export const isControlType = (value: unknown): value is ControlType => typeof value === "string" && Object.hasOwn(CONTROL_TYPES, value);
 

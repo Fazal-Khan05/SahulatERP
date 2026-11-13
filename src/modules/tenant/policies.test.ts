@@ -165,6 +165,44 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
     expect(leaked).toHaveLength(0);
   });
 
+  // drizzle/0019_journal_documents.sql: a later step names the audit rows its own database
+  // functions write, with a function of its own, and the app's role can then no longer write them.
+  it("keeps the audit rows a later step's database functions write out of the app's hands", async () => {
+    const write = (action: string) => codeOf(() => withTenant(ownerA, tenantA, (tx) => audit(tx, { userId: ownerA, tenantId: tenantA, role: "owner" }, { action, entity: "tenant" })));
+    expect(await write("zz_test.post")).toBeUndefined();
+    await admin.unsafe("drop function if exists app.audit_reserved_zz_test(text)");
+    await admin.unsafe("create function app.audit_reserved_zz_test(p_action text) returns boolean language sql immutable as 'select p_action in (''zz_test.post'', ''zz_test.bounce'')'");
+    // As a step would leave it: nobody but its owner may call it. The check still can.
+    await admin.unsafe("revoke all on function app.audit_reserved_zz_test(text) from public");
+    try {
+      expect(await write("zz_test.post")).toBe(DENIED);
+      expect(await write("zz_test.bounce")).toBe(DENIED);
+      // The app's own rows about the same thing, and rows about anything else, go in as before.
+      expect(await write("zz_test.note")).toBeUndefined();
+      expect(await write("zz_testing.post")).toBeUndefined();
+      expect(await write("test.ok")).toBeUndefined();
+      // A temporary table of the session's own called "text" does not hide the function from the
+      // check, whether it is made after the check was first asked in the session or before.
+      const hidden = (askFirst: boolean) =>
+        codeOf(() =>
+          withTenant(ownerA, tenantA, async (tx) => {
+            if (askFirst) await tx.execute(sql`select app.audit_action_reserved('zz_test.post')`);
+            await tx.execute(sql`create temp table text (x int) on commit drop`);
+            await audit(tx, { userId: ownerA, tenantId: tenantA, role: "owner" }, { action: "zz_test.post", entity: "tenant" });
+          }),
+        );
+      expect(await hidden(true)).toBe(DENIED);
+      expect(await hidden(false)).toBe(DENIED);
+      expect((await admin`select 1 from public.audit_log where tenant_id = ${tenantA} and action in ('zz_test.post', 'zz_test.bounce')`).length).toBe(1);
+    } finally {
+      await admin.unsafe("drop function if exists app.audit_reserved_zz_test(text)");
+    }
+    expect(await write("zz_test.post")).toBeUndefined();
+    // The rows the database has written itself since Step 18 are still its own.
+    expect(await write("journal.post")).toBe(DENIED);
+    expect(await write("sales_order.submit")).toBe(DENIED);
+  });
+
   it("lets an owner add a branch and writes the audit row in the same transaction", async () => {
     const id = await withTenant(ownerA, tenantA, async (tx) => {
       const [row] = await tx.insert(branches).values({ tenantId: tenantA, name: "A3", createdBy: ownerA }).returning();

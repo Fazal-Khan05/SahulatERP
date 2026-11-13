@@ -2,6 +2,8 @@
 
 Read [docs/PLAN.md](docs/PLAN.md) and do only the step you are asked.
 
+Steps 21 to 46 can be built in three tracks at once. If you are asked to build in a track, read [docs/PARALLEL.md](docs/PARALLEL.md) first: it says which steps are whose, which files a track may edit, and how a step is merged.
+
 ## Stack
 
 - Next.js (App Router), TypeScript, Tailwind CSS, ESLint
@@ -23,7 +25,8 @@ Read [docs/PLAN.md](docs/PLAN.md) and do only the step you are asked.
 - Document numbers come from number_series inside the transaction; never computed in the app, never reused.
 - Tax and withholding come from dated tables via tax/rules.ts; no rate is ever typed into a command or screen.
 - External calls record intent before and outcome after; on an ambiguous result, query before retrying; never blindly resubmit an FBR invoice.
-- No new dependency without the founder's approval. No work from a later step; note it in docs/LATER.md.
+- No new dependency without the founder's approval. No work from a later step; note it in docs/LATER.md (from Step 21: in docs/later/step-NN.md).
+- From migration 0020 on: a migration says whose it is (`-- track: A`, or `-- track: joint` when the work is not split), never writes out again a function or policy another track wrote, and adds to a shared list with a function of its own (docs/PARALLEL.md). `npm run check` enforces this.
 - Customer data, CNICs, salaries, tokens and keys never enter Git, fixtures or logs.
 - Nothing in reference/ is imported or run.
 - Never run destructive SQL, reset a password, disable a key, or change a Vercel production env var without showing the exact command and getting a yes. The Supabase MCP must be run read-only against any project holding real customer data.

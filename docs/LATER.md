@@ -915,3 +915,10 @@ Things noticed while building a step that belong to a later one, or to nobody ye
   FBR rejects after posting cannot be undone, only credited: validate with FBR before posting.
 - **Credit notes (Step 21) must come out of what an order has invoiced and of what a customer
   owes**, and the rule that only an invoice has a due date will need widening if they have one.
+
+## From Step 21 on
+
+Each step keeps its notes in a file of its own, `docs/later/step-NN.md`, so that the steps can
+be built by three people at once (`docs/PARALLEL.md`) without everyone adding to the end of
+this file. What the preparation for that left for later is in
+`docs/later/preparation.md`.

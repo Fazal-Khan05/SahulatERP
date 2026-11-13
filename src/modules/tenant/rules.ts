@@ -1,4 +1,7 @@
 import { z } from "zod";
+import * as money from "@/tracks/money";
+import * as selling from "@/tracks/selling";
+import * as stock from "@/tracks/stock";
 
 // Pure rules for tenants, memberships and branch scope. No I/O.
 
@@ -28,7 +31,10 @@ export const ROLE_LABELS: Record<MemberRole, string> = {
 
 // Who may do what. The database policies enforce the same split; this table decides what the
 // screens offer and gives a clear refusal before a query is attempted.
-const PERMISSIONS = {
+//
+// The steps built so far are listed here. A step built in one of the three tracks adds its
+// permissions to its own file in src/tracks, never to this list (docs/PARALLEL.md).
+export const CORE_PERMISSIONS = {
   "settings.read": ["owner", "auditor"],
   "branding.update": ["owner"],
   "module.update": ["owner"],
@@ -70,6 +76,8 @@ const PERMISSIONS = {
   "delivery.manage": ["owner", "accountant", "sales_manager", "salesperson", "warehouse_manager"],
   "stock.cost.read": ["owner", "accountant", "auditor"],
 } as const satisfies Record<string, readonly MemberRole[]>;
+
+const PERMISSIONS = { ...CORE_PERMISSIONS, ...selling.permissions, ...stock.permissions, ...money.permissions } as const satisfies Record<string, readonly MemberRole[]>;
 
 export type Permission = keyof typeof PERMISSIONS;
 
@@ -292,10 +300,15 @@ export function checkModuleChange(
 // ── Navigation ──────────────────────────────────────────────────────────────────────────────────
 // Each role gets its own short menu, written in that role's words. An entry appears only while
 // its module is on. `href` is null until the screen behind the entry is built.
+//
+// The entries still to be built belong to the three tracks. Each track says where its entries
+// lead in its own file in src/tracks; the words and the order stay here and do not change.
 
 export type NavEntry = { label: string; href: string | null };
 
-type NavSpec = readonly [label: string, module: ModuleKey | null, href?: string];
+type NavSpec = readonly [label: string, module: ModuleKey | null, href?: string | null];
+
+const LINKS = { ...selling.links, ...stock.links, ...money.links };
 
 function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
   const purchases = on.imports ? "Purchases and imports" : "Purchases";
@@ -305,14 +318,14 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
         ["Sales", "sales", "/sales"],
         ["Customers", "sales", "/customers"],
         ["Price lists", "sales", "/price-lists"],
-        ["Collections", "collections"],
-        [purchases, "purchasing"],
+        ["Collections", "collections", LINKS.collections],
+        [purchases, "purchasing", LINKS.purchases],
         ["Suppliers", "purchasing", "/suppliers"],
-        ["Stock", "inventory"],
+        ["Stock", "inventory", LINKS.stock],
         ["Items", "inventory", "/items"],
-        ["Cash and bank", "cash_bank"],
-        ["Commissions", "commissions"],
-        ["Payroll", "payroll"],
+        ["Cash and bank", "cash_bank", LINKS.cashAndBank],
+        ["Commissions", "commissions", LINKS.commissions],
+        ["Payroll", "payroll", LINKS.payroll],
         ["Journals", null, "/journals"],
         ["Reports", null, "/reports"],
         ["Settings", null, "/settings"],
@@ -322,14 +335,14 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
         ["Sales", "sales", "/sales"],
         ["Customers", "sales", "/customers"],
         ["Price lists", "sales", "/price-lists"],
-        ["Collections", "collections"],
-        [purchases, "purchasing"],
+        ["Collections", "collections", LINKS.collections],
+        [purchases, "purchasing", LINKS.purchases],
         ["Suppliers", "purchasing", "/suppliers"],
-        ["Stock", "inventory"],
+        ["Stock", "inventory", LINKS.stock],
         ["Items", "inventory", "/items"],
-        ["Cash and bank", "cash_bank"],
-        ["Commissions", "commissions"],
-        ["Payroll", "payroll"],
+        ["Cash and bank", "cash_bank", LINKS.cashAndBank],
+        ["Commissions", "commissions", LINKS.commissions],
+        ["Payroll", "payroll", LINKS.payroll],
         ["Journals", null, "/journals"],
         ["Reports", null, "/reports"],
         ["Settings", null, "/settings"],
@@ -339,15 +352,16 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
         ["Sales invoices", "sales", "/sales"],
         ["Customers", "sales", "/customers"],
         ["Price lists", "sales", "/price-lists"],
-        ["Bills and payments", "purchasing"],
+        ["Bills and payments", "purchasing", LINKS.billsAndPayments],
         ["Suppliers", "purchasing", "/suppliers"],
         ["Items", "inventory", "/items"],
-        ["Bank and cash", "cash_bank"],
+        ["Bank and cash", "cash_bank", LINKS.cashAndBank],
         ["Chart of accounts", null, "/settings/accounts"],
         ["Journals", null, "/journals"],
         ["Opening balances", null, "/settings/opening-balances"],
+        // Built by everyone together at the end, not by a track.
         ["Period close", null],
-        ["Payroll", "payroll"],
+        ["Payroll", "payroll", LINKS.payroll],
         ["Reports", null, "/reports"],
         ["Exchange rates", null, "/settings/currencies"],
         ["Tax rates", null, "/settings/tax"],
@@ -357,40 +371,40 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
         ["Sales", "sales", "/sales"],
         ["Customers", "sales", "/customers"],
         ["Price lists", "sales", "/price-lists"],
-        ["Collections", "collections"],
-        ["Stock", "inventory"],
+        ["Collections", "collections", LINKS.collections],
+        ["Stock", "inventory", LINKS.stock],
         ["Items", "inventory", "/items"],
-        ["Commissions", "commissions"],
-        ["Reports", null],
+        ["Commissions", "commissions", LINKS.commissions],
+        ["Reports", null, LINKS.salesReports],
       ];
     case "salesperson":
       return [
         ["My customers", "sales", "/customers"],
         ["Orders", "sales", "/sales"],
-        ["My commission", "commissions"],
+        ["My commission", "commissions", LINKS.myCommission],
       ];
     case "recovery_officer":
       return [
-        ["Cheques", "collections"],
-        ["Overdue customers", "collections"],
-        ["Follow-ups", "collections"],
-        ["Receipts", "collections"],
-        ["Customer statements", "collections"],
+        ["Cheques", "collections", LINKS.cheques],
+        ["Overdue customers", "collections", LINKS.overdueCustomers],
+        ["Follow-ups", "collections", LINKS.followUps],
+        ["Receipts", "collections", LINKS.receipts],
+        ["Customer statements", "collections", LINKS.customerStatements],
       ];
     case "warehouse_manager":
       return [
-        ["Receive goods", "purchasing"],
+        ["Receive goods", "purchasing", LINKS.receiveGoods],
         ["Deliveries", "sales", "/sales?kind=delivery"],
-        ["Transfers", "inventory"],
-        ["Stock", "inventory"],
+        ["Transfers", "inventory", LINKS.transfers],
+        ["Stock", "inventory", LINKS.stock],
         ["Items", "inventory", "/items"],
-        ["Stock count", "inventory"],
+        ["Stock count", "inventory", LINKS.stockCount],
       ];
     case "payroll_administrator":
       return [
-        ["Employees", "payroll"],
-        ["Payroll runs", "payroll"],
-        ["Payslips", "payroll"],
+        ["Employees", "payroll", LINKS.employees],
+        ["Payroll runs", "payroll", LINKS.payrollRuns],
+        ["Payslips", "payroll", LINKS.payslips],
       ];
   }
 }

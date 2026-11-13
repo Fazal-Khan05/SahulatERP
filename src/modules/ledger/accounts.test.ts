@@ -237,4 +237,50 @@ describe.skipIf(!hasDb)("the chart of accounts", () => {
     expect(await codeOf(() => withTenant(userIds.owner, tenantB, (tx) => tx.execute(`select app.seed_accounts('trading')`)))).toBe(DENIED);
     expect(await codeOf(() => withTenant(ownerB, tenantB, (tx) => tx.execute(`select app.seed_accounts('unknown')`)))).toBe(CHECK);
   });
+
+  // drizzle/0019_journal_documents.sql: a later step adds its accounts with a function of its
+  // own, and never writes the starting chart out again.
+  it("adds to the starting chart what a later step's own function returns", async () => {
+    const tenantC = randomUUID();
+    const ownerC = randomUUID();
+    await admin`insert into public.tenants (id, name, created_by) values (${tenantC}, ${PREFIX + " C"}, ${ownerC})`;
+    await admin`insert into public.memberships (tenant_id, user_id, email, role, created_by) values (${tenantC}, ${ownerC}, 'owner-c@accounts.test', 'owner', ${ownerC})`;
+    await admin.unsafe("drop function if exists app.chart_extra_zz_test()");
+    await admin.unsafe("drop function if exists app.chart_extra_zz_wrong()");
+    await admin.unsafe(`create function app.chart_extra_zz_test() returns table (code text, name text, type text, parent text, is_group boolean, is_control boolean, control_type text)
+      language sql immutable as 'values (''2991'', ''Test payable'', ''liability'', ''2990'', false, true, ''zz_test''), (''2990'', ''Test heading'', ''liability'', ''2000'', true, true, null)'`);
+    try {
+      const { created } = await seedAccounts(ctx(ownerC, tenantC, "owner"), "trading");
+      // The standard chart and the two more, the heading before the account beneath it.
+      expect(created).toBe(68);
+      const added = await admin`
+        select a.code, a.name, a.is_control, a.control_type, p.code as parent
+        from public.accounts a left join public.accounts p on p.tenant_id = a.tenant_id and p.id = a.parent_id
+        where a.tenant_id = ${tenantC} and a.code in ('2990', '2991') order by a.code`;
+      expect(added.map((a) => ({ ...a }))).toEqual([
+        { code: "2990", name: "Test heading", is_control: true, control_type: null, parent: "2000" },
+        { code: "2991", name: "Test payable", is_control: true, control_type: "zz_test", parent: "2990" },
+      ]);
+      // An account whose parent the chart does not have is refused, not put at the top of the
+      // chart; and so is a function of the right name and the wrong shape. Nothing is left behind.
+      await deleteTenants(admin, [tenantC]);
+      await admin`insert into public.tenants (id, name, created_by) values (${tenantC}, ${PREFIX + " C"}, ${ownerC})`;
+      await admin`insert into public.memberships (tenant_id, user_id, email, role, created_by) values (${tenantC}, ${ownerC}, 'owner-c@accounts.test', 'owner', ${ownerC})`;
+      const seed = () => codeOf(() => withTenant(ownerC, tenantC, (tx) => tx.execute(`select app.seed_accounts('trading')`)));
+      await admin.unsafe(`create function app.chart_extra_zz_wrong() returns table (code text, name text, type text, parent text, is_group boolean, is_control boolean, control_type text)
+        language sql immutable as 'values (''2995'', ''Lost'', ''liability'', ''2199'', false, false, null)'`);
+      expect(await seed()).toBe(CHECK);
+      await admin.unsafe("drop function app.chart_extra_zz_wrong()");
+      await admin.unsafe("create function app.chart_extra_zz_wrong(p_any integer default 0) returns integer language sql immutable as 'select 1'");
+      expect(await seed()).toBe(CHECK);
+      expect((await admin`select 1 from public.accounts where tenant_id = ${tenantC}`).length).toBe(0);
+    } finally {
+      await admin.unsafe("drop function if exists app.chart_extra_zz_test()");
+      await admin.unsafe("drop function if exists app.chart_extra_zz_wrong()");
+      await admin.unsafe("drop function if exists app.chart_extra_zz_wrong(integer)");
+      await deleteTenants(admin, [tenantC]);
+    }
+    // A company that already had its chart is not touched: the step gives it the account in its own migration.
+    expect((await admin`select 1 from public.accounts where tenant_id = ${tenantA} and code in ('2990', '2991')`).length).toBe(0);
+  });
 });

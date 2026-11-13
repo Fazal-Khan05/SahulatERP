@@ -16,57 +16,59 @@ export function adminSql(): AdminSql {
   return postgres(url, { max: 1, onnotice: () => {} });
 }
 
+// Every table of a company carries tenant_id (CLAUDE.md), so the tables to empty are read from
+// the database itself, and the order from its foreign keys: a table is emptied before any table
+// it points at. A step that adds a table adds nothing here.
+const DELETE_ORDER = `
+  with tables as (
+    select c.oid, c.relname as name
+    from pg_class c
+    where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p')
+      and exists (select 1 from pg_attribute a where a.attrelid = c.oid and a.attname = 'tenant_id' and not a.attisdropped)
+  )
+  select t.name,
+    coalesce((select array_agg(distinct p.name) from pg_constraint k join tables p on p.oid = k.confrelid
+              where k.contype = 'f' and k.conrelid = t.oid and k.confrelid <> t.oid), '{}') as parents
+  from tables t order by t.name`;
+
+/** The company tables, each before every table it points at, as far as that can be done. Exported for its own test. */
+export function deleteOrder(tables: readonly { name: string; parents: readonly string[] }[]): string[] {
+  const waiting = new Map(tables.map((t) => [t.name, new Set<string>()]));
+  // A table waits for every table that points at it.
+  for (const t of tables) for (const parent of t.parents) waiting.get(parent)?.add(t.name);
+  const order: string[] = [];
+  while (waiting.size > 0) {
+    let free = [...waiting].filter(([, children]) => children.size === 0).map(([name]) => name).sort();
+    // Tables that point at each other in a circle: no order satisfies their keys one statement at a
+    // time. They are emptied in name order with every deferrable key checked at the end
+    // (deleteTenants defers them), so such a pair needs one of its keys DEFERRABLE.
+    if (free.length === 0) free = [[...waiting].sort(([a, x], [b, y]) => x.size - y.size || a.localeCompare(b))[0][0]];
+    for (const name of free) {
+      order.push(name);
+      waiting.delete(name);
+    }
+    for (const children of waiting.values()) for (const name of free) children.delete(name);
+  }
+  return order;
+}
+
+let order: Promise<string[]> | undefined;
+
 /** Removes the given tenants and everything in them. Only ever called with ids a test created. */
 export async function deleteTenants(sql: AdminSql, tenantIds: string[]): Promise<void> {
   if (tenantIds.length === 0) return;
+  // Read once for each test file: a migration never runs while tests do.
+  order ??= sql.unsafe<{ name: string; parents: string[] }[]>(DELETE_ORDER).then((rows) => deleteOrder(rows));
+  const tables = await order.catch((error) => {
+    order = undefined;
+    throw error;
+  });
   await sql.begin(async (tx) => {
-    await tx`delete from public.audit_log where tenant_id = any(${tenantIds})`;
     // The ledger and stock refuse every delete except a whole company's, named for this transaction.
     await tx`select set_config('app.purge_tenants', ${tenantIds.join(",")}, true)`;
-    await tx`delete from public.stock_moves where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.stock_balances where tenant_id = any(${tenantIds})`;
-    // Sales documents point at customers, items, warehouses and members.
-    await tx`delete from public.sales_document_links where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.sales_line_salespeople where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.sales_lines where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.sales_documents where tenant_id = any(${tenantIds})`;
-    // The books first: they point at customers, suppliers, accounts and branches.
-    await tx`delete from public.opening_balances where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.opening_entries where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.manual_journal_lines where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.manual_journals where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.journal_lines where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.journals where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.customer_prices where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.item_prices_by_class where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.price_list_items where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.item_units where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.items where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.item_categories where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.units where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.contacts where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.party_addresses where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.customers where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.suppliers where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.price_lists where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.withholding_rules where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.tax_rates where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.tax_categories where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.exchange_rates where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.currencies where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.jobs where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.files where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.modules_enabled where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.settings where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.invitations where tenant_id = any(${tenantIds})`;
-    // One statement: the key from an account to its heading is checked when the statement ends.
-    await tx`delete from public.accounts where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.company_setup where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.number_series where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.fiscal_periods where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.warehouses where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.branches where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.memberships where tenant_id = any(${tenantIds})`;
-    await tx`delete from public.tenants where id = any(${tenantIds})`;
+    // For tables that point at each other: a deferrable key is checked when the transaction ends.
+    await tx`set constraints all deferred`;
+    // One statement for each table: a key from a row to another row of its own table is checked when the statement ends.
+    for (const table of tables) await tx`delete from ${tx(`public.${table}`)} where tenant_id = any(${tenantIds})`;
   });
 }

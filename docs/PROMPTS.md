@@ -8,6 +8,12 @@ How to use: start a fresh Claude Code session in the repo and paste the one-line
 Do the next undone step in docs/PLAN.md. Use docs/PROMPTS.md if it has a section for that step; otherwise use the generic template there. Stop when the step's acceptance is met and the status is marked.
 ```
 
+From Step 21 the work can be split into three tracks built at once (docs/PARALLEL.md). When it is, each person pastes the driver for their own track instead:
+
+```
+I am building track A (or B, or C). Read docs/PARALLEL.md, then do the next undone step of my track in docs/PLAN.md that is not waiting for another track. Work on the branch track-a (track-b, track-c) and on my own database. Use docs/PROMPTS.md if it has a section for that step; otherwise the generic template there. Stop when the step's acceptance is met; do not merge into main until I say so.
+```
+
 To chain low-risk steps (Phase 1 only, Steps 5–10): "Do Steps 5 to 10 in sequence; stop at the first failing check; mark each done as you go." Steps 13, 20, 25, 28, 32 and 41 each end with a worked example checked as the "Accounting checks" section below describes.
 
 ## Generic template (applies to every step without its own section)
@@ -18,7 +24,8 @@ Read CLAUDE.md, then docs/PLAN.md section for Step N and nothing else from the p
 - Follow the module layout in PLAN.md "Architecture": `src/modules/<name>/{schema,rules,commands,queries}.ts`, screens in `src/app/(app)/<module>/`.
 - Every table: tenant_id, RLS with FORCE, composite unique (tenant_id, id), audit row on every command, decimal.js for amounts, dated rate tables for anything statutory.
 - Show the migration SQL before applying it. No new dependency without asking. Nothing from a later step; note it in docs/LATER.md.
-- When finished: mark the step done with today's date in docs/PLAN.md, commit as "Step N: <title>", push, and report what changed, what you did not do, and what the founder must click through to verify.
+- From Step 21: write notes in docs/later/step-NN.md, and start the migration with `-- track: joint`. When building in a track, follow docs/PARALLEL.md instead: stay in your track's folders; add to shared lists only in your track's file in src/tracks; start the migration with `-- track: A` (B, C); apply migrations to your own database only.
+- When finished: mark the step done with today's date in docs/PLAN.md, commit as "Step N: <title>", push (when building in a track: push your track's branch and merge as docs/PARALLEL.md says), and report what changed, what you did not do, and what the founder must click through to verify.
 
 ## Housekeeping before Step 2 (run once, before Step 1 or 2)
 

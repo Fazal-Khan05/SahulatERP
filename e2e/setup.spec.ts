@@ -59,7 +59,7 @@ test("a new company reaches an empty inbox in under five minutes", async ({ page
       (select string_agg(module::text, ',' order by module::text) from public.modules_enabled where tenant_id = ${tenantId} and not enabled) as switched_off`;
   expect(state).toEqual({ registered: false, currency: "PKR", periods: 12, year_starts: "07-01", branch: "Main", warehouse: "Main warehouse", switched_off: "commissions" });
   const audited = await sql`select action from public.audit_log where tenant_id = ${tenantId} and action not like 'auth.%' order by at`;
-  expect(audited.map((a) => a.action)).toEqual(["tenant.create", "currency.set_base", "fiscal_year.open", "module.update", "branch.create", "warehouse.create", "company.setup"]);
+  expect(audited.map((a) => a.action)).toEqual(["tenant.create", "currency.set_base", "fiscal_year.open", "module.update", "branch.create", "warehouse.create", "accounts.seed", "company.setup"]);
   // The menu follows the modules chosen: commissions are not part of Trading with imports.
   expect(await railLabels(page)).not.toContain("Commissions");
   expect(await railLabels(page)).toContain("Purchases and imports");

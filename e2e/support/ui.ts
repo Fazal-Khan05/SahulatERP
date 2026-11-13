@@ -39,3 +39,16 @@ export const test = base.extend<{ failOnPageError: void }>({
 export function isServerAction(request: Request): boolean {
   return request.method() === "POST" && "next-action" in request.headers();
 }
+
+/**
+ * Creates a company as the signed-in user and takes it through the setup wizard with the usual
+ * answers, not registered for sales tax. Ends on the inbox.
+ */
+export async function createCompany(page: Page, name: string) {
+  await page.getByLabel("Company name").fill(name);
+  await page.getByRole("button", { name: "Create company" }).click();
+  await expect(page).toHaveURL(/\/setup$/);
+  await page.locator('input[name="salesTaxRegistered"][value="no"]').check();
+  await page.getByRole("button", { name: "Finish setup" }).click();
+  await expect(page).toHaveURL(/\/inbox$/);
+}

@@ -378,9 +378,8 @@ Things noticed while building a step that belong to a later one, or to nobody ye
   screen must read**: not registered means no tax is charged or shown anywhere.
 - **The setup answers cannot be changed afterwards.** A company that registers for sales tax
   later needs a screen (and a dated record) to say so; decide with the tax engine.
-- **The chart of accounts is only chosen, not created.** Step 12 creates the accounts from
-  `accountsTemplate` ("trading" is the only one) for companies that are set up, and at setup
-  from then on.
+- **The wizard creates the chart of accounts it asks about** (since Step 12). A company set up
+  before that gets a button on Settings, Accounts.
 - **The owner ticks that the tax rates were checked** only when registered; the moment is kept
   in `tax_rates_confirmed_at`. The terms of service should say the company is responsible for
   its rates (launch gate).
@@ -394,3 +393,45 @@ Things noticed while building a step that belong to a later one, or to nobody ye
   undone. The lock holds one database connection while the steps use others.
 - **The wizard sets every module to the chosen bundle**, including one switched on by hand before
   setup was finished.
+
+## From Step 12
+
+- **The chart of accounts was designed by Claude, not by an accountant** (see "Decided by the
+  founder on 2026-11-13"). It is a standard chart for a trading company: 65 accounts under
+  Assets, Liabilities, Equity, Income and Expenses, written by `app.seed_accounts`
+  (`drizzle/0011_accounts.sql`).
+- **A posting finds its account by what the account is for (`control_type`), never by a code or a
+  name.** The vocabulary is `CONTROL_TYPES` in `src/modules/ledger/rules.ts`. Every account a
+  later step posts to by itself is locked from the start: receivables, payables, stock, goods in
+  transit, goods received not invoiced, cheques in hand, advances to suppliers and from customers,
+  the tax accounts, salaries and commission (expense and payable), bank charges, exchange gain or
+  loss, stock adjustments, sales, cost of goods sold, retained earnings and opening balance
+  equity. A step that finds it needs one more must add it by migration for every company, and
+  must pick a code and a name no company has taken (both are unique per company): check before
+  inserting, and fall back to a free code.
+- **The company's own bank and cash accounts are ordinary accounts under the locked headings
+  "Bank accounts" and "Cash accounts"**, and carry `bank` or `cash`. A heading added under them
+  carries it too, so a lookup for bank accounts must leave out headings. Cash and bank (Step 33)
+  should tie its `bank_accounts` rows to these.
+- **Only an owner, an accountant or an auditor can read accounts.** A salesperson submitting an
+  invoice cannot; the posting engine (Step 13) finds accounts inside the database function, with
+  the table owner's rights.
+- **A company not registered for sales tax does not see the three sales tax accounts** (input
+  tax, output tax, sales tax withheld) on its chart; they exist and stay empty. The withholding
+  accounts for income tax and provincial sales tax are shown: a company can be a withholding
+  agent without being registered for sales tax.
+- **A locked account cannot be renamed**, even to another language or the company's own word for
+  it. If that is wanted, add a display name beside the locked name.
+- **An account cannot be moved to another heading or change type.** A wrong one is deleted while
+  nothing uses it, or archived and added again.
+- **An archived account still holds its name and code.** Adding one with the same name says so.
+- **Deleting an account with postings is refused by the foreign key from journal lines**, which
+  arrives with Step 13; the test for it is in that step.
+- **Year-end close is not built.** Retained earnings is locked and ready; the reports (Step 16)
+  work the year's profit out from income and expenses.
+- **Accounts the chart leaves out on purpose:** sales returns and discounts (the sales documents
+  in Steps 19 and 20 decide whether they need their own), purchase price differences, rounding,
+  federal excise, and one account per fixed asset class for accumulated depreciation.
+- **The suggested code for a new account** follows the last account under its heading and never
+  reaches the next heading; a company can always type its own.
+

@@ -4,6 +4,7 @@ import { requireTenant } from "@/lib/auth/session";
 import { UserError, logFailure } from "@/lib/errors";
 import type { FormState } from "@/lib/form-state";
 import { setBaseCurrency } from "@/modules/currencies/commands";
+import { seedAccounts } from "@/modules/ledger/commands";
 import { openFiscalYear } from "@/modules/numbering/commands";
 import { firstYearProblem } from "@/modules/numbering/rules";
 import { SETUP_DONE, recordSetup, withSetupLock } from "@/modules/setup/commands";
@@ -53,6 +54,8 @@ export async function completeSetupAction(_: FormState, formData: FormData): Pro
       for (const step of moduleChanges(session.modules, wanted)) await setModuleEnabled(session, step.module, step.enabled);
       const branch = existing.branch ?? (await createBranch(session, setup.branchName));
       if (!existing.warehouse) await createWarehouse(session, { name: setup.warehouseName, branchId: branch.id });
+      // The chart of accounts the owner chose; a company that already has one keeps it.
+      if (!existing.accounts) await seedAccounts(session, setup.accountsTemplate);
 
       await recordSetup(session, setup, {
         baseCurrency: setup.baseCurrency.code,

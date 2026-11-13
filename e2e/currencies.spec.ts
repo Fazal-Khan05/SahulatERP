@@ -98,7 +98,7 @@ test("an accountant reaches exchange rates from their menu and corrects a rate",
   await signIn(page, accountant);
   expect(await railLabels(page)).toContain("Exchange rates");
   await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Exchange rates" }).click();
-  await expect(page.getByRole("navigation", { name: "Settings" }).getByRole("link")).toHaveText(["Currencies", "Tax", "Fiscal periods", "Branches"]);
+  await expect(page.getByRole("navigation", { name: "Settings" }).getByRole("link")).toHaveText(["Currencies", "Tax", "Accounts", "Fiscal periods", "Branches"]);
 
   await page.getByLabel("From date").fill("2026-11-10");
   await page.getByLabel("Rate in PKR").fill("279.25");

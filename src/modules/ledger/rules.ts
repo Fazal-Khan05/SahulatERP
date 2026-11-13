@@ -1,4 +1,7 @@
+import Decimal from "decimal.js";
+import { AMOUNT_SCALE, formatAmount } from "@/lib/money";
 import { cleanText } from "@/lib/text";
+import type { MemberRole } from "@/modules/tenant/rules";
 
 // Pure rules for the chart of accounts. No I/O.
 //
@@ -202,4 +205,88 @@ export function readNewAccount(raw: { parentId?: unknown; name?: unknown; code?:
 /** Why the company cannot change this account, or null when it can. */
 export function lockedReason(account: Pick<Account, "isControl">): string | null {
   return account.isControl ? "This account is part of the starting chart and is locked: the product relies on it." : null;
+}
+
+// ── Posting ─────────────────────────────────────────────────────────────────────────────────────
+//
+// A journal is a set of lines whose debits equal its credits, posted for one source document.
+// checkJournalLines() says whether a set of lines can be a journal; the database checks the same
+// again, whoever writes the rows.
+
+/**
+ * Accounts that must always agree with something kept elsewhere: each customer's and supplier's
+ * balance, the stock records, the cheques on hand. Only the documents that keep those records
+ * may post to them; a manual journal may not.
+ */
+export const SUBLEDGER_CONTROLS = ["ar", "ap", "inventory", "customer_advances", "supplier_advances", "grni", "goods_in_transit", "cheques_in_hand"] as const satisfies readonly ControlType[];
+/** Accounts whose every line names a customer, and those whose every line names a supplier. */
+export const CUSTOMER_CONTROLS = ["ar", "customer_advances"] as const satisfies readonly ControlType[];
+export const SUPPLIER_CONTROLS = ["ap", "supplier_advances"] as const satisfies readonly ControlType[];
+
+/**
+ * The kinds of document that post a journal, who may post each, who may reverse its journal
+ * directly (nobody, for a document that must be cancelled through its own command), and the
+ * accounts each may not touch. The database holds the same list (app.journal_source_roles,
+ * app.journal_source_reversal_roles and app.journal_source_blocked_controls); a step that adds a
+ * kind adds it in both.
+ */
+export const JOURNAL_SOURCES = {
+  manual_journal: { label: "Manual journal", roles: ["owner", "accountant"], reversalRoles: ["owner", "accountant"], blockedControls: SUBLEDGER_CONTROLS },
+} as const satisfies Record<string, { label: string; roles: readonly MemberRole[]; reversalRoles: readonly MemberRole[]; blockedControls: readonly ControlType[] }>;
+export type JournalSourceType = keyof typeof JOURNAL_SOURCES;
+export const isJournalSource = (value: unknown): value is JournalSourceType => typeof value === "string" && Object.hasOwn(JOURNAL_SOURCES, value);
+
+export const MAX_JOURNAL_LINES = 1000;
+/** The columns are numeric(20,4): sixteen digits before the point. */
+const AMOUNT_LIMIT = new Decimal("1e16");
+/** decimal.js keeps 20 significant digits by default; a sum of large amounts needs more. */
+const Exact = Decimal.clone({ precision: 60 });
+
+export type JournalLineInput = {
+  accountId: string;
+  /** Exactly one of debit and credit is above zero. */
+  debit?: Decimal | null;
+  credit?: Decimal | null;
+  description?: string | null;
+  customerId?: string | null;
+  supplierId?: string | null;
+};
+
+export const MAX_LINE_DESCRIPTION = 300;
+export const MAX_JOURNAL_MEMO = 500;
+
+const amountProblem = (amount: Decimal): string | null => {
+  if (!amount.isFinite() || amount.isNegative()) return "an amount cannot be negative";
+  if (amount.decimalPlaces() > AMOUNT_SCALE) return `an amount has at most ${AMOUNT_SCALE} digits after the point`;
+  if (amount.gte(AMOUNT_LIMIT)) return "that amount is too large";
+  return null;
+};
+
+/**
+ * Whether these lines can be posted as one journal: at least two lines, each a debit or a
+ * credit above zero and never both, and debits equal to credits. Nothing is rounded.
+ */
+export function checkJournalLines(lines: readonly JournalLineInput[]): { ok: true; total: Decimal } | { ok: false; reason: string } {
+  if (lines.length < 2) return { ok: false, reason: "A journal needs at least two lines: a debit and a credit." };
+  if (lines.length > MAX_JOURNAL_LINES) return { ok: false, reason: `A journal can have at most ${MAX_JOURNAL_LINES} lines.` };
+  let debits = new Exact(0);
+  let credits = new Exact(0);
+  for (const [index, line] of lines.entries()) {
+    const at = `Line ${index + 1}`;
+    const debit = line.debit ?? new Decimal(0);
+    const credit = line.credit ?? new Decimal(0);
+    const problem = amountProblem(debit) ?? amountProblem(credit);
+    if (problem) return { ok: false, reason: `${at}: ${problem}.` };
+    if (debit.isZero() && credit.isZero()) return { ok: false, reason: `${at}: enter a debit or a credit.` };
+    if (!debit.isZero() && !credit.isZero()) return { ok: false, reason: `${at}: enter a debit or a credit, not both.` };
+    if (line.customerId && line.supplierId) return { ok: false, reason: `${at}: a line belongs to a customer or to a supplier, not both.` };
+    if ((line.description ?? "").length > MAX_LINE_DESCRIPTION) return { ok: false, reason: `${at}: use at most ${MAX_LINE_DESCRIPTION} characters for the description.` };
+    debits = debits.plus(debit);
+    credits = credits.plus(credit);
+  }
+  if (!debits.eq(credits)) {
+    return { ok: false, reason: `The journal does not balance: debits are ${formatAmount(debits)} and credits are ${formatAmount(credits)}.` };
+  }
+  // Handed back as an ordinary Decimal; the wider one was only for adding up.
+  return { ok: true, total: new Decimal(debits.toFixed()) };
 }

@@ -106,3 +106,13 @@ export function readFirstYear(raw: { month?: unknown; year?: unknown }): { ok: t
   if (year < 2000 || year > 2100) return { ok: false, reason: "Enter the year the fiscal year starts, such as 2026." };
   return { ok: true, start: iso(year, month, 1) };
 }
+
+/**
+ * What to tell someone whose document was refused for its date, from the database's code: no
+ * fiscal period covers the date (SE001), or the period is locked (SE002). Null for anything else.
+ */
+export function periodRefusal(code: string | undefined, date: string): string | null {
+  if (code === "SE001") return `No fiscal period is open for ${date.split("-").reverse().join("-")}. An owner opens the fiscal year under Settings, Fiscal periods.`;
+  if (code === "SE002") return `The period ${periodName(date)} is locked. An owner can unlock it under Settings, Fiscal periods.`;
+  return null;
+}

@@ -435,3 +435,62 @@ Things noticed while building a step that belong to a later one, or to nobody ye
 - **The suggested code for a new account** follows the last account under its heading and never
   reaches the next heading; a company can always type its own.
 
+## From Step 13
+
+- **`postJournal(tx, source, lines)` in `src/modules/ledger/posting.ts` is the only way a journal
+  is written.** It runs inside the transaction of the command that needs it and calls the
+  database function `app.post_journal`; the app has no INSERT, UPDATE or DELETE on `journals` or
+  `journal_lines`. `reverseJournal(tx, journalId, { date })` is the only way one is undone.
+  `docs/examples/step-13.md` has a worked example, checked by Claude, not by an accountant.
+- **A step that adds a kind of document that posts** adds it in two places that must agree: the
+  three small database functions `app.journal_source_roles` (who may post it),
+  `app.journal_source_reversal_roles` (who may reverse its journal directly; nobody, for a
+  document that must be cancelled through its own command so that its own records are undone
+  with the journal) and `app.journal_source_blocked_controls` (accounts it may not touch), and
+  `JOURNAL_SOURCES` in `src/modules/ledger/rules.ts`. A test fails if the two differ. Only
+  `manual_journal` exists.
+- **A manual journal cannot post to the accounts that must agree with records kept elsewhere**:
+  receivables, payables, advances to suppliers and from customers, stock, goods in transit, goods
+  received not invoiced, cheques in hand. It can still post to the other locked accounts: the
+  tax and withholding accounts, salaries and commission (expense and payable), retained earnings
+  and opening balance equity. That is on purpose for now: a company with no payroll module books
+  salaries by journal, and paying sales tax to FBR has no document of its own yet. Each step that
+  builds the records behind one of those accounts (commissions in Steps 38 to 41, payroll, the
+  tax returns) should decide whether to close it to manual journals, by adding it to
+  `app.journal_source_blocked_controls`. Closing it later is safe; journals already posted stay.
+- **A line on receivables or advances from customers names its customer, and a line on payables
+  or advances to suppliers its supplier.** The database refuses one that does not. So a
+  customer's or supplier's balance is the sum of the journal lines that name them; statements and
+  ageing (Steps 31 and 32) can be built on that.
+- **Journal lines are in the company's base currency only.** A document in a foreign currency
+  (Step 22) posts base amounts; if it needs the foreign amount on the line (for revaluation),
+  that is new columns, added before the first such line is written.
+- **`journal_lines.cost_centre_id` exists and must be empty.** The database refuses any value
+  until cost centres exist, because a line can never be corrected. The step that adds cost
+  centres drops the check `journal_lines_no_cost_centre_yet`, adds the foreign key, and lets
+  `app.post_journal` store the value.
+- **A journal belongs to a branch or to the whole company.** Its lines carry the same branch, for
+  the branch filter on reports (Step 16). A member limited to some branches posts to, sees and
+  reverses only those branches' journals, never the company-wide ones.
+- **A journal's document number is unique in the company, and a reversal has none.** A reversal
+  is found by the journal it reverses; a screen shows it as "Reversal of JV-2627-00001".
+- **A reversal cannot itself be reversed.** A journal reversed by mistake is posted again as a
+  new document.
+- **A journal has at most 1,000 lines.** The balance check at the end of the transaction adds
+  the journal up once per line, which is about a quarter of a second for 1,000 lines. A document
+  that needs more (a large opening balance, a payroll run for hundreds of people) should post
+  several journals, or the check should be made to run once per journal.
+- **An account can be archived in the same instant a journal posts to it.** Both are kept. The
+  journal is valid; the account just holds one more line than it had when it was archived.
+- **Removing a whole company's journals is possible only for a session signed in as postgres**
+  that names the company in `app.purge_tenants` for that transaction. The tests use it. Deleting
+  a real company's data (launch gate) should go through one audited operator script that does
+  this, never by hand.
+- **The dev database is also production while building**, so the 1,000 test journals the engine
+  test posts are written to it and removed again each run.
+- **The engine writes its own audit row** (`journal.post`, `journal.reverse`) inside the database
+  function, so no journal exists without one. The command that asked for the journal writes its
+  own row as well.
+- **The fiscal-period messages are shared**: `periodRefusal` in `src/modules/numbering/rules.ts`
+  turns the database's SE001 and SE002 into the same words wherever a date is refused.
+

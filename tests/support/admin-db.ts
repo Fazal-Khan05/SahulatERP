@@ -43,6 +43,10 @@ export async function deleteTenants(sql: AdminSql, tenantIds: string[]): Promise
     await tx`delete from public.modules_enabled where tenant_id = any(${tenantIds})`;
     await tx`delete from public.settings where tenant_id = any(${tenantIds})`;
     await tx`delete from public.invitations where tenant_id = any(${tenantIds})`;
+    // The ledger refuses every delete except a whole company's, named for this transaction.
+    await tx`select set_config('app.purge_tenants', ${tenantIds.join(",")}, true)`;
+    await tx`delete from public.journal_lines where tenant_id = any(${tenantIds})`;
+    await tx`delete from public.journals where tenant_id = any(${tenantIds})`;
     // One statement: the key from an account to its heading is checked when the statement ends.
     await tx`delete from public.accounts where tenant_id = any(${tenantIds})`;
     await tx`delete from public.company_setup where tenant_id = any(${tenantIds})`;

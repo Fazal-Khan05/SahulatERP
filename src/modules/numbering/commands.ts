@@ -4,11 +4,8 @@ import { audit, isUuid, withTenant, type Tx } from "@/db";
 import { UserError, pgCode } from "@/lib/errors";
 import { isIsoDate } from "@/modules/currencies/rules";
 import { can, type TenantContext } from "@/modules/tenant/rules";
-import { firstYearProblem, fiscalYearLabel, isDocumentType, monthlyPeriods, nextDay, periodName, readFirstYear, type DocumentType } from "./rules";
+import { firstYearProblem, fiscalYearLabel, isDocumentType, monthlyPeriods, nextDay, periodName, periodRefusal, readFirstYear, type DocumentType } from "./rules";
 import { fiscalPeriods } from "./schema";
-
-const NO_PERIOD = "SE001";
-const LOCKED = "SE002";
 
 /**
  * Takes the next number for a document, such as SI-2627-00001. It must be called inside the
@@ -25,8 +22,8 @@ export async function takeDocumentNumber(tx: Tx, type: DocumentType, date: strin
     const rows = await tx.transaction((inner) => inner.execute<{ number: string }>(sql`select app.next_document_number(${type}, ${date}::date) as number`));
     return rows[0].number;
   } catch (error) {
-    if (pgCode(error) === NO_PERIOD) throw new UserError(`No fiscal period is open for ${date.split("-").reverse().join("-")}. An owner opens the fiscal year under Settings, Fiscal periods.`);
-    if (pgCode(error) === LOCKED) throw new UserError(`The period ${periodName(date)} is locked. An owner can unlock it under Settings, Fiscal periods.`);
+    const refused = periodRefusal(pgCode(error), date);
+    if (refused) throw new UserError(refused);
     throw error;
   }
 }

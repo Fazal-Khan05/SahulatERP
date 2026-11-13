@@ -1,5 +1,6 @@
+import Decimal from "decimal.js";
 import { describe, expect, it } from "vitest";
-import { chartOrder, codeCeiling, depthProblem, lockedReason, readAccountName, readCode, readNewAccount, suggestCode, visibleAccounts } from "./rules";
+import { CONTROL_TYPES, CUSTOMER_CONTROLS, JOURNAL_SOURCES, SUBLEDGER_CONTROLS, SUPPLIER_CONTROLS, chartOrder, checkJournalLines, codeCeiling, depthProblem, isJournalSource, lockedReason, readAccountName, readCode, readNewAccount, suggestCode, visibleAccounts } from "./rules";
 
 const row = (id: string, parentId: string | null, code: string) => ({ id, parentId, code });
 
@@ -72,5 +73,44 @@ describe("the chart of accounts", () => {
   it("says a locked account cannot be changed", () => {
     expect(lockedReason({ isControl: false })).toBeNull();
     expect(lockedReason({ isControl: true })).toContain("locked");
+  });
+});
+
+describe("a journal", () => {
+  const d = (value: string) => new Decimal(value);
+  const line = (debit: string | null, credit: string | null, more: object = {}) => ({ accountId: "a", debit: debit === null ? null : d(debit), credit: credit === null ? null : d(credit), ...more });
+
+  it("balances: debits equal credits, to the last decimal", () => {
+    expect(checkJournalLines([line("40000", null), line(null, "40000")])).toEqual({ ok: true, total: d("40000") });
+    const split = checkJournalLines([line("450000", null), line("50000.0001", null), line(null, "500000.0001")]);
+    expect(split.ok && split.total.toFixed(4)).toBe("500000.0001");
+    // Tenths that a binary number cannot hold add up exactly here.
+    expect(checkJournalLines([line("0.1", null), line("0.2", null), line(null, "0.3")]).ok).toBe(true);
+    // Sixteen digits before the point, summed without losing the last decimal.
+    expect(checkJournalLines([line("9999999999999999.9999", null), line("9999999999999999.9999", null), line(null, "9999999999999999.9999"), line(null, "9999999999999999.9999")]).ok).toBe(true);
+    expect(checkJournalLines([line("100", null), line(null, "99.9999")])).toEqual({ ok: false, reason: "The journal does not balance: debits are 100.00 and credits are 99.9999." });
+  });
+
+  it("has at least two lines, each a debit or a credit above zero and never both", () => {
+    expect(checkJournalLines([])).toEqual({ ok: false, reason: "A journal needs at least two lines: a debit and a credit." });
+    expect(checkJournalLines([line("5", null)]).ok).toBe(false);
+    expect(checkJournalLines(Array.from({ length: 1001 }, () => line("1", null)))).toEqual({ ok: false, reason: "A journal can have at most 1000 lines." });
+    expect(checkJournalLines([line("5", "5"), line(null, "5")])).toEqual({ ok: false, reason: "Line 1: enter a debit or a credit, not both." });
+    expect(checkJournalLines([line("5", null), line(null, null)])).toEqual({ ok: false, reason: "Line 2: enter a debit or a credit." });
+    expect(checkJournalLines([line("0", "0"), line(null, "5")])).toEqual({ ok: false, reason: "Line 1: enter a debit or a credit." });
+    expect(checkJournalLines([line("-5", null), line(null, "-5")])).toEqual({ ok: false, reason: "Line 1: an amount cannot be negative." });
+    expect(checkJournalLines([line("5.00001", null), line(null, "5.00001")])).toEqual({ ok: false, reason: "Line 1: an amount has at most 4 digits after the point." });
+    expect(checkJournalLines([line("10000000000000000", null), line(null, "10000000000000000")])).toEqual({ ok: false, reason: "Line 1: that amount is too large." });
+    expect(checkJournalLines([{ accountId: "a", debit: new Decimal(NaN) }, line(null, "5")]).ok).toBe(false);
+    expect(checkJournalLines([line("5", null, { customerId: "c", supplierId: "s" }), line(null, "5")])).toEqual({ ok: false, reason: "Line 1: a line belongs to a customer or to a supplier, not both." });
+  });
+
+  it("knows what may post, and which accounts are kept by their own documents", () => {
+    expect(isJournalSource("manual_journal")).toBe(true);
+    for (const not of ["reversal", "sales_invoice", "", null, "constructor"]) expect(isJournalSource(not), String(not)).toBe(false);
+    expect(JOURNAL_SOURCES.manual_journal.roles).toEqual(["owner", "accountant"]);
+    expect(JOURNAL_SOURCES.manual_journal.blockedControls).toEqual(SUBLEDGER_CONTROLS);
+    // Every name used for an account is one the chart knows.
+    for (const control of [...SUBLEDGER_CONTROLS, ...CUSTOMER_CONTROLS, ...SUPPLIER_CONTROLS]) expect(Object.keys(CONTROL_TYPES), control).toContain(control);
   });
 });

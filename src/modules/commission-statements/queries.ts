@@ -81,6 +81,12 @@ export async function listStatements(ctx: TenantContext, period: Period): Promis
   });
 }
 
+/** The Postgres code of a failed query, as the driver gives it (on the error, or on its cause). */
+function codeOf(error: unknown): string | undefined {
+  const e = error as { code?: string; cause?: { code?: string } };
+  return e?.cause?.code ?? e?.code;
+}
+
 export type CommissionStatementData = Period & {
   person: { userId: string; name: string };
   statement: CommissionStatement;
@@ -106,39 +112,39 @@ type StatementRow = {
 export async function getCommissionStatement(ctx: TenantContext, userId: string, period: Period): Promise<CommissionStatementData | null> {
   requireStatements(ctx);
   if (!isUuid(userId)) return null;
-  return withTenant(ctx.userId, ctx.tenantId, async (tx) => {
-    const [allowed] = await tx.execute<{ yes: boolean }>(sql`select coalesce(${userId}::uuid = any(app.commission_statement_people()), app.commission_statement_people() is null) as yes`);
-    if (!allowed?.yes) return null;
-    const [rows, names] = await Promise.all([
+  const read = await withTenant(ctx.userId, ctx.tenantId, (tx) =>
+    Promise.all([
       tx.execute<StatementRow>(sql`
         select seq::text, movement_date::text, type, amount::text, source_type, source_id, source_number,
                invoice_id, invoice_number, customer_name, kind, seller_user_id, team_rate::text
         from app.commission_statement(${userId}::uuid, ${period.from}::date, ${period.to}::date)`),
       selectNames(tx, period),
-    ]);
-    const nameOf = (id: string) => names.get(id) ?? (id === ctx.userId ? ctx.email : "A former member");
-    const opening = figuresOf(rows.filter((row) => row.source_type === "opening").map((row) => ({ type: row.type, amount: new Decimal(row.amount) })));
-    const movements = rows
-      .filter((row) => row.source_type !== "opening")
-      .map((row) => ({
-        seq: Number(row.seq),
-        date: row.movement_date,
-        type: row.type,
-        amount: new Decimal(row.amount),
-        sourceType: row.source_type,
-        sourceId: row.source_id ?? "",
-        sourceNumber: row.source_number,
-        invoiceId: row.invoice_id ?? "",
-        invoiceNumber: row.invoice_number,
-        customerName: row.customer_name,
-        kind: row.kind ?? "own",
-        sellerUserId: row.seller_user_id ?? userId,
-        teamRate: row.team_rate === null ? null : new Decimal(row.team_rate),
-      }));
-    return {
-      ...period,
-      person: { userId, name: nameOf(userId) },
-      statement: buildCommissionStatement(opening, movements, nameOf, formatAmount),
-    };
+    ]),
+  ).catch((error: unknown) => {
+    // The database refuses a person the reader may not see, or who is not in the company.
+    if (codeOf(error) === "42501") return null;
+    throw error;
   });
+  if (!read) return null;
+  const [rows, names] = read;
+  const nameOf = (id: string) => names.get(id) ?? (id === ctx.userId ? ctx.email : "A former member");
+  const opening = figuresOf(rows.filter((row) => row.source_type === "opening").map((row) => ({ type: row.type, amount: new Decimal(row.amount) })));
+  const movements = rows
+    .filter((row) => row.source_type !== "opening")
+    .map((row) => ({
+      seq: Number(row.seq),
+      date: row.movement_date,
+      type: row.type,
+      amount: new Decimal(row.amount),
+      sourceType: row.source_type,
+      sourceId: row.source_id ?? "",
+      sourceNumber: row.source_number,
+      invoiceId: row.invoice_id ?? "",
+      invoiceNumber: row.invoice_number,
+      customerName: row.customer_name,
+      kind: row.kind ?? "own",
+      sellerUserId: row.seller_user_id ?? userId,
+      teamRate: row.team_rate === null ? null : new Decimal(row.team_rate),
+    }));
+  return { ...period, person: { userId, name: nameOf(userId) }, statement: buildCommissionStatement(opening, movements, nameOf, formatAmount) };
 }

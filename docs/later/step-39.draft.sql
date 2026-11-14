@@ -58,7 +58,9 @@ DECLARE
   v_tenant uuid := app.tenant_id();
   v_people uuid[] := app.commission_statement_people();
 BEGIN
-  IF v_tenant IS NULL OR p_user IS NULL OR NOT (v_people IS NULL OR p_user = ANY (v_people)) THEN
+  -- Someone who is not a member of the company has no statement here, whoever asks.
+  IF v_tenant IS NULL OR p_user IS NULL OR NOT (v_people IS NULL OR p_user = ANY (v_people))
+     OR NOT EXISTS (SELECT 1 FROM public.memberships ms WHERE ms.tenant_id = v_tenant AND ms.user_id = p_user) THEN
     RAISE EXCEPTION 'not allowed to see this commission statement' USING ERRCODE = 'insufficient_privilege';
   END IF;
   IF p_from IS NULL OR p_to IS NULL OR NOT isfinite(p_from) OR NOT isfinite(p_to) OR p_from > p_to THEN

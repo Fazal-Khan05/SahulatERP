@@ -5,9 +5,15 @@ Track C (commissions), the Finisher's. Built on Step 38's ledger (the Builder's,
 (hand-written: three read functions, no tables).
 
 Prepared while Step 38 was still on its branch: the rules and their tests, the screens, the
-print page and the PDF are written; the migration is drafted; the database tests are listed as
-`it.todo` in `src/modules/commission-statements/statements.test.ts`. Built for real once Step 38
-is on main.
+print page, the PDF, the read functions (drafted in `docs/later/step-39.draft.sql`) and the
+database tests (`src/modules/commission-statements/statements.test.ts`). The database tests pass
+against Step 38's migration as it stood on the Builder's branch (commit 483f859), on a local
+database of their own.
+
+**When Step 38 is on main:** turn the draft into `drizzle/0028_commission_statements.sql` (with
+`drizzle-kit generate --custom`) and its down file, and delete the draft; pay through Step 38's
+`approveCommission` and `payCommission` in the tests; link the statements from Commission earned
+and from Reports; write the browser test; run everything.
 
 ## Decided by the founder (2026-11-15, through the coordinator)
 
@@ -76,12 +82,19 @@ These came up while building. Each is the option I would recommend; say if any s
 6. **A balance below nothing** (commission paid and since taken back) is shown with a minus sign
    and "Owed back, from the next payment".
 
-## Tests to build once Step 38 is on main
+## Tests
 
-The database tests, as listed in `statements.test.ts`, and a browser test:
-`e2e/commission-statements.spec.ts`: the owner opens the list, a salesperson's statement, prints
-it and downloads the PDF; the salesperson is sent straight to their own and cannot open
-another's (not found); a manager sees their team in the list.
+- `src/modules/commission-statements/rules.test.ts`: the statement from movements, on its own.
+- `src/modules/commission-statements/statements.test.ts`, against the database: a month with a
+  cheque that clears and then bounces after Ali was paid, a return, a payment that takes back
+  what he owed; the statement is exactly the movements dated in the period, its end is where
+  the accruals stand, October's end is November's beginning, everyone's statements add up to
+  Sales commission and Commission payable in the books; and who reads whose (a salesperson, a
+  manager at any depth and after a move, the owner, an accountant, the auditor, an accountant
+  of one branch, another company's owner).
+- To write: `e2e/commission-statements.spec.ts`: the owner opens the list, a salesperson's
+  statement, prints it and downloads the PDF; the salesperson is sent straight to their own and
+  cannot open another's (not found); a manager sees their team in the list.
 
 ## Later
 

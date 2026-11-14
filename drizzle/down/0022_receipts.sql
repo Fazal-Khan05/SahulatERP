@@ -1,4 +1,4 @@
--- Reverses drizzle/0021_receipts.sql. Never run automatically. This DELETES every receipt of
+-- Reverses drizzle/0022_receipts.sql. Never run automatically. This DELETES every receipt of
 -- every company and what each paid. It leaves the journals those receipts posted where they
 -- are (they cannot be removed), with nothing to say where they came from, so every customer's
 -- balance in the books stays as the receipts left it. Run it by hand, as postgres, only after
@@ -36,7 +36,7 @@ DROP TABLE public.receipt_allocations, public.receipts;
 DROP FUNCTION app.check_receipt_allocation();
 DROP FUNCTION app.check_receipt();
 
--- The row drizzle-kit wrote for 0021_receipts (its "when" in drizzle/meta/_journal.json).
-DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1794661663082;
+-- The row drizzle-kit wrote for 0022_receipts (its "when" in drizzle/meta/_journal.json).
+DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1794688218727;
 
 COMMIT;

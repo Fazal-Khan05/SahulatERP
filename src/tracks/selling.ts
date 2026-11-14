@@ -9,19 +9,24 @@ import type { ReportSection, TrackLinks, TrackPermissions } from "./shape";
 // Plain lists only. Import types, never a value from a module: the modules read this file.
 
 /** Who may do what on this track's screens. Asked through can(), like every other permission. */
-export const permissions = {} as const satisfies TrackPermissions;
+export const permissions = {
+  // Step 32. Money received from customers, and the cheques among it. The founder's decision
+  // (2026-11-14): the sales team sees what a customer owes and does not record money.
+  "receipt.read": ["owner", "accountant", "auditor", "recovery_officer"],
+  "receipt.manage": ["owner", "accountant", "recovery_officer"],
+} as const satisfies TrackPermissions;
 
 /**
  * Where this track's menu entries lead: null until the screen is built, then its address. The
  * words and the order of each role's menu are in src/modules/tenant/rules.ts and do not change.
  */
 export const links = {
-  collections: null,
+  collections: "/receipts",
   salesReports: null,
-  cheques: null,
+  cheques: "/receipts/cheques",
   overdueCustomers: null,
   followUps: null,
-  receipts: null,
+  receipts: "/receipts",
   customerStatements: null,
 } as const satisfies TrackLinks;
 

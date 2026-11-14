@@ -148,6 +148,13 @@
       "when": 1794654743372,
       "tag": "0020_stock_documents",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1794661663082,
+      "tag": "0021_receipts",
+      "breakpoints": true
     }
   ]
 }

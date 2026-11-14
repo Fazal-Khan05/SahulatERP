@@ -11,6 +11,8 @@ import { todayIso } from "@/lib/format";
 import { AMOUNT_SCALE, formatAmount } from "@/lib/money";
 import { formatIsoDate } from "@/modules/currencies/rules";
 import { submitProblem } from "@/modules/sales/commands";
+import { getInvoiceCommission } from "@/modules/commission-ledger/queries";
+import { standingLabel } from "@/modules/commission-ledger/rules";
 import { getCreditNoteFacts, getInvoiceReturns } from "@/modules/credit-notes/queries";
 import { getDocumentJournal, type Journal } from "@/modules/ledger/queries";
 import { getCustomerCredit, getDeliveryRows, getLineDefaults, getOrderDelivery, getSalesDocument, listInvoicesOf, listOrdersToDeliver, listSalesDocuments, listSalesPeople, listSalesWarehouses, type SalesDocument } from "@/modules/sales/queries";
@@ -885,7 +887,12 @@ async function Invoice({ session, document, back }: { session: Session; document
     );
   }
 
-  const [people, journal, returns] = await Promise.all([listSalesPeople(session), document.status === "draft" ? null : getDocumentJournal(session, "sales_invoice", document.id), getInvoiceReturns(session, document)]);
+  const [people, journal, returns, commission] = await Promise.all([
+    listSalesPeople(session),
+    document.status === "draft" ? null : getDocumentJournal(session, "sales_invoice", document.id),
+    getInvoiceReturns(session, document),
+    document.status === "submitted" && session.modules.commissions ? getInvoiceCommission(session, document.id) : null,
+  ]);
   const returnable = returns.lines.some((line) => line.left.gt(0));
   const draftNote = returns.creditNotes.find((note) => note.status === "draft");
   return (
@@ -898,6 +905,41 @@ async function Invoice({ session, document, back }: { session: Session; document
           <LinesTable document={document} />
         </Card>
         {journal ? <Books journal={journal} /> : null}
+        {commission ? (
+          <Card title="Commission on this invoice">
+            <div className="overflow-x-auto">
+              <table aria-label="Commission on this invoice" className="w-full min-w-[560px] text-left text-sm">
+                <thead className="border-b text-muted-foreground">
+                  <tr>
+                    <th className="py-2 pr-4 font-medium">Who</th>
+                    <th className="py-2 pr-4 font-medium">Item</th>
+                    <th className="py-2 pr-4 text-right font-medium">Earned</th>
+                    <th className="py-2 pr-4 text-right font-medium">Released</th>
+                    <th className="py-2 pr-4 text-right font-medium">Paid</th>
+                    <th className="py-2 font-medium">Where it stands</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {commission.accruals.map((row) => (
+                    <tr key={row.id}>
+                      <td className="py-2 pr-4">
+                        <Link href={`/commissions/earned?person=${row.userId}`} className="underline-offset-4 hover:underline">
+                          {commission.names[row.userId]}
+                        </Link>
+                        {row.kind === "team" ? <span className="text-muted-foreground"> (manager of {commission.names[row.sellerUserId]})</span> : null}
+                      </td>
+                      <td className="py-2 pr-4">{row.itemCode}</td>
+                      <td className="py-2 pr-4 text-right whitespace-nowrap tabular-nums">{formatAmount(row.earned)}</td>
+                      <td className="py-2 pr-4 text-right whitespace-nowrap tabular-nums">{formatAmount(row.released)}</td>
+                      <td className="py-2 pr-4 text-right whitespace-nowrap tabular-nums">{formatAmount(row.paid)}</td>
+                      <td className="py-2">{standingLabel(row)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        ) : null}
         {document.status === "submitted" ? (
           <Card title="Returns and credit notes">
             {returns.creditNotes.length === 0 ? (

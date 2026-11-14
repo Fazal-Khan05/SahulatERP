@@ -9,7 +9,19 @@ import type { ReportSection, TrackLinks, TrackPermissions } from "./shape";
 // Plain lists only. Import types, never a value from a module: the modules read this file.
 
 /** Who may do what on this track's screens. Asked through can(), like every other permission. */
-export const permissions = {} as const satisfies TrackPermissions;
+export const permissions = {
+  // Step 30. How much each warehouse holds, in quantities only; what it cost is "stock.cost.read".
+  "stock.read": ["owner", "accountant", "auditor", "sales_manager", "warehouse_manager"],
+  "stock_transfer.read": ["owner", "accountant", "auditor", "warehouse_manager"],
+  "stock_transfer.manage": ["owner", "accountant", "warehouse_manager"],
+  // Adjustments and opening stock change what the books say stock is worth: not for the warehouse.
+  "stock_adjustment.read": ["owner", "accountant", "auditor"],
+  "stock_adjustment.manage": ["owner", "accountant"],
+  // The warehouse counts; an owner or an accountant posts the differences.
+  "stock_count.read": ["owner", "accountant", "auditor", "warehouse_manager"],
+  "stock_count.manage": ["owner", "accountant", "warehouse_manager"],
+  "stock_count.post": ["owner", "accountant"],
+} as const satisfies TrackPermissions;
 
 /**
  * Where this track's menu entries lead: null until the screen is built, then its address. The
@@ -18,10 +30,10 @@ export const permissions = {} as const satisfies TrackPermissions;
 export const links = {
   purchases: null,
   billsAndPayments: null,
-  stock: null,
+  stock: "/stock",
   receiveGoods: null,
-  transfers: null,
-  stockCount: null,
+  transfers: "/stock/transfers",
+  stockCount: "/stock/counts",
 } as const satisfies TrackLinks;
 
 /**
@@ -34,7 +46,15 @@ export const controls = {} as const satisfies Record<string, string>;
  * Kinds of document this track numbers, by their two letters. The migration adds a function
  * app.document_type_<letters>() for each.
  */
-export const documents = {} as const satisfies Record<string, string>;
+export const documents = { SC: "Stock count" } as const satisfies Record<string, string>;
 
 /** This track's reports, listed on the Reports page under headings of its own. */
-export const reports: readonly ReportSection[] = [];
+export const reports: readonly ReportSection[] = [
+  {
+    title: "Stock",
+    reports: [
+      // The accountant's menu has no Stock entry; this is how an accountant reaches the stock screens.
+      { label: "Stock on hand", href: "/stock", about: "What each warehouse holds, with transfers, adjustments, opening stock and counts.", permission: "stock.read", module: "inventory" },
+    ],
+  },
+];

@@ -27,6 +27,22 @@ Track A. Built on 2026-11-14 by the Finisher session.
 - A permission `sales.email` (owner, accountant, sales manager, salesperson) in
   `src/tracks/selling.ts`; the database policy names the same four roles.
 
+## Review of the migration
+
+An independent reviewer attacked `0020_sales_document_emails` as arbitrary SQL from the app's
+role. Nothing crossed a company, a branch or a salesperson's documents. Fixed in the migration
+itself:
+
+- an email's start time could be set by hand, and one dated in the future would have looked
+  "being sent" for ever and stopped the document being emailed again: it must now be `now()`;
+- the time an outcome was written could be set by hand: it must now be `now()`;
+- nothing on the row said who wrote the outcome: `finished_by` is added and must be the member
+  writing it;
+- a subject could hold a line break, and an address a comma, semicolon or odd space: refused, by
+  the database and by the form.
+
+Each has a test in `src/modules/sales-email/email.test.ts`.
+
 ## Decided by the founder
 
 - 2026-11-14: **PDF library `@react-pdf/renderer`** may be added (offered: it, browser-only with
@@ -63,7 +79,7 @@ Track A. Built on 2026-11-14 by the Finisher session.
 - **The message of an email is not kept**, only its address, subject and outcome. The PDF is not
   kept either: it is made again from the document, which never changes once numbered.
 - **A member may mark an email "sent" or "failed" without any service being asked.** It is their
-  own company's log, and the audit row says who did it.
+  own company's log; the row's `finished_by` and the audit row say who did it.
 - **`src/lib/` would be the natural home of the email sender**, since other tracks will email
   statements (Steps 33 and 39). It lives in `src/modules/sales-email/` because `src/lib/` is
   shared; Steps 33 and 39 may import `MailSender` and `mailSenderFromEnvironment` from there, or

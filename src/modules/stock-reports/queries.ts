@@ -128,7 +128,7 @@ async function itemMoves(tx: Tx, ctx: TenantContext, filter: StockFilter, itemId
         coalesce(sd.number, st.number, sa.number, sc.number) as number, m.reverses_move_id is not null as reversal
       from public.stock_moves m
       join public.warehouses w on w.tenant_id = m.tenant_id and w.id = m.warehouse_id
-      left join public.sales_documents sd on m.source_type in ('delivery_note', 'sales_invoice') and sd.tenant_id = m.tenant_id and sd.id = m.source_id
+      left join public.sales_documents sd on m.source_type in ('delivery_note', 'sales_invoice', 'credit_note') and sd.tenant_id = m.tenant_id and sd.id = m.source_id
       left join public.stock_transfers st on m.source_type = 'stock_transfer' and st.tenant_id = m.tenant_id and st.id = m.source_id
       left join public.stock_adjustments sa on m.source_type = 'stock_adjustment' and sa.tenant_id = m.tenant_id and sa.id = m.source_id
       left join public.stock_counts sc on m.source_type = 'stock_count' and sc.tenant_id = m.tenant_id and sc.id = m.source_id

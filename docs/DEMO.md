@@ -26,6 +26,8 @@ For showing SahulatERP to an importer who works out commission by hand today.
    - **Print** and **Download PDF**: the invoice on the company's letterhead, total in words;
    - **What happened**: who wrote it, when it was posted, the order it came from.
    Say: "Nobody types a journal. The invoice puts itself into the books."
+   If they ask about returns: *Sales*, *Credit notes* has one, five brake shoes sent back (one
+   damaged); it took the goods back into stock and the amount off what the customer owes.
 
 3. **Commissions** (2 minutes). Open *Commissions*. Show the plans:
    - a standard plan with a higher rate on lighting and a lower one on tyres;
@@ -70,7 +72,6 @@ For showing SahulatERP to an importer who works out commission by hand today.
 - **Commission earned and paid** (accrual on invoices, release on collection, statements per
   salesperson) arrives with Steps 38 and 39. Once Step 38 is live, the demo company is made
   again, so the commission is earned by the real posting.
-- **Sales returns** (credit notes) arrive with Step 21; once it is live the seed adds one return.
 - **Email** of invoices and statements waits for an email service to be chosen; for now the
   PDF is downloaded and sent by hand.
 - **Purchases and imports** are not built yet: stock came in as opening stock.

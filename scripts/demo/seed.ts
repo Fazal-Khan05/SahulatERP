@@ -5,6 +5,7 @@ import Decimal from "decimal.js";
 import { closeDb } from "@/db";
 import { todayIso } from "@/lib/format";
 import { savePlan, setManager } from "@/modules/commissions/commands";
+import { postCreditNote, saveCreditNoteDraft, startCreditNote } from "@/modules/credit-notes/commands";
 import { setBaseCurrency } from "@/modules/currencies/commands";
 import { postAdjustment, saveAdjustmentDraft } from "@/modules/inventory/commands";
 import { addItemCategory, addUnit, createItem } from "@/modules/items/commands";
@@ -280,6 +281,20 @@ export async function seedDemo(): Promise<string[]> {
       documents += 1;
     }
     said.push(`${documents} sales documents: quotations, orders, delivery notes and ${invoices.length} invoices, some split 60/40 between Ali and Sana.`);
+
+    // ── A return: five brake shoes come back from this month's first invoice, one damaged ────────
+    const returned = invoices.find((i) => i.month === 1)!;
+    const billed = (await getSalesDocument(owner, returned.id))!;
+    const shoes = billed.lines.find((line) => line.itemCode === "BR-101")!;
+    const { id: creditNote } = await startCreditNote(owner, returned.id);
+    await saveCreditNoteDraft(owner, creditNote, {
+      date: billed.date < yesterday ? shift(billed.date, 1) : billed.date,
+      notes: "Five brake shoes sent back: wrong size. One was damaged in transit.",
+      reference: "DN-17/26",
+      lines: [{ sourceLineId: shoes.id, quantity: "5", damaged: "1" }],
+    });
+    const { number: creditNumber } = await postCreditNote(owner, creditNote);
+    said.push(`A return: credit note ${creditNumber} for five brake shoes, one written off as damaged.`);
 
     // ── Money in: cash, bank and cheques ────────────────────────────────────────────────────────
     const [{ id: cash }] = await sql<{ id: string }[]>`select id from public.accounts where tenant_id = ${tenantId} and code = '1111'`;

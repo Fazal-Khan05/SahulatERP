@@ -9,6 +9,7 @@ import { seedAccounts } from "@/modules/ledger/commands";
 import { openFiscalYear } from "@/modules/numbering/commands";
 import { createParty } from "@/modules/parties/commands";
 import type { Cell, ReportTable } from "@/modules/reports/rules";
+import { postCreditNote, saveCreditNoteDraft, startCreditNote } from "@/modules/credit-notes/commands";
 import { postDelivery, postInvoice, saveDeliveryDraft, saveInvoiceDraft, saveSalesDraft, startDelivery, startInvoice, submitSalesDocument } from "@/modules/sales/commands";
 import { getSalesDocument } from "@/modules/sales/queries";
 import type { TenantContext } from "@/modules/tenant/rules";
@@ -39,6 +40,7 @@ const TODAY = "2026-11-14";
 
 let admin: AdminSql;
 let customer: string;
+let firstInvoice: string;
 
 const filter = (raw: Record<string, string> = {}): StockFilter => readStockFilter(raw, { yearStart: "2026-07-01", today: TODAY });
 const report = (who: TenantContext, key: Parameters<typeof getStockReport>[1], raw: Record<string, string> = {}) => getStockReport(who, key, filter(raw), TODAY);
@@ -56,11 +58,12 @@ async function order(date: string, items: [string, string][]): Promise<string> {
   await submitSalesDocument(as.owner, id);
   return id;
 }
-async function billAll(sourceId: string, date: string): Promise<void> {
+async function billAll(sourceId: string, date: string): Promise<string> {
   const { id } = await startInvoice(as.owner, sourceId);
   const draft = (await getSalesDocument(as.owner, id))!;
   await saveInvoiceDraft(as.owner, id, { date, lines: draft.lines.map((l) => ({ sourceLineId: l.sourceLineId, quantity: l.quantity.toFixed() })) });
   await postInvoice(as.owner, id);
+  return id;
 }
 
 describe.skipIf(!hasDb)("stock reports", () => {
@@ -103,7 +106,7 @@ describe.skipIf(!hasDb)("stock reports", () => {
     const draft = (await getSalesDocument(as.owner, note))!;
     await saveDeliveryDraft(as.owner, note, { date: "2026-11-06", lines: draft.lines.map((l) => ({ sourceLineId: l.sourceLineId, quantity: l.quantity.toFixed() })) });
     await postDelivery(as.owner, note);
-    await billAll(note, "2026-11-07");
+    firstInvoice = await billAll(note, "2026-11-07");
     // 10 November: one helmet invoiced and delivered at once.
     await billAll(await order("2026-11-10", [[helmet, "1"]]), "2026-11-10");
     // 12 November: 15 chains ordered, not delivered yet.
@@ -208,5 +211,23 @@ describe.skipIf(!hasDb)("stock reports", () => {
     expect(books.map((b) => `${b.code} ${new Decimal(b.amount).toFixed(2)}`)).toEqual(["4100 5400.00", "5100 -3456.00"]);
     // October sold nothing.
     expect(lines(await report(as.accountant, "item-profit", { from: "2026-10-01", to: "2026-10-31" }))).toEqual([]);
+  });
+
+  it("takes a return (a credit note) off item profit, and the valuation still equals the books", async () => {
+    // 12 November: one helmet comes back from the first invoice, and two chains, one of them damaged.
+    const { id } = await startCreditNote(as.owner, firstInvoice);
+    const invoice = (await getSalesDocument(as.owner, firstInvoice))!;
+    const lineOf = (code: string) => invoice.lines.find((l) => l.itemCode === code)!.id;
+    await saveCreditNoteDraft(as.owner, id, { date: "2026-11-12", lines: [{ sourceLineId: lineOf("HL-1"), quantity: "1", damaged: "" }, { sourceLineId: lineOf("CH-2"), quantity: "2", damaged: "1" }] });
+    await postCreditNote(as.owner, id);
+    // Helmets: 3 sold less 1 back; the one back had cost 600. Chains: 6 less 2; of the 552 they had cost, 276 came back onto the shelf and 276 was written off.
+    const profit = await report(as.accountant, "item-profit", { from: "2026-11-01" });
+    expect(lines(profit)).toEqual(["CH-2 | Chain | 4 pc | 1600.00 | 1380.00 | 220.00 | 13.8%", "HL-1 | Helmet | 2 pc | 2000.00 | 1200.00 | 800.00 | 40.0%"]);
+    expect(row(profit, "Total").slice(3)).toEqual(["3600.00", "2580.00", "1020.00", "28.3%"]);
+    // The goods that came back are in stock, and the stock still equals the stock account.
+    const today = await report(as.owner, "valuation");
+    expect(row(today, "Difference").at(-1)).toBe("0.00");
+    const helmets = await report(as.owner, "movement", { from: "2026-11-01", item: invoice.lines.find((l) => l.itemCode === "HL-1")!.itemId });
+    expect(lines(helmets).some((line) => line.includes("Credit note CN-2627-00001"))).toBe(true);
   });
 });

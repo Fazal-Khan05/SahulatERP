@@ -146,6 +146,7 @@ const SOURCE_WORDS: Record<string, string> = {
   cheque_return: "Cheque returned",
   advance_application: "Advance set against invoices",
   opening_balance: "Opening balance",
+  credit_note: "Credit note (goods returned)",
   manual_journal: "Journal entry",
 };
 

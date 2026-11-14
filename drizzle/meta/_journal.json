@@ -162,6 +162,13 @@
       "when": 1794688218727,
       "tag": "0022_receipts",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1794691803336,
+      "tag": "0023_safe_search_path",
+      "breakpoints": true
     }
   ]
 }

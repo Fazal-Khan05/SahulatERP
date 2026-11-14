@@ -97,8 +97,10 @@ reads from the three track files, and a track adds to its own file only.
 
 The opening comment of `drizzle/0019_journal_documents.sql` describes the five database
 functions, and each has a test that shows one being added: search the tests for `_zz`.
-Every function a migration creates is followed by `REVOKE ALL ON FUNCTION app.<name>(...) FROM
-PUBLIC;`: a new function can otherwise be called by anyone. `npm run check` refuses a migration
+Every function a migration creates is written with `SET search_path = pg_catalog, pg_temp`
+(never an empty path: `drizzle/0023_safe_search_path.sql` says why) and is followed by
+`REVOKE ALL ON FUNCTION app.<name>(...) FROM PUBLIC;`: a new function can otherwise be called by
+anyone. `npm run check` refuses a migration
 that leaves it out.
 
 A file in `src/tracks` holds plain lists and nothing else. It imports types only (`import type`),

@@ -147,6 +147,18 @@ describe("the migrations folder", () => {
     expect(checkMigrations(folder(22, { 20: { track: "A", sql: trigger("a") }, 21: { track: "C", sql: trigger("c").replaceAll("receipts_after", "receipts_commission") } }))).toEqual([]);
   });
 
+  it("refuses an empty search path on a function, from the migration that closed that hole on", () => {
+    const fn = (path: string) => `CREATE FUNCTION app.zz_fn() RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = ${path} AS 'select true';\nREVOKE ALL ON FUNCTION app.zz_fn() FROM PUBLIC;\n`;
+    // Before 0023 the migrations are as they were written; 0023 itself put them right in the database.
+    expect(checkMigrations(folder(23, { 22: { track: "A", sql: fn("''") } }))).toEqual([]);
+    const problems = checkMigrations(folder(24, { 23: { track: "A", sql: fn("''") } }));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain("0023_m23: gives a function an empty search path");
+    expect(checkMigrations(folder(24, { 23: { track: "A", sql: fn("pg_catalog, pg_temp") } }))).toEqual([]);
+    // Said in a comment, it is not a function being written.
+    expect(checkMigrations(folder(24, { 23: { track: "A", sql: `-- never SET search_path = ''\n${fn("pg_catalog, pg_temp")}` } }))).toEqual([]);
+  });
+
   it("refuses a folder with a migration still set aside", () => {
     expect(checkMigrations({ ...folder(21), aside: true })).toEqual(["A migration is set aside (drizzle/.aside) and has not been put back. After merging main, run: npm run db:put-back"]);
   });

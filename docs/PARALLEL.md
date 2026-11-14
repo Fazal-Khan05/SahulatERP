@@ -120,6 +120,11 @@ menu entry that does not exist, that is a shared change.
    `npm run db:migrate` then `npm run db:runtime-password` set it up. Nobody but the founder
    holds the connection details of the shared development database, and it receives only what
    is on `main`: the founder's session runs `npm run db:migrate` against it after each merge.
+   For the database tests there is also a local database, which is some forty times faster
+   than a hosted one: `npm run db:local -- <a name of your own>` starts it if it is not running
+   (it does not start by itself after the computer restarts), makes your database if it is
+   missing, and prints the two addresses to put in front of a test command. It has no sign-in
+   service, so the browser tests still need the hosted project.
 3. **Take main in every day**, and always before starting a step: `git fetch`, then
    `git merge origin/main`. Small merges often are easy; one big merge at the end is not. If
    main has a migration you do not have and you have one main does not, a plain merge is the

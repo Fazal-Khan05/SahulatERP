@@ -15,6 +15,7 @@
     "test:e2e": "playwright test",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:local": "sh scripts/local-db.sh",
     "db:set-aside": "node scripts/migration-aside.mjs set-aside",
     "db:undo-aside": "node --env-file-if-exists=.env.local scripts/migration-aside.mjs undo-aside",
     "db:put-back": "node scripts/migration-aside.mjs put-back",

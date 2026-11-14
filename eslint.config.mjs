@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Read-only prototype material; never imported or run.
     "reference/**",
+    // Other sessions' working copies of this same code (git worktrees); each is checked from inside itself.
+    ".claude/**",
   ]),
   {
     // Application code reaches the database only through withTenant() in src/db, and Supabase

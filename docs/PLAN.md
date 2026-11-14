@@ -158,7 +158,7 @@ Fifty-two steps in nine phases. Phases finish in order; steps inside a phase mos
 
 | Step | Deliverable | Acceptance | Status |
 | --- | --- | --- | --- |
-| 30 | Stock transfers, adjustments with reasons, bulk opening stock, stock count sheets with variance posting; concurrent-edit warning | Count variance posts to the inventory adjustment account | |
+| 30 | Stock transfers, adjustments with reasons, bulk opening stock, stock count sheets with variance posting; concurrent-edit warning | Count variance posts to the inventory adjustment account | Done 2026-11-14 |
 | 31 | Reports: stock valuation, stock movement, stock ageing, low stock, item profitability (margin) | Valuation equals the inventory control account | |
 | 32 | Receipts (bank, cash, cheque) allocated across invoices; cheque lifecycle received → deposited → cleared/bounced; bounce reverses allocation, AR and commission release in one transaction; cheques-in-hand register; bank charges on receipt | Bouncing a cheque restores the invoice balance and reverses the released commission | |
 | 33 | Recovery: follow-ups, promise-to-pay with broken-promise list, customer statement print and email, aged receivables | Overdue list matches ageing report | |

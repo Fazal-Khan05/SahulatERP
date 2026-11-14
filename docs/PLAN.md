@@ -139,7 +139,7 @@ Fifty-two steps in nine phases. Phases finish in order; steps inside a phase mos
 | 18 | Sales documents table and the one document screen: quotation and sales order (draft/submit, lines, price resolution, line discounts, salesperson splits summing to 100%, credit-limit check with owner override, keyboard entry) | Over-limit sale blocked; override logged with reason | Done 2026-11-13 |
 | 19 | Delivery note from order (partial, remaining qty tracked) with stock moves at weighted-average cost | Stock and COGS move; delivering more than ordered is refused | Done 2026-11-13 |
 | 20 | Sales invoice from delivery or order; posting: AR, revenue, output tax, further tax, COGS; buyer snapshot stored; FBR fields stored (module off, so not submitted) | Journal matches a hand-worked example for a registered buyer and an unregistered one | Done 2026-11-13 |
-| 21 | Credit note / sales return: restock (saleable or damaged), reversal postings, commission reversal hook | Returning more than invoiced refused; partial return posts partial reversal | |
+| 21 | Credit note / sales return: restock (saleable or damaged), reversal postings, commission reversal hook | Returning more than invoiced refused; partial return posts partial reversal | Done 2026-11-15 (the commission reversal comes with Step 38) |
 | 22 | Walk-in customer, multi-currency sale with FX gain/loss on settlement, customer advances with own control account | Advance applied to an invoice clears both correctly | |
 | 23 | Print and PDF for all sales documents; email sending with PDF; document timeline | Email arrives with the PDF; print header uses the tenant logo | Done 2026-11-14, except the send itself: no email service chosen yet (docs/later/step-23.md) |
 

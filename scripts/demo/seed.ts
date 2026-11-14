@@ -135,7 +135,8 @@ export async function seedDemo(): Promise<string[]> {
     const set = (await addUnit(owner, { code: "set", name: "Set" })).id;
     const categories: Record<string, string> = {};
     for (const name of ["Brakes", "Lighting", "Engine parts", "Tyres and tubes", "Accessories"]) categories[name] = (await addItemCategory(owner, name)).id;
-    // code, name, category, unit, price, cost, reorder level, opening quantity in Karachi, in Lahore
+    // code, name, category, unit, price, cost, reorder level, opening quantity in Karachi, in Lahore.
+    // The LED headlight and the carburettor end up below their reorder levels, for the Low stock report.
     const ITEMS: [string, string, string, string, number, number, number, number, number][] = [
       ["BR-101", "Brake shoe, 70cc rear", "Brakes", piece, 450, 300, 50, 400, 150],
       ["BR-102", "Brake shoe, 125cc rear", "Brakes", piece, 520, 340, 40, 300, 100],
@@ -145,7 +146,7 @@ export async function seedDemo(): Promise<string[]> {
       ["BR-140", "Brake drum, 70cc", "Brakes", piece, 2400, 1700, 10, 40, 15],
       ["LT-201", "Headlight bulb, 12V 35W", "Lighting", piece, 220, 120, 100, 800, 300],
       ["LT-202", "Indicator set, amber", "Lighting", set, 950, 600, 25, 120, 50],
-      ["LT-210", "LED headlight unit", "Lighting", piece, 3800, 2600, 10, 45, 20],
+      ["LT-210", "LED headlight unit", "Lighting", piece, 3800, 2600, 60, 45, 20],
       ["LT-220", "Tail light assembly", "Lighting", piece, 1450, 950, 15, 80, 30],
       ["LT-230", "Horn, 12V dual tone", "Lighting", piece, 1150, 720, 20, 90, 40],
       ["LT-240", "Wiring harness, 70cc", "Lighting", piece, 2900, 2000, 8, 30, 10],
@@ -154,7 +155,7 @@ export async function seedDemo(): Promise<string[]> {
       ["EN-310", "Clutch plate set, 70cc", "Engine parts", set, 1850, 1250, 20, 110, 40],
       ["EN-320", "Chain sprocket kit, 70cc", "Engine parts", set, 3100, 2150, 15, 90, 30],
       ["EN-330", "Air filter, 125cc", "Engine parts", piece, 420, 250, 50, 300, 120],
-      ["EN-340", "Carburettor, 70cc", "Engine parts", piece, 5600, 4000, 5, 25, 10],
+      ["EN-340", "Carburettor, 70cc", "Engine parts", piece, 5600, 4000, 35, 25, 10],
       ["EN-350", "Gasket set, 125cc", "Engine parts", set, 780, 480, 30, 200, 80],
       ["TY-401", "Tyre 2.75-17, rear", "Tyres and tubes", piece, 4100, 3200, 20, 120, 50],
       ["TY-402", "Tyre 2.50-17, front", "Tyres and tubes", piece, 3600, 2800, 20, 110, 40],

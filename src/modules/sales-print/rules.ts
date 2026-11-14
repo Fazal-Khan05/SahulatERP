@@ -25,6 +25,8 @@ export function printTitle(kind: SalesKind, taxed: boolean): string {
       return "Delivery note";
     case "invoice":
       return taxed ? "Sales tax invoice" : "Invoice";
+    case "credit_note":
+      return "Credit note";
   }
 }
 

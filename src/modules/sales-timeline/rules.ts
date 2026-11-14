@@ -36,7 +36,7 @@ export type TimelineEvent = {
   unsettledEmailId: string | null;
 };
 
-const posts = (kind: SalesKind) => kind === "delivery" || kind === "invoice";
+const posts = (kind: SalesKind) => kind === "delivery" || kind === "invoice" || kind === "credit_note";
 
 /** The document's timeline, oldest first. `nameOf` gives a member's name, or a stand-in for one the reader may not see. */
 export function buildTimeline(facts: TimelineFacts, nameOf: (userId: string) => string): TimelineEvent[] {

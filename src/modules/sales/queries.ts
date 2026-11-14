@@ -56,8 +56,10 @@ export type StoredLine = {
   extraTaxAmount: Decimal;
   value: Decimal;
   total: Decimal;
-  /** On a delivery note: the line of the order this line delivers. */
+  /** On a delivery note: the line of the order this line delivers. On an invoice: the line it bills. On a credit note: the invoice line it takes back. */
   sourceLineId: string | null;
+  /** On a credit note: how much of the quantity came back damaged. Null on every other kind. */
+  damagedQuantity: Decimal | null;
 };
 
 export type SalesDocument = {
@@ -178,6 +180,7 @@ export async function selectSalesDocument(tx: Tx, tenantId: string, id: string, 
         value: salesLines.value,
         total: salesLines.total,
         sourceLineId: salesLines.sourceLineId,
+        damagedQuantity: salesLines.damagedQuantity,
       })
       .from(salesLines)
       .innerJoin(items, and(eq(items.tenantId, salesLines.tenantId), eq(items.id, salesLines.itemId)))
@@ -250,6 +253,7 @@ export async function selectSalesDocument(tx: Tx, tenantId: string, id: string, 
       extraTaxAmount: new Decimal(line.extraTaxAmount),
       value: new Decimal(line.value),
       total: new Decimal(line.total),
+      damagedQuantity: exact(line.damagedQuantity),
     })),
     shares: shareRows.map((share) => ({ userId: share.userId, percent: new Decimal(share.percent) })),
   };
@@ -289,7 +293,7 @@ export type SalesListRow = { id: string; kind: SalesKind; status: SalesStatus; n
 
 /** The newest documents of one kind, drafts first among those of the same day. `search` matches part of the number or the customer's name. */
 export async function listSalesDocuments(ctx: TenantContext, options: { kind: SalesKind; status?: SalesStatus | null; search?: string }): Promise<{ rows: SalesListRow[]; more: boolean }> {
-  if (options.kind === "quotation" || options.kind === "invoice") requireSalesAccess(ctx);
+  if (options.kind === "quotation" || options.kind === "invoice" || options.kind === "credit_note") requireSalesAccess(ctx);
   else requireDocumentAccess(ctx);
   const term = (options.search ?? "").replace(/[^\P{Cc}]/gu, " ").trim().slice(0, 80);
   const pattern = `%${term.replace(/[\\%_]/g, "\\$&")}%`;

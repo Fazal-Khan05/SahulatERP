@@ -50,8 +50,8 @@ export const salesDocuments = pgTable(
     notes: text(),
     // The document this one was made from and is checked against: for a delivery note, its
     // sales order; for an invoice, the delivery note it bills or the sales order it delivers and
-    // bills at once. Nothing on a quotation or an order (an order made from a quotation is only
-    // linked to it).
+    // bills at once; for a credit note, the invoice it takes back part of. Nothing on a
+    // quotation or an order (an order made from a quotation is only linked to it).
     sourceDocumentId: uuid("source_document_id"),
     // On an invoice: the day it falls due, from the customer's credit days when it was posted.
     dueDate: date("due_date", { mode: "string" }),
@@ -198,8 +198,12 @@ export const salesLines = pgTable(
     fbrUomCode: text("fbr_uom_code"),
     hsCode: text("hs_code"),
     // On a delivery note: the line of the sales order that this line delivers. On an invoice:
-    // the line of the delivery note or of the sales order that this line bills.
+    // the line of the delivery note or of the sales order that this line bills. On a credit
+    // note: the line of the invoice whose goods come back.
     sourceLineId: uuid("source_line_id"),
+    // On a credit note only: how many of the quantity returned came back damaged and are written
+    // off, not put back on the shelf. Nothing on any other kind of document.
+    damagedQuantity: numeric("damaged_quantity", { precision: 20, scale: 4 }),
     // The value of the supply before tax and after the discount, and what the buyer pays for the line.
     value: numeric({ precision: 20, scale: 4 }).notNull(),
     total: numeric({ precision: 20, scale: 4 }).notNull(),
@@ -225,6 +229,7 @@ export const salesLines = pgTable(
       .on(t.tenantId, t.sourceLineId)
       .where(sql`${t.sourceLineId} is not null`),
     check("sales_lines_not_own_source", sql`${t.sourceLineId} is distinct from ${t.id}`),
+    check("sales_lines_damaged_within_quantity", sql`${t.damagedQuantity} >= 0 and ${t.damagedQuantity} <= ${t.quantity}`),
     check("sales_lines_line_no_positive", sql`${t.lineNo} >= 1`),
     check("sales_lines_description_length", sql`char_length(btrim(${t.description})) between 1 and 300`),
     check("sales_lines_quantity_positive", sql`${t.quantity} > 0 and ${t.quantity} < 1e12 and ${t.unitFactor} > 0 and ${t.unitFactor} < 1e12`),

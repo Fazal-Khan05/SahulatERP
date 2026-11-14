@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import Decimal from "decimal.js";
 import { closeDb } from "@/db";
@@ -64,7 +64,7 @@ export async function seedDemo(): Promise<string[]> {
   try {
     const found = await findDemo(sql);
     if (found.tenantIds.length > 0 || found.userIds.length > 0) throw new Error("The demo company already exists. Run npm run demo:reset first.");
-    if (existsSync(ACCOUNTS_FILE)) throw new Error(`${ACCOUNTS_FILE} already exists. Remove it, or run npm run demo:reset, first.`);
+    if (existsSync(ACCOUNTS_FILE) && readFileSync(ACCOUNTS_FILE, "utf8").trim() !== "") throw new Error(`${ACCOUNTS_FILE} already holds logins. Run npm run demo:reset first.`);
 
     // ── The logins ──────────────────────────────────────────────────────────────────────────────
     const supabase = supabaseAdmin();
@@ -345,7 +345,8 @@ export async function resetDemo(): Promise<string[]> {
       const { error } = await supabase.auth.admin.deleteUser(id);
       if (error) throw new Error(`Could not remove a demo login: ${error.message}`);
     }
-    if (existsSync(ACCOUNTS_FILE)) writeFileSync(ACCOUNTS_FILE, "");
+    // The passwords of logins that no longer exist are of no use to anyone.
+    rmSync(ACCOUNTS_FILE, { force: true });
     return [`Removed ${owned.length} demo company and ${found.userIds.length} demo logins.`];
   } finally {
     await sql.end();

@@ -9,7 +9,13 @@ import type { ReportSection, TrackLinks, TrackPermissions } from "./shape";
 // Plain lists only. Import types, never a value from a module: the modules read this file.
 
 /** Who may do what on this track's screens. Asked through can(), like every other permission. */
-export const permissions = {} as const satisfies TrackPermissions;
+export const permissions = {
+  // Step 37. Only the owner sets up commission plans and the sales hierarchy (the founder's
+  // decision, 2026-11-14); the accountant, the auditor and the sales manager read them. The
+  // database's policies in drizzle/0025_commission_plans.sql name the same roles.
+  "commission.read": ["owner", "accountant", "auditor", "sales_manager"],
+  "commission.manage": ["owner"],
+} as const satisfies TrackPermissions;
 
 /**
  * Where this track's menu entries lead: null until the screen is built, then its address. The
@@ -17,7 +23,7 @@ export const permissions = {} as const satisfies TrackPermissions;
  */
 export const links = {
   cashAndBank: null,
-  commissions: null,
+  commissions: "/commissions",
   myCommission: null,
   payroll: null,
   employees: null,
@@ -38,4 +44,12 @@ export const controls = {} as const satisfies Record<string, string>;
 export const documents = {} as const satisfies Record<string, string>;
 
 /** This track's reports, listed on the Reports page under headings of its own. */
-export const reports: readonly ReportSection[] = [];
+export const reports: readonly ReportSection[] = [
+  {
+    title: "Commissions",
+    reports: [
+      // The accountant's menu has no Commissions entry; this is how an accountant reaches the plans.
+      { label: "Commission plans", href: "/commissions", about: "Who is on which plan, its rates, slabs and target, and who reports to whom.", permission: "commission.read", module: "commissions" },
+    ],
+  },
+];

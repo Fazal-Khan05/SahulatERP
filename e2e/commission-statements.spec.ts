@@ -53,7 +53,7 @@ test("a salesperson's statement shows the sale and what the customer's payment r
     on conflict (tenant_id, module) do update set enabled = true`;
   const [unit] = await sql`insert into public.units (tenant_id, code, name, created_by) values (${tenantId}, 'pc', 'Piece', ${owner.id}) returning id`;
   const [item] = await sql`insert into public.items (tenant_id, code, name, base_unit_id, default_price, created_by, updated_by) values (${tenantId}, 'HL-1', 'Helmet', ${unit.id}, 1000, ${owner.id}, ${owner.id}) returning id`;
-  const [customer] = await sql`insert into public.customers (tenant_id, name, code, credit_days, created_by, updated_by) values (${tenantId}, 'Registered Dealer', 'C-001', 30, ${owner.id}, ${owner.id}) returning id`;
+  await sql`insert into public.customers (tenant_id, name, code, credit_days, created_by, updated_by) values (${tenantId}, 'Registered Dealer', 'C-001', 30, ${owner.id}, ${owner.id})`;
   const [warehouse] = await sql`select id from public.warehouses where tenant_id = ${tenantId}`;
   await seedStock(sql, { tenantId, itemId: item.id, warehouseId: warehouse.id, quantity: "100", value: "60000", userId: owner.id });
   // 2% for everyone; the manager earns 0.5% on what the seller sells.

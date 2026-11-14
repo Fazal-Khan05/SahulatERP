@@ -24,6 +24,8 @@ function refusal(error: unknown, date: string): UserError | null {
   if (code === "SE313") return new UserError("That date has not come yet. Nothing is recorded before it happens.");
   if (code === "SE314") return new UserError("Choose a cash or bank account that is in use. An archived account cannot be used: restore it first under Chart of accounts.");
   if (code === "SE317") return new UserError("Commission is paid by someone who works across the whole company, not in some branches only.");
+  if (code === "SE318") return new UserError("A receipt, a cheque or a return is being recorded on one of these invoices right now. Try again in a moment.");
+  if (code === "SE319") return new UserError("That date is too early: commission is paid on or after the day it was released.");
   if (code === "42501") return new UserError("Your role does not permit this action.");
   if (code === "SE312" || code === "SE315" || code === "SE316" || code === "SE074") return new UserError("That could not be done as it stands. Reload the page and try again.");
   return null;

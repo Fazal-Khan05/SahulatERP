@@ -50,10 +50,11 @@ export function earnedAfterReturn(accrued: Decimal, invoiced: Decimal, returned:
 /**
  * How much of what is earned has been released: the proportion of the invoice that has been
  * collected. `remaining` is what is left of the invoice to collect, its total less its credit
- * notes; an invoice that has all come back releases nothing.
+ * notes. With nothing left to collect there is nothing to wait for: an invoice that came to
+ * nothing releases what it earned at once, and one that has all come back has earned nothing.
  */
 export function releasedFor(earned: Decimal, collected: Decimal, remaining: Decimal): Decimal {
-  if (remaining.lte(0)) return NIL;
+  if (remaining.lte(0)) return earned;
   return four(earned.times(Decimal.min(collected.div(remaining), 1)));
 }
 

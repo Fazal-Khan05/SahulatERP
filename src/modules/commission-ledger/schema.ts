@@ -117,6 +117,7 @@ export const commissionMovements = pgTable(
   (t) => [
     unique("commission_movements_tenant_id_id_key").on(t.tenantId, t.id),
     foreignKey({ name: "commission_movements_accrual_fk", columns: [t.tenantId, t.accrualId], foreignColumns: [commissionAccruals.tenantId, commissionAccruals.id] }),
+    unique("commission_movements_seq_key").on(t.seq),
     index("commission_movements_accrual_idx").on(t.tenantId, t.accrualId, t.seq),
     index("commission_movements_source_idx").on(t.tenantId, t.sourceType, t.sourceId),
     check("commission_movements_type_known", sql`${t.type} in ('accrued', 'entitlement_adjusted', 'released', 'release_reversed', 'paid', 'recovery_recorded')`),

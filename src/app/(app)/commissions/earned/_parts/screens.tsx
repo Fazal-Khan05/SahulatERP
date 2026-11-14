@@ -38,10 +38,13 @@ export async function EarnedScreen({ searchParams }: { searchParams: Promise<{ p
   }
   const query = await searchParams;
   const asked = typeof query.person === "string" ? query.person : null;
-  const person = everyone ? asked : session.userId;
+  // Someone who does not read everyone's sees their own, and their team's when they have one:
+  // row-level security decides which people come back at all.
+  const person = everyone ? asked : (asked ?? session.userId);
   const approver = can(session.role, "commission.approve");
   const payer = can(session.role, "commission.pay") && session.branchIds === null;
   const [earned, payments, accounts] = await Promise.all([getEarned(session, person), listPayments(session), payer && person ? listMoneyAccounts(session) : []]);
+  const team = everyone || earned.people.some((p) => p.userId !== session.userId);
   const chosen = person ? earned.people.find((p) => p.userId === person) : undefined;
   const rows = person ? earned.accruals : [];
   const totals = totalsOf(rows);
@@ -51,12 +54,12 @@ export async function EarnedScreen({ searchParams }: { searchParams: Promise<{ p
   return (
     <>
       <PageHead
-        title={everyone ? "Commission earned" : "My commission"}
+        title={everyone ? "Commission earned" : team ? "My commission and my team's" : "My commission"}
         sub="Commission is earned when an invoice is posted, released as the customer pays (a cheque when it clears), and taken back when goods are returned or a cheque bounces."
       />
       <div className="flex max-w-6xl flex-col gap-5">
-        {everyone ? (
-          <Card title="The sales team">
+        {team ? (
+          <Card title={everyone ? "The sales team" : "My team and I"}>
             {earned.people.length === 0 ? (
               <Empty>Nobody has earned commission yet. It is earned when an invoice with a salesperson on it is posted, on the plan that applies that day.</Empty>
             ) : (
@@ -98,7 +101,7 @@ export async function EarnedScreen({ searchParams }: { searchParams: Promise<{ p
         ) : null}
 
         {person ? (
-          <Card title={everyone ? `What ${chosen?.name ?? "this person"} has earned` : "What I have earned"}>
+          <Card title={person === session.userId ? "What I have earned" : `What ${chosen?.name ?? "this person"} has earned`}>
             {rows.length === 0 ? (
               <Empty>Nothing yet.</Empty>
             ) : (

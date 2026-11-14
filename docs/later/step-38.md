@@ -12,6 +12,9 @@ Built in track C (commissions) by the Builder, on Step 37's plans (the Finisher'
 - **The owner and the accountant approve commission for payment.**
 - **Commission already paid on a sale that is later undone** (goods returned, or a cheque that
   bounces after it cleared) **is carried forward and taken from later commission.**
+- **Who reads it**: each salesperson their own; a manager also their team's, at any depth
+  below them in the sales hierarchy (whoever has people under them there, whatever their
+  role); the owner and the accountant everyone's, and the auditor too.
 
 ## What was built
 
@@ -76,14 +79,17 @@ These came up while building. Each is the option I would recommend; say if any s
    The money came in earlier, for the goods that have since come back.
 9. **A manager's share follows the seller's line**: earned, released, taken back and owed back
    on the same events.
-10. **Who reads what.** The owner, an accountant and the auditor read everyone's commission; a
-    salesperson and a manager read their own (a manager's own includes what their team's
-    sales brought them, not their team members' commission).
+10. **A manager's team is the hierarchy as it stands today.** Someone moved under a new
+    manager is read by the new manager from then on, past commission included.
 11. **Commission is earned whether or not the Commissions module is switched on** (as in the
     old prototype), as long as a plan applies: switching the module off hides the screens, it
     does not stop people earning.
 12. **Nothing is withheld from a commission payment.** Income tax on commission paid to an
     employee belongs with payroll (Step 41); a payment here is the gross amount.
+13. **What a person owes back stays inside Commission payable**, against their name, until it
+    comes out of a later payment; it is not moved to an account of its own. The Commission
+    earned page shows it by person. (The independent accounting check would rather see an
+    asset account for it; see the first judgement in `docs/examples/step-38.md`.)
 
 ## For the other steps
 
@@ -101,8 +107,10 @@ These came up while building. Each is the option I would recommend; say if any s
   movements with `movement_date` in it. `earned = sum(accrued + entitlement_adjusted)`,
   `released = sum(released) - sum(release_reversed)`, `paid = sum(paid) - sum(recovery_recorded)`,
   always, for every accrual.
-- Row-level security already gives a salesperson their own rows and the owner, an accountant
-  and the auditor everyone's.
+- Row-level security already gives everyone their own rows, a manager also the rows of
+  everyone below them in `sales_hierarchy` (`app.commission_team()` is the signed-in member
+  and everyone below, as it stands now), and the owner, an accountant and the auditor
+  everyone's.
 - To approve: `select app.approve_commission(array[...accrual ids])`. To pay:
   `select * from app.pay_commission(user, date, account, note)`. In the app:
   `approveCommission` and `payCommission` in `src/modules/commission-ledger/commands.ts`, and
@@ -126,5 +134,9 @@ has source type `commission_payment` and carries the CP number.
 - A limit on how much of a payment can go to what is owed back.
 - A person who has left and still owes commission back: it stays on their account; there is
   no way yet to write it off or to collect it another way.
-- Commission on the invoice's own page (the read model is there: `getInvoiceCommission`).
+- An account of its own for commission owed back by staff, and its ageing.
+- Taking unreleased commission back when a customer's debt is written off (nothing writes a
+  debt off yet).
+- A warning when commission is paid in cash above the limit the income tax law is understood
+  to set for salary paid outside a bank; withholding income tax (with payroll).
 - A statement for each person (Step 39).

@@ -1,5 +1,5 @@
 {
-  "id": "6514f543-3826-42e5-a56c-9f7a8fad0029",
+  "id": "9aa3fe15-2aa2-4a3e-ba17-361636a0024d",
   "prevId": "603a3333-3ffe-456d-a86e-752a5e19ff13",
   "version": "7",
   "dialect": "postgresql",
@@ -505,6 +505,13 @@
           "columns": [
             "tenant_id",
             "id"
+          ]
+        },
+        "commission_movements_seq_key": {
+          "name": "commission_movements_seq_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "seq"
           ]
         }
       },

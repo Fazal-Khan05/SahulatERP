@@ -16,6 +16,7 @@ BEGIN
 END $$;
 
 DROP FUNCTION app.pay_commission(uuid, date, uuid, text);
+DROP FUNCTION app.commission_team();
 DROP FUNCTION app.approve_commission(uuid[]);
 DROP TRIGGER credit_note_allocations_commission ON public.credit_note_allocations;
 DROP FUNCTION app.commission_after_credit();
@@ -26,8 +27,9 @@ DROP TRIGGER receipt_allocations_commission_counted ON public.receipt_allocation
 DROP FUNCTION app.commission_after_allocation();
 DROP TRIGGER sales_documents_commission ON public.sales_documents;
 DROP FUNCTION app.commission_after_document();
-DROP FUNCTION app.refresh_commission(uuid, uuid, text, uuid, date);
+DROP FUNCTION app.refresh_commission(uuid, uuid, text, uuid, date, integer);
 DROP FUNCTION app.commission_collected(uuid, uuid);
+DROP FUNCTION app.commission_money_in(uuid, uuid);
 DROP FUNCTION app.commission_month_sales(uuid, uuid, date);
 DROP FUNCTION app.audit_reserved_commission(text);
 DROP FUNCTION app.document_type_cp();
@@ -39,6 +41,6 @@ DROP FUNCTION app.check_commission_accrual();
 DROP FUNCTION app.refuse_commission_change();
 
 -- The row drizzle-kit wrote for 0027_commission_ledger (its "when" in drizzle/meta/_journal.json).
-DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1794698475367;
+DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1794699922249;
 
 COMMIT;

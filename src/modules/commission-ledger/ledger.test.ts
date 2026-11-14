@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import Decimal from "decimal.js";
 import { sql } from "drizzle-orm";
+import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb, withTenant } from "@/db";
 import { savePlan, setManager } from "@/modules/commissions/commands";
-import { postCreditNote, saveCreditNoteDraft, startCreditNote } from "@/modules/credit-notes/commands";
+import { applyCredit, postCreditNote, saveCreditNoteDraft, startCreditNote } from "@/modules/credit-notes/commands";
 import { setBaseCurrency } from "@/modules/currencies/commands";
 import { addUnit, createItem } from "@/modules/items/commands";
 import { addAccount, seedAccounts } from "@/modules/ledger/commands";
@@ -34,7 +35,7 @@ const roles = ["owner", "accountant", "auditor", "sales_manager", "salesperson",
 const userIds = Object.fromEntries(roles.map((role) => [role, randomUUID()])) as Record<(typeof roles)[number], string>;
 // Salespeople: hamza and sara on the default plan, mina under the sales manager, tara with a
 // monthly target, una paid per unit, nadia with no plan at all (before the default plan starts).
-const people = Object.fromEntries(["hamza", "sara", "mina", "tara", "una", "zero"].map((key) => [key, randomUUID()])) as Record<string, string>;
+const people = Object.fromEntries(["hamza", "sara", "mina", "tara", "una", "zero", "slab", "lone"].map((key) => [key, randomUUID()])) as Record<string, string>;
 const cityAccountant = randomUUID();
 const ownerT = randomUUID();
 const sellerT1 = randomUUID();
@@ -202,6 +203,8 @@ describe.skipIf(!hasDb)("commission earned, released, taken back and paid", () =
     await savePlan(as.owner, null, plan({ name: "Tara", userId: people.tara, target: "15000", multiplier: "2" }));
     await savePlan(as.owner, null, plan({ name: "Una", userId: people.una, kind: "per_unit", rate: "10" }));
     await savePlan(as.owner, null, plan({ name: "Zero", userId: people.zero, rate: "0" }));
+    // Slab: nothing on the first 10,000 of a month, 5% above it.
+    await savePlan(as.owner, null, plan({ name: "Slab", userId: people.slab, kind: "tiered", rate: "0", tiers: [{ threshold: "0", rate: "0" }, { threshold: "10000", rate: "5" }] }));
     await setManager(as.owner, people.mina, userIds.sales_manager);
     await savePlan(taxed, null, plan({}));
   }, 240_000);
@@ -503,6 +506,100 @@ describe.skipIf(!hasDb)("commission earned, released, taken back and paid", () =
     await booksAgree(tenantT);
   });
 
+  it("holds under what an attacker of the database tried", async () => {
+    // The month is the calendar's, whatever time zone the session that posts the invoice is set to.
+    const month = (zone: string) => admin.begin(async (tx) => {
+      await tx.unsafe(`set local timezone = '${zone}'`);
+      return (await tx`select app.commission_month_sales(${tenantA}, ${people.tara}, '2026-11-01'::date)::text as v`)[0].v as string;
+    });
+    expect(await month("<A>0<B>-30,J304/0,J305/0")).toBe(await month("UTC"));
+
+    // A sale that earned nothing (the first slab of a plan at 0%) still fills the month, and still comes off it when it comes back.
+    const first = await sell("2026-11-06", { quantity: "100", shares: [by("slab")] });
+    expect(await standing(first)).toEqual(["slab own on 10000: 0 / 0 / 0"]);
+    await giveBack("2026-11-07", first, "100");
+    expect(await movements(first)).toEqual(["accrued 0", "entitlement_adjusted 0"]);
+    // The month is empty again: the next 10,000 is in the first slab, and earns nothing (not 5%).
+    expect(await standing(await sell("2026-11-08", { quantity: "100", shares: [by("slab")] }))).toEqual(["slab own on 10000: 0 / 0 / 0"]);
+    expect(await standing(await sell("2026-11-08", { quantity: "100", shares: [by("slab")] }))).toEqual(["slab own on 10000: 500 / 0 / 0"]);
+
+    // A sale that comes to nothing has nothing to collect: so much a unit on it is released at once.
+    const free = await sell("2026-11-08", { quantity: "5", unitPrice: "0", shares: [by("una")] });
+    expect(await standing(free)).toEqual(["una own on 0: 50 / 50 / 0"]);
+
+    // Credit from a return counts as money collected on another invoice only while the invoice it came from is settled.
+    const a = await sell("2026-11-09", { quantity: "100", shares: [by("lone")] });
+    const cheque = await chequeIn("2026-11-09", a, "10000");
+    await clear(cheque, "2026-11-09");
+    const note = await giveBack("2026-11-10", a, "40");
+    const b = await sell("2026-11-10", { quantity: "100", shares: [by("lone")] });
+    await applyCredit(as.accountant, note, { date: "2026-11-10", allocations: [{ kind: "invoice", id: b, amount: "4000" }] });
+    expect([...(await standing(a)), ...(await standing(b))]).toEqual(["lone own on 10000: 120 / 120 / 0", "lone own on 10000: 200 / 80 / 0"]);
+    // The cheque behind the credit bounces: nothing has been collected from this customer for either invoice.
+    await bounceCheque(as.accountant, cheque, { date: "2026-11-11", reason: "Insufficient funds" });
+    expect([...(await standing(a)), ...(await standing(b))]).toEqual(["lone own on 10000: 120 / 0 / 0", "lone own on 10000: 200 / 0 / 0"]);
+    // The customer pays the 6,000 that the goods kept on the first invoice come to: its commission is released. The
+    // 4,000 of credit that went to the second invoice is still not money in hand.
+    await cashIn("2026-11-12", [[a, "6000"]]);
+    expect([...(await standing(a)), ...(await standing(b))]).toEqual(["lone own on 10000: 120 / 120 / 0", "lone own on 10000: 200 / 0 / 0"]);
+    // The other 4,000 is paid: the credit is money again, and counts on the second invoice.
+    await cashIn("2026-11-12", [[a, "4000"]]);
+    expect([...(await standing(a)), ...(await standing(b))]).toEqual(["lone own on 10000: 120 / 120 / 0", "lone own on 10000: 200 / 80 / 0"]);
+
+    // Commission is not paid on a day before it was released.
+    await approveCommission(as.owner, await accrualIds(a));
+    await expect(payCommission(as.owner, people.lone, { date: "2026-11-01", accountId: cash })).rejects.toThrow("That date is too early");
+
+    // Two things at the same moment on one invoice: a cash receipt is cancelled while a cheque clears. The second waits
+    // for the first and then reads what it left: 5,000 of 10,000 collected, half released; not all of it.
+    const racy = await sell("2026-11-12", { quantity: "100", shares: [by("lone")] });
+    const cashReceipt = await cashIn("2026-11-12", [[racy, "5000"]]);
+    const other = await chequeIn("2026-11-12", racy, "5000");
+    await depositCheque(as.accountant, other, { accountId: bank, date: "2026-11-12" });
+    const one = postgres(process.env.DATABASE_URL!, { max: 1 });
+    const two = postgres(process.env.DATABASE_URL!, { max: 1 });
+    const identify = (tx: postgres.TransactionSql) => tx`select set_config('app.user_id', ${userIds.accountant}, true), set_config('app.tenant_id', ${tenantA}, true)`;
+    try {
+      let clearing: Promise<unknown> | undefined;
+      await one.begin(async (tx) => {
+        await identify(tx);
+        await tx`select app.cancel_receipt(${cashReceipt}::uuid, '2026-11-12'::date, 'Wrong customer')`;
+        clearing = two.begin(async (tx2) => {
+          await identify(tx2);
+          await tx2`select app.clear_cheque(${other}::uuid, '2026-11-12'::date, 0)`;
+        });
+        // The clearing is waiting for this transaction before it reads anything.
+        for (let i = 0; i < 15; i += 1) {
+          const [waiting] = await admin`select count(*)::int as n from pg_stat_activity where wait_event_type = 'Lock' and datname = current_database() and pid <> pg_backend_pid()`;
+          if (waiting.n > 0) break;
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+      });
+      await clearing;
+    } finally {
+      await one.end();
+      await two.end();
+    }
+    expect(await standing(racy)).toEqual(["lone own on 10000: 200 / 100 / 0"]);
+
+    // Approval never waits on a posting: while something holds an accrual, it steps aside and says so.
+    const [held] = await accrualIds(racy);
+    await admin.begin(async (tx) => {
+      await tx`select 1 from public.commission_accruals where id = ${held} for update`;
+      await expect(approveCommission(as.owner, [held])).rejects.toThrow("is being recorded on one of these invoices right now");
+    });
+    // Asked for with every check made at once instead of at the end, an invoice still posts and accrues.
+    const strict = await saveSalesDraft(as.owner, null, { kind: "order", date: "2026-11-12", customerId: retailer, warehouseId: warehouse, lines: [{ itemId: lamp, quantity: "1", unitId: "", unitPrice: "", discountPercent: "", description: "" }], shares: [by("lone")] });
+    await submitSalesDocument(as.owner, strict.id);
+    const { id: strictInvoice } = await startInvoice(as.owner, strict.id);
+    await withTenant(as.owner.userId, tenantA, async (tx) => {
+      await tx.execute(sql`set constraints all immediate`);
+      await tx.execute(sql`select app.post_sales_invoice(${strictInvoice}::uuid)`);
+    });
+    expect(await standing(strictInvoice)).toEqual(["lone own on 100: 2 / 0 / 0"]);
+    await booksAgree();
+  });
+
   it("is read by those it concerns and written by nobody but the database's own functions", async () => {
     const [mine] = await admin<{ id: string; invoice_id: string }[]>`select id, invoice_id from public.commission_accruals where tenant_id = ${tenantA} and user_id = ${people.hamza} order by invoice_date limit 1`;
     // The owner, an accountant and the auditor read everyone's; a salesperson and a manager their own; the rest nothing.
@@ -512,7 +609,12 @@ describe.skipIf(!hasDb)("commission earned, released, taken back and paid", () =
     expect([await count(as.accountant), await count(as.auditor)]).toEqual([all, all]);
     const [own] = await admin`select count(*)::int as n from public.commission_accruals where tenant_id = ${tenantA} and user_id = ${people.hamza}`;
     expect(await count(seller("hamza"))).toBe(own.n);
-    expect(await count(as.sales_manager)).toBe(1);
+    // A manager reads their own and that of everyone below them: the sales manager's share of Mina's sale, and Mina's own.
+    expect(await count(as.sales_manager)).toBe(2);
+    expect((await getEarned(as.sales_manager)).people.map((p) => p.name)).toEqual(["mina@ledger.test", as.sales_manager.email].sort());
+    // Mina reads her own, not her manager's.
+    expect(await count(seller("mina"))).toBe(1);
+    expect((await withTenant(people.mina, tenantA, (tx) => tx.execute(sql`select app.commission_team() as team`)))[0].team).toEqual([people.mina]);
     expect([await count(as.warehouse_manager), await count(as.recovery_officer), await count(scoped)]).toEqual([0, 0, 0]);
     expect((await withTenant(ownerT, tenantT, (tx) => tx.execute(sql`select 1 from commission_accruals where tenant_id = ${tenantA}::uuid`))).length).toBe(0);
     const earned = await getEarned(seller("hamza"));

@@ -61,6 +61,12 @@
   and browser tests are run by the person merging, on their own database, before the pull
   request. A database for CI would make that automatic.
 
+- **Supabase's own function `public.rls_auto_enable` on the first project** is SECURITY DEFINER,
+  owned by postgres, with `search_path=pg_catalog` (so the temporary schema is still looked in
+  first). It is not ours and `drizzle/0023_safe_search_path.sql` leaves it alone; with the app's
+  roles unable to make temporary objects it cannot be reached that way. The second project does
+  not have it. Worth a look in Step 47 (is it callable by `app_runtime`, and is it still needed).
+
 ## Decided while preparing
 
 - The standard chart, the kinds of numbered document, the audit rows only the database writes

@@ -86,7 +86,8 @@ fi
 
 # ── this working copy's own database ─────────────────────────────────────────────────────────
 if ! exists "$NAME"; then
-  sql -U supabase_admin -d postgres -c "create database $NAME template app"
+  # Owned by postgres, like "app": the migrations run as postgres and make a schema of their own.
+  sql -U supabase_admin -d postgres -c "create database $NAME template app owner postgres"
   # Whatever this working copy has beyond "app".
   migrate "$NAME"
   echo "Made the database $NAME."

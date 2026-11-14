@@ -141,6 +141,13 @@
       "when": 1794581449059,
       "tag": "0019_journal_documents",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1794654529157,
+      "tag": "0020_sales_document_emails",
+      "breakpoints": true
     }
   ]
 }

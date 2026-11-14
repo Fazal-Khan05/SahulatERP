@@ -9,7 +9,11 @@ import type { ReportSection, TrackLinks, TrackPermissions } from "./shape";
 // Plain lists only. Import types, never a value from a module: the modules read this file.
 
 /** Who may do what on this track's screens. Asked through can(), like every other permission. */
-export const permissions = {} as const satisfies TrackPermissions;
+export const permissions = {
+  // Step 23: email a numbered sales document to the customer. The same roles that write sales
+  // documents; the database's own policy on sales_document_emails names the same four.
+  "sales.email": ["owner", "accountant", "sales_manager", "salesperson"],
+} as const satisfies TrackPermissions;
 
 /**
  * Where this track's menu entries lead: null until the screen is built, then its address. The

@@ -93,8 +93,10 @@ test("an owner posts an invoice for the customer to pay", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "SI-2627-00001" })).toBeVisible();
   expect(await balance("1200")).toBe("5000.00");
 
-  // The owner's Collections entry leads to the receipts; a salesperson has no way in.
+  // The owner's Collections entry leads to the recovery screens (Step 33), and from there to the receipts; a salesperson has no way in.
   await rail(page).getByRole("link", { name: "Collections", exact: true }).click();
+  await expect(page).toHaveURL(/\/recovery$/);
+  await page.getByRole("navigation", { name: "Collections" }).getByRole("link", { name: "Receipts", exact: true }).click();
   await expect(page).toHaveURL(/\/receipts$/);
   await expect(page.getByText("No receipts yet.")).toBeVisible();
 });

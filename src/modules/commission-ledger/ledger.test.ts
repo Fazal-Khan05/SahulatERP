@@ -546,6 +546,18 @@ describe.skipIf(!hasDb)("commission earned, released, taken back and paid", () =
     await cashIn("2026-11-12", [[a, "4000"]]);
     expect([...(await standing(a)), ...(await standing(b))]).toEqual(["lone own on 10000: 120 / 120 / 0", "lone own on 10000: 200 / 80 / 0"]);
 
+    // Credit handed down a chain of returns releases nothing: X is "paid" by a cheque that never clears and is returned,
+    // its credit settles Y, Y is returned, and Y's credit is set against Z. No money has come in for any of them.
+    const x = await sell("2026-11-12", { quantity: "100", shares: [by("lone")] });
+    const never = await chequeIn("2026-11-12", x, "10000");
+    const y = await sell("2026-11-12", { quantity: "100", shares: [by("lone")] });
+    await applyCredit(as.accountant, await giveBack("2026-11-12", x, "100"), { date: "2026-11-12", allocations: [{ kind: "invoice", id: y, amount: "10000" }] });
+    const z = await sell("2026-11-12", { quantity: "100", shares: [by("lone")] });
+    await applyCredit(as.accountant, await giveBack("2026-11-12", y, "100"), { date: "2026-11-12", allocations: [{ kind: "invoice", id: z, amount: "10000" }] });
+    expect(await standing(z)).toEqual(["lone own on 10000: 200 / 0 / 0"]);
+    await bounceCheque(as.accountant, never, { date: "2026-11-12", reason: "Stopped" });
+    expect(await standing(z)).toEqual(["lone own on 10000: 200 / 0 / 0"]);
+
     // Commission is not paid on a day before it was released.
     await approveCommission(as.owner, await accrualIds(a));
     await expect(payCommission(as.owner, people.lone, { date: "2026-11-01", accountId: cash })).rejects.toThrow("That date is too early");

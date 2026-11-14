@@ -16,7 +16,6 @@ BEGIN
 END $$;
 
 DROP FUNCTION app.pay_commission(uuid, date, uuid, text);
-DROP FUNCTION app.commission_team();
 DROP FUNCTION app.approve_commission(uuid[]);
 DROP TRIGGER credit_note_allocations_commission ON public.credit_note_allocations;
 DROP FUNCTION app.commission_after_credit();
@@ -37,10 +36,12 @@ DROP FUNCTION app.journal_backed_commission_payment(public.journals);
 DROP FUNCTION app.journal_backed_commission_return(public.journals);
 DROP FUNCTION app.journal_backed_commission_accrual(public.journals);
 DROP TABLE public.commission_movements, public.commission_payments, public.commission_accruals;
+-- After the tables: their policies ask it.
+DROP FUNCTION app.commission_team();
 DROP FUNCTION app.check_commission_accrual();
 DROP FUNCTION app.refuse_commission_change();
 
 -- The row drizzle-kit wrote for 0027_commission_ledger (its "when" in drizzle/meta/_journal.json).
-DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1794699922249;
+DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1794700697391;
 
 COMMIT;

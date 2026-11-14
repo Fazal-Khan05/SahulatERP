@@ -86,6 +86,13 @@ These came up while building. Each is the option I would recommend; say if any s
     does not stop people earning.
 12. **Nothing is withheld from a commission payment.** Income tax on commission paid to an
     employee belongs with payroll (Step 41); a payment here is the gross amount.
+14. **An invoice with nothing left to collect has nothing to wait for.** Commission earned by
+    the unit on goods given free is released at once, also when the priced goods on the same
+    invoice have all come back.
+15. **Credit handed on twice does not count as money.** If an invoice is settled with credit
+    from a return and is then itself returned, the credit that passes on to a third invoice
+    does not release that invoice's commission. Rare, and safe; the commission is released if
+    the invoice is also paid in money.
 13. **What a person owes back stays inside Commission payable**, against their name, until it
     comes out of a later payment; it is not moved to an account of its own. The Commission
     earned page shows it by person. (The independent accounting check would rather see an
@@ -140,3 +147,54 @@ has source type `commission_payment` and carries the CP number.
 - A warning when commission is paid in cash above the limit the income tax law is understood
   to set for salary paid outside a bank; withholding income tax (with payroll).
 - A statement for each person (Step 39).
+
+## Reviewed
+
+An independent reviewer attacked the migration on a local database before anything was applied
+to the shared one (any SQL as the app's database role, as any member, in any kind of
+transaction, several sessions at once). Fixed in the migration itself, each with a test:
+
+- **High.** Two things happening to one invoice at the same moment (a cheque clearing while a
+  receipt was being cancelled) could leave too much or too little released, and it could then
+  be approved and paid. Everything that brings commission up to date now waits its turn for
+  the customer and reads only afterwards.
+- **High.** Whoever posted an invoice with raw SQL could shift where a month begins by
+  changing the session's time zone, and so earn a higher slab. The month is now worked out
+  without a time zone.
+- **High.** Goods returned from a sale that had earned nothing (the first slab of a plan at 0%)
+  did not come off the month's sales, so the next sale earned the higher slab. A return now
+  always comes off.
+- **Medium.** Credit from a return, set against another invoice, went on counting as money
+  collected there after the cheque behind it bounced. It now counts only while the invoice the
+  credit came from is itself paid, and those invoices are brought up to date together.
+- **Medium.** Approving or paying commission at the very moment a receipt was being posted on
+  the same invoices could make the receipt fail. Approval and payment no longer wait: they
+  step aside and ask to be tried again.
+- **Low.** A payment could be dated before the commission it paid was released (now refused);
+  an approval left no record of what was approved (the audit row now lists it); a sale that
+  came to nothing on a per-unit plan could never be released (it is released at once);
+  an audit row with a made-up `commission.` name could be written by the app's role (all such
+  names are now the database's own).
+
+A second reviewer then attacked the changes. Fixed:
+
+- **High.** Credit handed down a chain of two returns (the first invoice "paid" by a cheque
+  that never cleared, returned, its credit used on a second invoice, that one returned, and
+  its credit used on a third) released the third invoice's commission with no money behind it.
+  Credit now counts as money on another invoice only when the invoice it came from is paid by
+  money and its own returns; credit an invoice was itself settled with is not passed on.
+- **Low.** A payment could take back what was owed on a day before it became owed; refused.
+
+Left as it is, and listed for the founder: an invoice whose priced goods have all come back,
+with a free item kept, has nothing left to collect, so commission earned by the unit on the
+free item is released without a payment.
+
+Held under attack: writing any of the three tables, forging a journal or one of the audit
+rows, calling the functions underneath, another company, another branch, the roles that may
+not approve or pay, a salesperson reading a colleague's commission, every order of statements
+inside receipts, cheques and credit notes when run one at a time, and the books after long
+mixed sequences.
+
+Not fixed here, older than this step and passed to the coordinator: the app's database role
+can ask for the next document number of any kind (so a CP number, like any other, can be used
+up without a document).

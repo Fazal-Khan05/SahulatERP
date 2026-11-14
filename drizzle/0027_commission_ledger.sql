@@ -401,8 +401,10 @@ CREATE FUNCTION app.commission_money_in(p_tenant uuid, p_invoice uuid) RETURNS n
 -- How much of an invoice has been collected, for commission: the money that has come in for
 -- it, and credit from ANOTHER invoice's credit note set against it. That credit is money that
 -- came in earlier, for goods that have since come back; it counts only while the invoice it
--- came from is itself settled by money and credit. (If that invoice's cheque bounces, or has
--- not cleared yet, the credit is not money in hand, and stops counting until it is.)
+-- came from is itself settled by money and by its own returns. (If that invoice's cheque
+-- bounces, or has not cleared yet, the credit is not money in hand, and stops counting until
+-- it is. And credit that an invoice was itself settled with is not money that invoice can
+-- pass on: credit handed down a chain of returns releases nothing.)
 CREATE FUNCTION app.commission_collected(p_tenant uuid, p_invoice uuid) RETURNS numeric
   LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
   AS $$
@@ -413,7 +415,10 @@ CREATE FUNCTION app.commission_collected(p_tenant uuid, p_invoice uuid) RETURNS 
         JOIN public.sales_documents o ON o.tenant_id = n.tenant_id AND o.id = n.source_document_id
         WHERE c.tenant_id = p_tenant AND c.invoice_id = p_invoice AND n.source_document_id <> p_invoice
           AND app.commission_money_in(p_tenant, o.id)
-              + coalesce((SELECT sum(x.amount) FROM public.credit_note_allocations x WHERE x.tenant_id = p_tenant AND x.invoice_id = o.id), 0) >= o.total), 0)
+              + coalesce((
+                  SELECT sum(x.amount) FROM public.credit_note_allocations x
+                  JOIN public.sales_documents xn ON xn.tenant_id = x.tenant_id AND xn.id = x.credit_note_id
+                  WHERE x.tenant_id = p_tenant AND x.invoice_id = o.id AND xn.source_document_id = o.id), 0) >= o.total), 0)
   $$;
 --> statement-breakpoint
 -- Brings every accrual of one invoice up to date with what has happened to the invoice, and
@@ -785,7 +790,8 @@ BEGIN
   END IF;
   -- Held, but never waited for: a receipt, a return or a cheque being recorded on one of these
   -- invoices at this moment has them, and is about to change the figure. Approval steps aside
-  -- (SE318) and is asked again, so that it can never stand in the way of a posting.
+  -- (SE318) and is asked again, so that it and a posting can never be left waiting on each
+  -- other. (A posting on these invoices does wait for the moment the approval itself takes.)
   BEGIN
     PERFORM 1 FROM public.commission_accruals a WHERE a.tenant_id = v_tenant AND a.id = ANY (v_ids) ORDER BY a.id FOR UPDATE NOWAIT;
   EXCEPTION WHEN lock_not_available THEN
@@ -877,11 +883,12 @@ BEGIN
   EXCEPTION WHEN lock_not_available THEN
     RAISE EXCEPTION 'something is being recorded on one of this person''s invoices right now; try again' USING ERRCODE = 'SE318';
   END;
-  -- Not before the commission it pays was released.
+  -- Not before the commission it pays was released, nor before what it takes back was owed.
   IF EXISTS (
     SELECT 1 FROM public.commission_accruals a
     JOIN public.commission_movements m ON m.tenant_id = a.tenant_id AND m.accrual_id = a.id
-    WHERE a.tenant_id = v_tenant AND a.user_id = p_user AND a.approved_at IS NOT NULL AND a.released > a.paid AND m.movement_date > p_date
+    WHERE a.tenant_id = v_tenant AND a.user_id = p_user AND m.movement_date > p_date
+      AND ((a.approved_at IS NOT NULL AND a.released > a.paid) OR a.paid > a.released)
   ) THEN
     RAISE EXCEPTION 'commission is paid on or after the day it was released' USING ERRCODE = 'SE319';
   END IF;

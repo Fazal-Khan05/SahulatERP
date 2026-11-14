@@ -160,7 +160,7 @@ Fifty-two steps in nine phases. Phases finish in order; steps inside a phase mos
 | --- | --- | --- | --- |
 | 30 | Stock transfers, adjustments with reasons, bulk opening stock, stock count sheets with variance posting; concurrent-edit warning | Count variance posts to the inventory adjustment account | Done 2026-11-14 |
 | 31 | Reports: stock valuation, stock movement, stock ageing, low stock, item profitability (margin) | Valuation equals the inventory control account | |
-| 32 | Receipts (bank, cash, cheque) allocated across invoices; cheque lifecycle received → deposited → cleared/bounced; bounce reverses allocation, AR and commission release in one transaction; cheques-in-hand register; bank charges on receipt | Bouncing a cheque restores the invoice balance and reverses the released commission | |
+| 32 | Receipts (bank, cash, cheque) allocated across invoices; cheque lifecycle received → deposited → cleared/bounced; bounce reverses allocation, AR and commission release in one transaction; cheques-in-hand register; bank charges on receipt | Bouncing a cheque restores the invoice balance and reverses the released commission | Done 2026-11-15 (the commission part comes with Step 38) |
 | 33 | Recovery: follow-ups, promise-to-pay with broken-promise list, customer statement print and email, aged receivables | Overdue list matches ageing report | |
 | 34 | Bank and cash accounts, transfers, expenses, petty cash; archive only at zero balance | Expense with provincial services tax withholding posts correctly | |
 | 35 | Bank statement import (CSV/Excel from HBL, Meezan, UBL formats; generic column mapper), matching rules, reconciliation screen, unreconcile | 90% of a sample statement auto-matches; reconciled balance equals ledger | |

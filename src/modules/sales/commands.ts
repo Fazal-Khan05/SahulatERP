@@ -58,10 +58,12 @@ function requireDeliveryWriter(ctx: TenantContext): void {
   if (!can(ctx.role, "delivery.manage")) throw new UserError("Your role cannot write delivery notes.");
 }
 
-/** Who may write a document depends on what it is: the warehouse writes delivery notes and nothing else. */
+/** Who may write a document depends on what it is: the warehouse writes delivery notes and nothing else, and a salesperson does not write credit notes. */
 function requireWriterOf(ctx: TenantContext, kind: SalesDocument["kind"]): void {
   if (kind === "delivery") requireDeliveryWriter(ctx);
-  else requireManager(ctx);
+  else if (kind === "credit_note") {
+    if (!can(ctx.role, "credit_note.manage")) throw new UserError("Only an owner, an accountant or the sales manager can write a credit note.");
+  } else requireManager(ctx);
 }
 
 const NOT_HERE = "That document is not in this company.";
@@ -329,6 +331,7 @@ async function submitIn(tx: Tx, ctx: TenantContext, id: unknown, loadedAt: unkno
   const label = KIND_LABELS[document.kind];
   if (document.kind === "delivery") throw new UserError("A delivery note is posted from its own page, which takes its goods out of stock.");
   if (document.kind === "invoice") throw new UserError("A sales invoice is posted from its own page, which puts it into the books.");
+  if (document.kind === "credit_note") throw new UserError("A credit note is posted from its own page, which puts it into the books.");
   if (document.status === "submitted" || document.status === "cancelled") throw new UserError(`This ${label.toLowerCase()} is already submitted.`);
   if (document.status === "on_hold" && !can(ctx.role, "sales.approve_credit")) throw new UserError("This order is waiting for the owner's approval.");
   if (document.lines.length === 0) throw new UserError(`A ${label.toLowerCase()} needs at least one line.`);
@@ -403,6 +406,7 @@ export async function cancelSalesDocument(ctx: TenantContext, id: unknown, raw: 
     const document = await lockDocument(tx, ctx, id, loadedAt);
     if (document.kind === "delivery") throw new UserError("A delivery note is cancelled from its own page, which puts its goods back into stock.");
     if (document.kind === "invoice") throw new UserError("A posted sales invoice is not cancelled. It is corrected by a credit note.");
+    if (document.kind === "credit_note") throw new UserError("A posted credit note is not cancelled.");
     if (document.status === "cancelled") throw new UserError("This document is already cancelled.");
     if (document.status !== "submitted") throw new UserError("Only a submitted document is cancelled. A draft is simply thrown away.");
     if (document.kind === "order") {

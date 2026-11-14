@@ -17,6 +17,12 @@ export const permissions = {
   // (2026-11-14): the sales team sees what a customer owes and does not record money.
   "receipt.read": ["owner", "accountant", "auditor", "recovery_officer"],
   "receipt.manage": ["owner", "accountant", "recovery_officer"],
+  // Step 21. A return and its credit note are recorded by the owner, an accountant or the sales
+  // manager (the founder's decision, 2026-11-14: a salesperson asks one of them). Setting the
+  // credit that is left over against other invoices is settling what a customer owes: the owner
+  // and an accountant.
+  "credit_note.manage": ["owner", "accountant", "sales_manager"],
+  "credit_note.apply": ["owner", "accountant"],
   // Step 33. Recovery is worked by the recovery officer, the owner, the accountant and the sales
   // manager; the auditor reads it (the founder's decision, 2026-11-14). The database's policies
   // and functions in drizzle/0023_recovery.sql name the same roles.

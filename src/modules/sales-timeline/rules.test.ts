@@ -39,6 +39,7 @@ describe("buildTimeline", () => {
   it("says posted for a delivery note or an invoice", () => {
     expect(buildTimeline({ ...base, kind: "invoice", submittedAt: at(2), submittedBy: "sam" }, nameOf)[1].what).toBe("Posted");
     expect(buildTimeline({ ...base, kind: "delivery", submittedAt: at(2), submittedBy: "sam" }, nameOf)[1].what).toBe("Posted");
+    expect(buildTimeline({ ...base, kind: "credit_note", submittedAt: at(2), submittedBy: "sam" }, nameOf)[1].what).toBe("Posted");
   });
 
   it("puts the documents made from it and its emails where they happened, with the cancellation last", () => {

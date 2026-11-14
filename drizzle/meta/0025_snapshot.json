@@ -1,11 +1,11 @@
 {
-  "id": "2b66d323-aefa-49f4-a240-f17d2710af37",
+  "id": "2b8e53d6-f895-4399-af06-e8c34c7d23e1",
   "prevId": "7798f1a0-2a03-44a5-90d4-01c0289893bf",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.commission_plan_rates": {
-      "name": "commission_plan_rates",
+    "public.credit_note_allocations": {
+      "name": "credit_note_allocations",
       "schema": "",
       "columns": {
         "id": {
@@ -21,492 +21,38 @@
           "primaryKey": false,
           "notNull": true
         },
-        "plan_id": {
-          "name": "plan_id",
+        "credit_note_id": {
+          "name": "credit_note_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
-        "category_id": {
-          "name": "category_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "customer_class": {
-          "name": "customer_class",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "rate": {
-          "name": "rate",
-          "type": "numeric(9, 4)",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "commission_plan_rates_category_key": {
-          "name": "commission_plan_rates_category_key",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "plan_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "category_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"commission_plan_rates\".\"category_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "commission_plan_rates_class_key": {
-          "name": "commission_plan_rates_class_key",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "plan_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "lower(btrim(\"customer_class\"))",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"commission_plan_rates\".\"customer_class\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "commission_plan_rates_tenant_id_tenants_id_fk": {
-          "name": "commission_plan_rates_tenant_id_tenants_id_fk",
-          "tableFrom": "commission_plan_rates",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "commission_plan_rates_plan_fk": {
-          "name": "commission_plan_rates_plan_fk",
-          "tableFrom": "commission_plan_rates",
-          "tableTo": "commission_plans",
-          "columnsFrom": [
-            "tenant_id",
-            "plan_id"
-          ],
-          "columnsTo": [
-            "tenant_id",
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "commission_plan_rates_category_fk": {
-          "name": "commission_plan_rates_category_fk",
-          "tableFrom": "commission_plan_rates",
-          "tableTo": "item_categories",
-          "columnsFrom": [
-            "tenant_id",
-            "category_id"
-          ],
-          "columnsTo": [
-            "tenant_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "commission_plan_rates_tenant_id_id_key": {
-          "name": "commission_plan_rates_tenant_id_id_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "tenant_id",
-            "id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "commission_plan_rates_one_key": {
-          "name": "commission_plan_rates_one_key",
-          "value": "(\"commission_plan_rates\".\"category_id\" is null) <> (\"commission_plan_rates\".\"customer_class\" is null)"
-        },
-        "commission_plan_rates_class_length": {
-          "name": "commission_plan_rates_class_length",
-          "value": "char_length(btrim(\"commission_plan_rates\".\"customer_class\")) between 1 and 40"
-        },
-        "commission_plan_rates_rate_range": {
-          "name": "commission_plan_rates_rate_range",
-          "value": "\"commission_plan_rates\".\"rate\" >= 0 and \"commission_plan_rates\".\"rate\" <= 100"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.commission_plan_tiers": {
-      "name": "commission_plan_tiers",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "plan_id": {
-          "name": "plan_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "threshold": {
-          "name": "threshold",
-          "type": "numeric(20, 4)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "rate": {
-          "name": "rate",
-          "type": "numeric(9, 4)",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "commission_plan_tiers_tenant_id_tenants_id_fk": {
-          "name": "commission_plan_tiers_tenant_id_tenants_id_fk",
-          "tableFrom": "commission_plan_tiers",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "commission_plan_tiers_plan_fk": {
-          "name": "commission_plan_tiers_plan_fk",
-          "tableFrom": "commission_plan_tiers",
-          "tableTo": "commission_plans",
-          "columnsFrom": [
-            "tenant_id",
-            "plan_id"
-          ],
-          "columnsTo": [
-            "tenant_id",
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "commission_plan_tiers_tenant_id_id_key": {
-          "name": "commission_plan_tiers_tenant_id_id_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "tenant_id",
-            "id"
-          ]
-        },
-        "commission_plan_tiers_threshold_key": {
-          "name": "commission_plan_tiers_threshold_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "tenant_id",
-            "plan_id",
-            "threshold"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "commission_plan_tiers_threshold_range": {
-          "name": "commission_plan_tiers_threshold_range",
-          "value": "\"commission_plan_tiers\".\"threshold\" >= 0 and \"commission_plan_tiers\".\"threshold\" < 1e16"
-        },
-        "commission_plan_tiers_rate_range": {
-          "name": "commission_plan_tiers_rate_range",
-          "value": "\"commission_plan_tiers\".\"rate\" >= 0 and \"commission_plan_tiers\".\"rate\" <= 100"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.commission_plans": {
-      "name": "commission_plans",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
+        "invoice_id": {
+          "name": "invoice_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
-        "kind": {
-          "name": "kind",
-          "type": "text",
+        "opening_balance_id": {
+          "name": "opening_balance_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "amount": {
+          "name": "amount",
+          "type": "numeric(20, 4)",
           "primaryKey": false,
           "notNull": true
         },
-        "rate": {
-          "name": "rate",
-          "type": "numeric(20, 4)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'0'"
-        },
-        "target": {
-          "name": "target",
-          "type": "numeric(20, 4)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'0'"
-        },
-        "multiplier": {
-          "name": "multiplier",
-          "type": "numeric(9, 4)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'1'"
-        },
-        "team_rate": {
-          "name": "team_rate",
-          "type": "numeric(9, 4)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'0'"
-        },
-        "effective_from": {
-          "name": "effective_from",
+        "allocated_on": {
+          "name": "allocated_on",
           "type": "date",
           "primaryKey": false,
           "notNull": true
         },
-        "effective_to": {
-          "name": "effective_to",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_by": {
-          "name": "updated_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "commission_plans_lookup_idx": {
-          "name": "commission_plans_lookup_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "effective_from",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "commission_plans_tenant_id_tenants_id_fk": {
-          "name": "commission_plans_tenant_id_tenants_id_fk",
-          "tableFrom": "commission_plans",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "commission_plans_user_fk": {
-          "name": "commission_plans_user_fk",
-          "tableFrom": "commission_plans",
-          "tableTo": "memberships",
-          "columnsFrom": [
-            "tenant_id",
-            "user_id"
-          ],
-          "columnsTo": [
-            "tenant_id",
-            "user_id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "commission_plans_tenant_id_id_key": {
-          "name": "commission_plans_tenant_id_id_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "tenant_id",
-            "id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "commission_plans_name_length": {
-          "name": "commission_plans_name_length",
-          "value": "char_length(btrim(\"commission_plans\".\"name\")) between 2 and 100"
-        },
-        "commission_plans_kind_known": {
-          "name": "commission_plans_kind_known",
-          "value": "\"commission_plans\".\"kind\" in ('flat', 'category', 'customer_class', 'per_unit', 'tiered')"
-        },
-        "commission_plans_rate_range": {
-          "name": "commission_plans_rate_range",
-          "value": "\"commission_plans\".\"rate\" >= 0 and \"commission_plans\".\"rate\" < 1e12 and (\"commission_plans\".\"kind\" = 'per_unit' or \"commission_plans\".\"rate\" <= 100)"
-        },
-        "commission_plans_target_range": {
-          "name": "commission_plans_target_range",
-          "value": "\"commission_plans\".\"target\" >= 0 and \"commission_plans\".\"target\" < 1e16"
-        },
-        "commission_plans_multiplier_range": {
-          "name": "commission_plans_multiplier_range",
-          "value": "\"commission_plans\".\"multiplier\" > 0 and \"commission_plans\".\"multiplier\" <= 10"
-        },
-        "commission_plans_team_rate_range": {
-          "name": "commission_plans_team_rate_range",
-          "value": "\"commission_plans\".\"team_rate\" >= 0 and \"commission_plans\".\"team_rate\" <= 100"
-        },
-        "commission_plans_dates": {
-          "name": "commission_plans_dates",
-          "value": "isfinite(\"commission_plans\".\"effective_from\") and (\"commission_plans\".\"effective_to\" is null or (isfinite(\"commission_plans\".\"effective_to\") and \"commission_plans\".\"effective_to\" >= \"commission_plans\".\"effective_from\"))"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.sales_hierarchy": {
-      "name": "sales_hierarchy",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "manager_user_id": {
-          "name": "manager_user_id",
+        "journal_id": {
+          "name": "journal_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -523,24 +69,11 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_by": {
-          "name": "updated_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
         }
       },
       "indexes": {
-        "sales_hierarchy_manager_idx": {
-          "name": "sales_hierarchy_manager_idx",
+        "credit_note_allocations_credit_note_idx": {
+          "name": "credit_note_allocations_credit_note_idx",
           "columns": [
             {
               "expression": "tenant_id",
@@ -549,7 +82,238 @@
               "nulls": "last"
             },
             {
-              "expression": "manager_user_id",
+              "expression": "credit_note_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "credit_note_allocations_invoice_idx": {
+          "name": "credit_note_allocations_invoice_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "invoice_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"credit_note_allocations\".\"invoice_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "credit_note_allocations_opening_idx": {
+          "name": "credit_note_allocations_opening_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "opening_balance_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"credit_note_allocations\".\"opening_balance_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "credit_note_allocations_tenant_id_tenants_id_fk": {
+          "name": "credit_note_allocations_tenant_id_tenants_id_fk",
+          "tableFrom": "credit_note_allocations",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "credit_note_allocations_credit_note_fk": {
+          "name": "credit_note_allocations_credit_note_fk",
+          "tableFrom": "credit_note_allocations",
+          "tableTo": "sales_documents",
+          "columnsFrom": [
+            "tenant_id",
+            "credit_note_id"
+          ],
+          "columnsTo": [
+            "tenant_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "credit_note_allocations_invoice_fk": {
+          "name": "credit_note_allocations_invoice_fk",
+          "tableFrom": "credit_note_allocations",
+          "tableTo": "sales_documents",
+          "columnsFrom": [
+            "tenant_id",
+            "invoice_id"
+          ],
+          "columnsTo": [
+            "tenant_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "credit_note_allocations_opening_fk": {
+          "name": "credit_note_allocations_opening_fk",
+          "tableFrom": "credit_note_allocations",
+          "tableTo": "opening_balances",
+          "columnsFrom": [
+            "tenant_id",
+            "opening_balance_id"
+          ],
+          "columnsTo": [
+            "tenant_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "credit_note_allocations_journal_fk": {
+          "name": "credit_note_allocations_journal_fk",
+          "tableFrom": "credit_note_allocations",
+          "tableTo": "journals",
+          "columnsFrom": [
+            "tenant_id",
+            "journal_id"
+          ],
+          "columnsTo": [
+            "tenant_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "credit_note_allocations_tenant_id_id_key": {
+          "name": "credit_note_allocations_tenant_id_id_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "tenant_id",
+            "id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "credit_note_allocations_one_target": {
+          "name": "credit_note_allocations_one_target",
+          "value": "(\"credit_note_allocations\".\"invoice_id\" is null) <> (\"credit_note_allocations\".\"opening_balance_id\" is null)"
+        },
+        "credit_note_allocations_not_itself": {
+          "name": "credit_note_allocations_not_itself",
+          "value": "\"credit_note_allocations\".\"invoice_id\" is distinct from \"credit_note_allocations\".\"credit_note_id\""
+        },
+        "credit_note_allocations_amount_sane": {
+          "name": "credit_note_allocations_amount_sane",
+          "value": "\"credit_note_allocations\".\"amount\" > 0 and \"credit_note_allocations\".\"amount\" < 1e16"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.credit_note_line_costs": {
+      "name": "credit_note_line_costs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "credit_note_id": {
+          "name": "credit_note_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "line_id": {
+          "name": "line_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "invoice_line_id": {
+          "name": "invoice_line_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cost": {
+          "name": "cost",
+          "type": "numeric(20, 4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "written_off": {
+          "name": "written_off",
+          "type": "numeric(20, 4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "credit_note_line_costs_invoice_line_idx": {
+          "name": "credit_note_line_costs_invoice_line_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "invoice_line_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -562,9 +326,9 @@
         }
       },
       "foreignKeys": {
-        "sales_hierarchy_tenant_id_tenants_id_fk": {
-          "name": "sales_hierarchy_tenant_id_tenants_id_fk",
-          "tableFrom": "sales_hierarchy",
+        "credit_note_line_costs_tenant_id_tenants_id_fk": {
+          "name": "credit_note_line_costs_tenant_id_tenants_id_fk",
+          "tableFrom": "credit_note_line_costs",
           "tableTo": "tenants",
           "columnsFrom": [
             "tenant_id"
@@ -575,32 +339,34 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "sales_hierarchy_user_fk": {
-          "name": "sales_hierarchy_user_fk",
-          "tableFrom": "sales_hierarchy",
-          "tableTo": "memberships",
+        "credit_note_line_costs_line_fk": {
+          "name": "credit_note_line_costs_line_fk",
+          "tableFrom": "credit_note_line_costs",
+          "tableTo": "sales_lines",
           "columnsFrom": [
             "tenant_id",
-            "user_id"
+            "credit_note_id",
+            "line_id"
           ],
           "columnsTo": [
             "tenant_id",
-            "user_id"
+            "document_id",
+            "id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "sales_hierarchy_manager_fk": {
-          "name": "sales_hierarchy_manager_fk",
-          "tableFrom": "sales_hierarchy",
-          "tableTo": "memberships",
+        "credit_note_line_costs_invoice_line_fk": {
+          "name": "credit_note_line_costs_invoice_line_fk",
+          "tableFrom": "credit_note_line_costs",
+          "tableTo": "sales_lines",
           "columnsFrom": [
             "tenant_id",
-            "manager_user_id"
+            "invoice_line_id"
           ],
           "columnsTo": [
             "tenant_id",
-            "user_id"
+            "id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
@@ -608,28 +374,28 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "sales_hierarchy_tenant_id_id_key": {
-          "name": "sales_hierarchy_tenant_id_id_key",
+        "credit_note_line_costs_tenant_id_id_key": {
+          "name": "credit_note_line_costs_tenant_id_id_key",
           "nullsNotDistinct": false,
           "columns": [
             "tenant_id",
             "id"
           ]
         },
-        "sales_hierarchy_member_key": {
-          "name": "sales_hierarchy_member_key",
+        "credit_note_line_costs_line_key": {
+          "name": "credit_note_line_costs_line_key",
           "nullsNotDistinct": false,
           "columns": [
             "tenant_id",
-            "user_id"
+            "line_id"
           ]
         }
       },
       "policies": {},
       "checkConstraints": {
-        "sales_hierarchy_not_own_manager": {
-          "name": "sales_hierarchy_not_own_manager",
-          "value": "\"sales_hierarchy\".\"user_id\" <> \"sales_hierarchy\".\"manager_user_id\""
+        "credit_note_line_costs_sane": {
+          "name": "credit_note_line_costs_sane",
+          "value": "\"credit_note_line_costs\".\"cost\" >= 0 and \"credit_note_line_costs\".\"cost\" < 1e16 and \"credit_note_line_costs\".\"written_off\" >= 0 and \"credit_note_line_costs\".\"written_off\" <= \"credit_note_line_costs\".\"cost\""
         }
       },
       "isRLSEnabled": false
@@ -9112,6 +8878,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "damaged_quantity": {
+          "name": "damaged_quantity",
+          "type": "numeric(20, 4)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "value": {
           "name": "value",
           "type": "numeric(20, 4)",
@@ -9335,6 +9107,10 @@
         "sales_lines_not_own_source": {
           "name": "sales_lines_not_own_source",
           "value": "\"sales_lines\".\"source_line_id\" is distinct from \"sales_lines\".\"id\""
+        },
+        "sales_lines_damaged_within_quantity": {
+          "name": "sales_lines_damaged_within_quantity",
+          "value": "\"sales_lines\".\"damaged_quantity\" >= 0 and \"sales_lines\".\"damaged_quantity\" <= \"sales_lines\".\"quantity\""
         },
         "sales_lines_line_no_positive": {
           "name": "sales_lines_line_no_positive",

@@ -50,6 +50,7 @@ describe("what a printed document shows", () => {
     expect(printTitle("invoice", false)).toBe("Invoice");
     expect(printTitle("quotation", true)).toBe("Quotation");
     expect(printTitle("order", false)).toBe("Sales order");
+    expect(printTitle("credit_note", true)).toBe("Credit note");
     expect(printTitle("delivery", true)).toBe("Delivery note");
   });
 

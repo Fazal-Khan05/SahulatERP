@@ -32,7 +32,7 @@ export function printView(printable: PrintableDocument): PrintView {
   const facts: [string, string][] = [["Date", formatIsoDate(document.date)]];
   if (document.validUntil) facts.push(["Valid until", formatIsoDate(document.validUntil)]);
   if (document.dueDate) facts.push(["Due", formatIsoDate(document.dueDate)]);
-  if (document.customerReference) facts.push(["Your reference", document.customerReference]);
+  if (document.customerReference) facts.push([document.kind === "credit_note" ? "Your debit note" : "Your reference", document.customerReference]);
   if (document.source?.number) facts.push([KIND_LABELS[document.source.kind], document.source.number]);
   if (document.kind === "delivery") facts.push(["From", document.warehouseName]);
 
@@ -49,7 +49,7 @@ export function printView(printable: PrintableDocument): PrintView {
     number: document.number,
     cancelled: document.status === "cancelled" ? (document.cancelReason ?? "") : null,
     seller: [seller.ntn ? `NTN ${seller.ntn}` : "", seller.strn ? `STRN ${seller.strn}` : ""].filter((line) => line !== ""),
-    buyerHeading: document.kind === "delivery" ? "Deliver to" : document.kind === "invoice" ? "Bill to" : "For",
+    buyerHeading: document.kind === "delivery" ? "Deliver to" : document.kind === "invoice" ? "Bill to" : document.kind === "credit_note" ? "Credit to" : "For",
     buyer: [buyer.name, ...buyerLines],
     facts,
     table: printedTable({

@@ -13,6 +13,10 @@ export const permissions = {
   // Step 23: email a numbered sales document to the customer. The same roles that write sales
   // documents; the database's own policy on sales_document_emails names the same four.
   "sales.email": ["owner", "accountant", "sales_manager", "salesperson"],
+  // Step 32. Money received from customers, and the cheques among it. The founder's decision
+  // (2026-11-14): the sales team sees what a customer owes and does not record money.
+  "receipt.read": ["owner", "accountant", "auditor", "recovery_officer"],
+  "receipt.manage": ["owner", "accountant", "recovery_officer"],
 } as const satisfies TrackPermissions;
 
 /**
@@ -20,12 +24,12 @@ export const permissions = {
  * words and the order of each role's menu are in src/modules/tenant/rules.ts and do not change.
  */
 export const links = {
-  collections: null,
+  collections: "/receipts",
   salesReports: null,
-  cheques: null,
+  cheques: "/receipts/cheques",
   overdueCustomers: null,
   followUps: null,
-  receipts: null,
+  receipts: "/receipts",
   customerStatements: null,
 } as const satisfies TrackLinks;
 

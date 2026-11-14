@@ -38,8 +38,9 @@ Of the four rule replacements the founder approved, three were needed (the polic
 a sales document, the document's guard, the lines' guard): the fourth, the end-of-transaction
 check, is untouched, because a credit note is refused earlier, in the guard itself. One more
 was needed that was not on the list: `app.receivable_items` of Step 32 (what is still unpaid on
-an invoice), which now also takes off what credit notes settled. Asked of the founder through
-the coordinator on 2026-11-15, before the migration reached the shared database.
+an invoice), which now also takes off what credit notes settled. The founder was asked through
+the coordinator on 2026-11-15, before the migration reached the shared database, and chose
+"Yes, replace it".
 
 ## Decided for Fazal, to confirm
 

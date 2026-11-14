@@ -129,7 +129,8 @@ test("the rest is delivered by a note, the note is invoiced, and it cannot then 
   // The delivery note now points at its invoice and can no longer be cancelled.
   await page.getByRole("link", { name: "DN-2627-00001" }).click();
   await expect(page.getByRole("heading", { name: "DN-2627-00001" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "SI-2627-00002" })).toBeVisible();
+  // exact: the timeline (Step 23) links to it too, as "Sales invoice SI-2627-00002".
+  await expect(page.getByRole("link", { name: "SI-2627-00002", exact: true })).toBeVisible();
   await expect(page.getByText("This delivery note has been invoiced. It can no longer be cancelled.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Cancel delivery note" })).toHaveCount(0);
 

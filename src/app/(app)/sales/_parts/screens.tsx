@@ -18,6 +18,7 @@ import { getCompanySetup } from "@/modules/setup/queries";
 import { can } from "@/modules/tenant/rules";
 import { approveSalesAction, cancelDeliveryAction, cancelSalesAction, discardSalesAction, orderFromQuotationAction, releaseSalesAction, saveDeliveryAction, saveInvoiceAction, saveSalesAction, startDeliveryAction, startInvoiceAction } from "./actions";
 import { DeliveryForm } from "./delivery-form";
+import { DocumentOutput } from "./output";
 import { SalesForm } from "./sales-form";
 
 const NO_ACCESS = "Your role does not include sales documents.";
@@ -632,6 +633,7 @@ export async function SalesDocumentScreen({ params, searchParams }: { params: Pr
             </ActionForm>
           </Card>
         ) : null}
+        <DocumentOutput session={session} document={document} />
       </div>
     </>
   );
@@ -775,6 +777,7 @@ async function DeliveryNote({ session, document, back }: { session: Session; doc
             </ActionForm>
           </Card>
         ) : null}
+        <DocumentOutput session={session} document={document} />
       </div>
     </>
   );
@@ -888,6 +891,7 @@ async function Invoice({ session, document, back }: { session: Session; document
         {document.status === "submitted" ? (
           <p className="text-sm text-muted-foreground">A posted invoice is never changed or cancelled. A mistake on it is put right with a credit note, which comes with sales returns.</p>
         ) : null}
+        <DocumentOutput session={session} document={document} />
       </div>
     </>
   );

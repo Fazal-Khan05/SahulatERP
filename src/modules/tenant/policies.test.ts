@@ -181,8 +181,9 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
       expect(await write("zz_test.note")).toBeUndefined();
       expect(await write("zz_testing.post")).toBeUndefined();
       expect(await write("test.ok")).toBeUndefined();
-      // A temporary table of the session's own called "text" does not hide the function from the
-      // check, whether it is made after the check was first asked in the session or before.
+      // A temporary table of the session's own called "text" once hid the function from the
+      // check. The app's role can no longer make one (drizzle/0023_safe_search_path.sql), asked
+      // before or after the check was first used in the session.
       const hidden = (askFirst: boolean) =>
         codeOf(() =>
           withTenant(ownerA, tenantA, async (tx) => {
@@ -201,6 +202,29 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
     // The rows the database has written itself since Step 18 are still its own.
     expect(await write("journal.post")).toBe(DENIED);
     expect(await write("sales_order.submit")).toBe(DENIED);
+  });
+
+  // drizzle/0023_safe_search_path.sql. With an empty search path Postgres looks for a type first
+  // in the session's temporary schema. A session of the app's role could make a temporary type
+  // called "uuid" whose check called a function of its own; app.tenant_id(), which every policy
+  // asks, then ran that function as postgres. Two things each close it, and both are held here.
+  it("gives a session of the app's role no way to run its own code as the owner of the database functions", async () => {
+    // 1. The app's role makes no temporary object of any kind.
+    const [rights] = await admin`select has_database_privilege('app_runtime', current_database(), 'TEMPORARY') as app_runtime, has_database_privilege('anon', current_database(), 'TEMPORARY') as anon, has_database_privilege('authenticated', current_database(), 'TEMPORARY') as authenticated`;
+    expect({ ...rights }).toEqual({ app_runtime: false, anon: false, authenticated: false });
+    const attempt = (statement: string) => codeOf(() => withTenant(ownerA, tenantA, (tx) => tx.execute(sql.raw(statement))));
+    expect(await attempt("create temp table zz_probe (x int) on commit drop")).toBe(DENIED);
+    expect(await attempt("create function pg_temp.zz_probe() returns boolean language sql as 'select true'")).toBe(DENIED);
+    expect(await attempt("create domain pg_temp.uuid as pg_catalog.uuid check (true)")).toBe(DENIED);
+    // 2. Every function in schema app looks in pg_catalog first and the temporary schema last,
+    //    whoever wrote it and in whichever step. Read from the database's own list, so a function
+    //    added later with an empty path, or none, fails here.
+    const unsafe = await admin`
+      select p.oid::regprocedure::text as fn, coalesce(array_to_string(p.proconfig, ' | '), 'no search_path set') as has
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'app' and not exists (select 1 from unnest(coalesce(p.proconfig, '{}')) c where c = 'search_path=pg_catalog, pg_temp')
+      order by 1`;
+    expect(unsafe.map((f) => `${f.fn}: ${f.has}`)).toEqual([]);
   });
 
   it("lets an owner add a branch and writes the audit row in the same transaction", async () => {

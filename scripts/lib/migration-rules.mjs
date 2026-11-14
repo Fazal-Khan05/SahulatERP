@@ -13,6 +13,14 @@
 export const FIRST_TRACKED = 20;
 export const TRACK_NAMES = ["A", "B", "C", "joint"];
 
+/**
+ * From this migration on (drizzle/0023_safe_search_path.sql) a function is never given an empty
+ * search path: Postgres then looks for types in the session's temporary schema first, and a
+ * session could make code of its own run as the function's owner.
+ */
+export const SAFE_PATH_FROM = 23;
+const EMPTY_PATH = /search_path\s*(?:=|TO)\s*''/i;
+
 /** The four that only ask (drizzle/0019_journal_documents.sql). A track adds a function of its own instead. */
 export const NEVER_REWRITTEN = ["app.check_journal_backed", "app.seed_accounts", "app.next_document_number", "app.check_audit_row", "app.audit_action_reserved"];
 
@@ -146,6 +154,9 @@ export function checkMigrations({ journal, sql, down, snapshots, aside = false }
     const track = tracked ? (trackOf(text) ?? "joint") : null;
     if (tracked && !TRACK_NAMES.includes(track)) {
       problems.push(`${entry.tag}: its opening comment names a track that does not exist ("${track}"). Use "-- track: A", "-- track: B" or "-- track: C", or leave the line out when the work is not split.`);
+    }
+    if (entry.idx >= SAFE_PATH_FROM && EMPTY_PATH.test(code(text))) {
+      problems.push(`${entry.tag}: gives a function an empty search path (SET search_path = ''). Write SET search_path = pg_catalog, pg_temp instead; drizzle/0023_safe_search_path.sql says why.`);
     }
     const fresh = created(text);
     for (const thing of definitions(text)) {

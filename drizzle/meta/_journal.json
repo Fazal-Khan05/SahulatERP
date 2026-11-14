@@ -155,6 +155,13 @@
       "when": 1794659345075,
       "tag": "0021_sales_document_emails",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1794688218727,
+      "tag": "0022_receipts",
+      "breakpoints": true
     }
   ]
 }

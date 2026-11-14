@@ -142,6 +142,7 @@ export function readPromise(raw: { amount?: unknown; promisedOn?: unknown; note?
 
 const SOURCE_WORDS: Record<string, string> = {
   sales_invoice: "Invoice",
+  credit_note: "Credit note",
   receipt: "Received",
   cheque_return: "Cheque returned",
   advance_application: "Advance set against invoices",

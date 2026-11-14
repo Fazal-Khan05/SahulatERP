@@ -165,7 +165,7 @@ scenario.
    out afresh from what it then holds, as for any goods coming in.
 3. **A return's cost is its share of what the line's goods cost when they left**, worked out
    the same way as its value: goods that have all come back have brought back exactly what
-   they cost. The cost is kept on each line of the credit note.
+   they cost. The cost is kept beside each line of the credit note, for those who read cost.
 4. **Damaged goods are written off in full at once** (the founder's decision). The reviewer
    notes that goods with some salvage value would be carried at that value under IAS 2, and
    that a loss recoverable from a carrier or a supplier is not tracked. The reason is typed on

@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, date, foreignKey, index, numeric, pgTable, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { journals } from "../ledger/schema";
 import { openingBalances } from "../opening/schema";
-import { salesDocuments } from "../sales/schema";
+import { salesDocuments, salesLines } from "../sales/schema";
 import { tenants } from "../tenant/schema";
 
 // A credit note is a sales document of its own kind (src/modules/sales/schema.ts): it is made
@@ -55,5 +55,37 @@ export const creditNoteAllocations = pgTable(
     check("credit_note_allocations_one_target", sql`(${t.invoiceId} is null) <> (${t.openingBalanceId} is null)`),
     check("credit_note_allocations_not_itself", sql`${t.invoiceId} is distinct from ${t.creditNoteId}`),
     check("credit_note_allocations_amount_sane", sql`${t.amount} > 0 and ${t.amount} < 1e16`),
+  ],
+);
+
+// What the goods on each line of a posted credit note cost when they left stock, and how much
+// of that was written off as damaged. Written by the database when the credit note is posted,
+// one row for each of its lines, and never changed. Kept apart from the line itself because
+// the sales team reads the lines of its documents and is not shown what goods cost: these rows
+// are read by the owner, an accountant and the auditor.
+export const creditNoteLineCosts = pgTable(
+  "credit_note_line_costs",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    creditNoteId: uuid("credit_note_id").notNull(),
+    // The line of the credit note, and the line of the invoice it takes back.
+    lineId: uuid("line_id").notNull(),
+    invoiceLineId: uuid("invoice_line_id").notNull(),
+    // What the goods that came back had cost, and the part of it that was written off.
+    cost: numeric({ precision: 20, scale: 4 }).notNull(),
+    writtenOff: numeric("written_off", { precision: 20, scale: 4 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid("created_by").notNull(),
+  },
+  (t) => [
+    unique("credit_note_line_costs_tenant_id_id_key").on(t.tenantId, t.id),
+    unique("credit_note_line_costs_line_key").on(t.tenantId, t.lineId),
+    foreignKey({ name: "credit_note_line_costs_line_fk", columns: [t.tenantId, t.creditNoteId, t.lineId], foreignColumns: [salesLines.tenantId, salesLines.documentId, salesLines.id] }),
+    foreignKey({ name: "credit_note_line_costs_invoice_line_fk", columns: [t.tenantId, t.invoiceLineId], foreignColumns: [salesLines.tenantId, salesLines.id] }),
+    index("credit_note_line_costs_invoice_line_idx").on(t.tenantId, t.invoiceLineId),
+    check("credit_note_line_costs_sane", sql`${t.cost} >= 0 and ${t.cost} < 1e16 and ${t.writtenOff} >= 0 and ${t.writtenOff} <= ${t.cost}`),
   ],
 );

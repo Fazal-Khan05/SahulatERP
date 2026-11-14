@@ -88,8 +88,10 @@ built here.
   `sales_line_salespeople` (the database refuses them): the salespeople and their shares are
   those of the invoice line, `sales_line_salespeople.line_id = sales_lines.source_line_id`.
   `damaged_quantity` says how much of the quantity was written off; it does not change the
-  value credited. `returned_cost` is what the returned goods cost when they left (for a
-  commission on margin, and for Step 31's item profit).
+  value credited. What the returned goods cost when they left, and how much of that was
+  written off, is in `credit_note_line_costs` (one row for each line of a posted credit note;
+  read by the owner, an accountant and the auditor only), for a commission on margin and for
+  Step 31's item profit.
 - *A credit note is not money collected.* What it settles is in `credit_note_allocations`,
   apart from `receipt_allocations`. If commission is released when an invoice is collected,
   the part of an invoice settled by a credit note was never collected. The hooks written in
@@ -156,11 +158,24 @@ itself:
 - **Low.** The cost taken back was rounded credit note by credit note, so many small returns
   could bring back a paisa or two more or less than the goods cost. Value and tax had a
   milder form of the same. Both are now worked out as the exact share so far (see the worked
-  example), and the cost is kept on the line.
+  example), and the cost is kept beside the line.
 - **Low.** A salesperson could learn the number of a colleague's invoice that the credit of
   one of their own credit notes had been set against. They now see the amount and the day.
 - **Low.** The file that reverses the migration could miss a draft credit note written while
   it ran. It now locks the table first.
+
+A second reviewer then attacked the changes. Fixed:
+
+- **Medium.** The cost of returned goods had been put on the credit note's line, where the
+  sales team could read it; nowhere else are they shown what goods cost. It is now in a table
+  of its own that only the owner, an accountant and the auditor read.
+- **Low.** Someone deleting a draft's lines with raw SQL at the very moment it was posted
+  could make the posting fail (nothing wrong reached the books). Posting no longer writes to
+  the lines, so it cannot.
+- **Low.** A return almost wholly damaged, of goods whose cost had fractions of a paisa, could
+  be refused. The damaged part of the cost is now never more than the whole.
+- **Low.** The file that reverses the migration now says what is given up with it: the
+  read-committed rule that also stands guard for Step 32's receipts.
 
 Held under attack: crediting more than was invoiced in every form tried (per line, over
 several credit notes, two at once, the same line twice); reaching the books past the posting

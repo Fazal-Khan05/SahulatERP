@@ -326,13 +326,20 @@ describe.skipIf(!hasDb)("credit notes", () => {
     expect((await getSalesDocument(as.accountant, last3))!.lines.map(figures)).toEqual(["BT-3 3 (0 damaged): 28.53 + 5.13 + 0.00 = 33.66"]);
     await postCreditNote(as.accountant, last3);
     const [credited] = await admin`
-      select sum(l.value)::text as value, sum(l.tax_amount)::text as tax, sum(l.quantity)::text as quantity, sum(l.returned_cost)::text as cost,
-             string_agg(trim_scale(l.returned_cost)::text, ' ' order by d.number) as costs
-      from public.sales_lines l join public.sales_documents d on d.id = l.document_id where l.source_line_id = ${bolts} and d.kind = 'credit_note' and d.status = 'submitted'`;
+      select sum(l.value)::text as value, sum(l.tax_amount)::text as tax, sum(l.quantity)::text as quantity, sum(c.cost)::text as cost,
+             string_agg(trim_scale(c.cost)::text, ' ' order by d.number) as costs
+      from public.sales_lines l join public.sales_documents d on d.id = l.document_id join public.credit_note_line_costs c on c.line_id = l.id
+      where l.source_line_id = ${bolts} and d.kind = 'credit_note' and d.status = 'submitted'`;
     // Exactly what the line billed, and exactly what its goods cost: 10.01, then up to 20.02, then all 35.04.
     expect(credited).toEqual({ value: "66.5700", tax: "11.9800", quantity: "7.0000", cost: "35.0400", costs: "10.01 10.01 15.02" });
     // All twenty bolts are on the shelf again, worth what they were.
     expect(await stock(bolt)).toBe("20 worth 100.1");
+    // What goods cost is read by those who read cost elsewhere, not by the sales team, whose credit notes these are.
+    const costs = (who: TenantContext) => withTenant(who.userId, tenantA, (tx) => tx.execute(sql`select 1 from credit_note_line_costs`)).then((rows) => rows.length);
+    for (const role of ["owner", "accountant", "auditor"] as const) expect(await costs(as[role]), role).toBeGreaterThan(0);
+    for (const role of ["sales_manager", "salesperson", "warehouse_manager", "recovery_officer"] as const) expect(await costs(as[role]), role).toBe(0);
+    expect(await codeOf(as.owner, sql`update credit_note_line_costs set cost = 0`)).toBe("42501");
+    expect(await codeOf(as.owner, sql`delete from credit_note_line_costs`)).toBe("42501");
     expect(await open(dealer)).toEqual(["SI-2627-00001 2360.00 of 4680.55"]);
     await booksAgree();
 
@@ -420,6 +427,7 @@ describe.skipIf(!hasDb)("credit notes", () => {
     ]);
     expect(await stock(helmet)).toBe(before);
     expect((await admin`select count(*)::int as n from public.stock_moves where source_id = ${id}`)[0].n).toBe(0);
+    expect((await admin`select trim_scale(cost)::text || ' ' || trim_scale(written_off)::text as c from public.credit_note_line_costs where credit_note_id = ${id}`).map((row) => row.c)).toEqual(["600 600"]);
     expect(await open(dealer)).toEqual([]);
     expect(await balance("customer_advances", dealer)).toBe("-820.00");
     await booksAgree();

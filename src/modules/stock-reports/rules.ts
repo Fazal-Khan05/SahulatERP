@@ -335,7 +335,7 @@ export function itemProfitTable(rows: readonly ProfitRow[], filter: StockFilter)
       { kind: "grand", depth: 0, cells: ["", "Total", "", sales, cost, sales.minus(cost), percent(marginPercent(sales, cost))] },
     ],
     notes: [
-      "Sales are the invoices' values before sales tax. The cost is what those goods left stock at.",
+      "Sales are the invoices' values before sales tax, less what credit notes took back. The cost is what those goods left stock at, less what came back onto the shelf; goods written off as damaged stay a cost.",
       "An invoice made from a delivery note counts here in the invoice's period; the books put its cost in the delivery note's month.",
     ],
   };

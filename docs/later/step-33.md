@@ -28,7 +28,7 @@ Track A. Waits for Step 32 (receipts).
   the books, with the unpaid invoices below; printed on the letterhead and as a PDF.
 - **Aged receivables** (`/recovery/ageing`, and on the Reports page under "Receivables"): not
   due, 1-30, 31-60, 61-90 and over 90 days past due, per customer; Excel, CSV and print.
-- Migration `0023_recovery` (track A): the tables `customer_follow_ups` and `payment_promises`
+- Migration `0024_recovery` (track A): the tables `customer_follow_ups` and `payment_promises`
   (logs, written once), and the functions `app.customer_received` and `app.customer_statement`.
 
 **The acceptance test**, "Overdue list matches ageing report", holds by construction: both are
@@ -56,7 +56,7 @@ on both screens.
 
 ## Review of the migration
 
-An independent reviewer attacked `0023_recovery` as arbitrary SQL from the app's role
+An independent reviewer attacked this step's migration (then numbered 0023, now `0024_recovery`) as arbitrary SQL from the app's role
 (2026-11-15). Nothing crossed a company, a branch or a role. Fixed in the migration:
 
 - the two functions' search path is `pg_catalog, pg_temp`, not empty (see the critical finding
@@ -66,7 +66,7 @@ An independent reviewer attacked `0023_recovery` as arbitrary SQL from the app's
 - "infinity" is refused as a date;
 - `service_role` loses its rights on the two logs, as in the other steps.
 
-**Critical, shared, not fixed here**: with an empty search path, Postgres looks for a type name
+**Critical, shared, fixed jointly on main** in `0023_safe_search_path` (2026-11-15): with an empty search path, Postgres looks for a type name
 in the session's temporary schema first. A session as the app's role can make a temporary type
 called `uuid` whose check runs its own code; inside any `SECURITY DEFINER` function with
 `search_path = ''` that declares or casts to `uuid`, that code runs as the function's owner and
@@ -74,7 +74,8 @@ bypasses row-level security. The functions of migration 0000 (`app.tenant_id()` 
 are open to it, so it reaches any query on a table with row-level security. The fix is joint:
 take the right to make temporary objects away from the app's role (`REVOKE TEMPORARY ON
 DATABASE ... FROM PUBLIC`), and give every such function `pg_catalog, pg_temp`. Reported to the
-coordinator on 2026-11-15.
+coordinator on 2026-11-15, who made that joint fix; its first run on a hosted Supabase project
+was this step's full browser suite on the Finisher's database (92 of 92 passed).
 
 ## Later
 

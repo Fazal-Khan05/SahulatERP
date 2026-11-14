@@ -222,9 +222,9 @@ test("the owner writes a broken item off, with the reason", async ({ page }) => 
   await fillLine(page, 1, "HL-1", "1");
   await shown(page.getByLabel("Add or take out, line 1", { exact: true })).selectOption({ label: "Take out" });
   // A reason is asked for; "Other" asks for a note as well.
-  await page.getByLabel("Reason").selectOption({ label: "Other" });
+  await page.getByLabel("Reason", { exact: true }).selectOption({ label: "Other" });
   await expect(page.getByLabel("Note (say what the reason is)")).toBeVisible();
-  await page.getByLabel("Reason").selectOption({ label: "Damaged" });
+  await page.getByLabel("Reason", { exact: true }).selectOption({ label: "Damaged" });
   await page.getByLabel("Note", { exact: true }).fill("Dropped while unloading");
   await page.getByRole("button", { name: "Post adjustment" }).click();
   await expect(page.getByRole("heading", { name: "SA-2627-00003" })).toBeVisible();

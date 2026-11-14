@@ -78,7 +78,7 @@ test("the owner gets the shell: their menu, an empty inbox and their company in 
   expect(await railLabels(page)).toEqual(OWNER_MENU);
   // Only screens that exist are links.
   const rail = page.getByRole("navigation", { name: "Main" });
-  await expect(rail.getByRole("link")).toHaveText(["Home", "Needs attention", "Sales", "Customers", "Price lists", "Suppliers", "Items", "Journals", "Reports", "Settings"]);
+  await expect(rail.getByRole("link")).toHaveText(["Home", "Needs attention", "Sales", "Customers", "Price lists", "Suppliers", "Stock", "Items", "Journals", "Reports", "Settings"]);
   await expect(rail.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
 
   await expect(page.getByText("Nothing needs your attention.").filter({ visible: true })).toHaveCount(1);

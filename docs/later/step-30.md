@@ -7,8 +7,11 @@ Built on 2026-11-14 in track B (stock). Migration `drizzle/0020_stock_documents.
 - **A transfer moves stock at once.** One person records it and the goods are in the other
   warehouse as soon as it is posted. There is no "on the way" state and no confirmation by the
   receiving warehouse. A wrong transfer is put right by transferring back.
-- **Transfers between two branches wait** (see "Later"). For now a transfer stays inside one
-  branch.
+- **Transfers between two branches wait for a piece of their own** (confirmed by the founder
+  on 2026-11-14, after the reviewer's finding; see "Later"). For now a transfer stays inside
+  one branch.
+- **The migration was applied to the shared development database** on the founder's yes
+  (2026-11-14), after the reviewer's two passes and after main was merged in.
 - **Only an owner and an accountant adjust stock** (write goods off, add goods, enter opening
   stock). The warehouse reports a difference through a stock count.
 - **The warehouse counts; an owner or an accountant posts the differences.** A finished count
@@ -106,8 +109,7 @@ These will not be renamed.
 - **The opening balances screen (Settings) does not mention opening stock.** It is a shared,
   finished screen. A line there pointing to "Enter opening stock" would save a new company a
   search.
-- **Transfers between the warehouses of two branches are refused** (decided by Claude after
-  the reviewer's finding; the founder to confirm). Every journal belongs to one branch and the
+- **Transfers between the warehouses of two branches are refused.** Every journal belongs to one branch and the
   reports can be read branch by branch. Goods moved from one branch to another change what each
   branch's stock is worth, so each branch's books need an entry: stock against an account that
   stands between the two branches. Posting nothing, as for a transfer inside a branch, left the

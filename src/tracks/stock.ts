@@ -55,6 +55,12 @@ export const reports: readonly ReportSection[] = [
     reports: [
       // The accountant's menu has no Stock entry; this is how an accountant reaches the stock screens.
       { label: "Stock on hand", href: "/stock", about: "What each warehouse holds, with transfers, adjustments, opening stock and counts.", permission: "stock.read", module: "inventory" },
+      // Step 31. What stock cost is for the owner, the accountant and the auditor (founder's decision, 2026-11-14).
+      { label: "Stock valuation", href: "/stock-reports/valuation", about: "What the stock on hand is worth on a day, against the stock account in the books.", permission: "stock.cost.read", module: "inventory" },
+      { label: "Stock movement", href: "/stock-reports/movement", about: "What came in and went out in a period, item by item, or every move of one item.", permission: "stock.cost.read", module: "inventory" },
+      { label: "Stock ageing", href: "/stock-reports/ageing", about: "How long the stock on hand has been held, and when each item last sold.", permission: "stock.cost.read", module: "inventory" },
+      { label: "Low stock", href: "/stock-reports/low-stock", about: "Items whose free stock is at or below their reorder level.", permission: "stock.read", module: "inventory" },
+      { label: "Item profit", href: "/stock-reports/item-profit", about: "Sales, cost of goods sold and margin of each item in a period.", permission: "stock.cost.read", module: "inventory" },
     ],
   },
 ];

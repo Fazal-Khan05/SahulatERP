@@ -169,6 +169,13 @@
       "when": 1794691803336,
       "tag": "0023_safe_search_path",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1794693579207,
+      "tag": "0024_credit_notes",
+      "breakpoints": true
     }
   ]
 }

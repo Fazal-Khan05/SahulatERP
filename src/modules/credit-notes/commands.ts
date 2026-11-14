@@ -171,13 +171,18 @@ export async function saveCreditNoteDraft(ctx: TenantContext, id: unknown, raw: 
     if (typed.date < document.source.date) throw new UserError("A credit note is dated on or after its invoice.");
     const invoice = await invoiceOf(tx, ctx, document.source.id);
     const lines = workOut(await selectReturnable(tx, ctx.tenantId, invoice.id), typed.lines, invoice.pricesIncludeTax);
-    // The lines first: the header's row is held, and its totals must describe the lines it ends with.
-    await writeLines(tx, ctx, document.id, lines);
-    const [saved] = await tx
-      .update(salesDocuments)
-      .set({ documentDate: typed.date, notes: typed.notes, customerReference: typed.reference, ...totalsOf(lines), updatedAt: sql`now()`, updatedBy: ctx.userId })
-      .where(and(eq(salesDocuments.tenantId, ctx.tenantId), eq(salesDocuments.id, document.id)))
-      .returning({ id: salesDocuments.id, updatedAt: salesDocuments.updatedAt });
+    let saved: { id: string; updatedAt: Date };
+    try {
+      // The lines first: the header's row is held, and its totals must describe the lines it ends with.
+      await writeLines(tx, ctx, document.id, lines);
+      [saved] = await tx
+        .update(salesDocuments)
+        .set({ documentDate: typed.date, notes: typed.notes, customerReference: typed.reference, ...totalsOf(lines), updatedAt: sql`now()`, updatedBy: ctx.userId })
+        .where(and(eq(salesDocuments.tenantId, ctx.tenantId), eq(salesDocuments.id, document.id)))
+        .returning({ id: salesDocuments.id, updatedAt: salesDocuments.updatedAt });
+    } catch (error) {
+      throw creditNoteRefusal(error, typed.date) ?? error;
+    }
     await audit(tx, ctx, {
       action: "sales_credit_note.update",
       entity: "sales_document",
@@ -214,7 +219,7 @@ function creditNoteRefusal(error: unknown, date: string): UserError | null {
   if (code === "SE121") return new UserError("The books have no record of these goods leaving stock on this invoice, so they cannot be taken back here.");
   if (code === "42501") return new UserError("Your role cannot do that.");
   if (code === "SE050" || code === "SE052" || code === "SE056" || code === "SE112" || code === "SE117" || code === "SE120" || code === "SE074") {
-    return new UserError("This credit note could not be posted as it stands. Open it again, save it, and post it once more.");
+    return new UserError("That could not be done to this credit note as it stands. Reload the page and try again.");
   }
   return null;
 }

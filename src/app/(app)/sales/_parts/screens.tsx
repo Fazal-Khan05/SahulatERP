@@ -1028,12 +1028,12 @@ async function CreditNote({ session, document, back }: { session: Session; docum
                     {facts.settled.map((row) => (
                       <tr key={row.id}>
                         <td className="py-2 pr-4 font-medium whitespace-nowrap">
-                          {row.kind === "invoice" && row.number ? (
+                          {row.kind === "invoice" && row.number && row.targetId ? (
                             <Link href={`/sales/${row.targetId}`} className="underline-offset-4 hover:underline">
                               {row.number}
                             </Link>
                           ) : (
-                            (row.number ?? "An invoice of another branch")
+                            (row.number ?? "An invoice you do not have access to")
                           )}
                           {row.kind === "opening" && row.number ? <span className="font-normal text-muted-foreground"> (from before the books were opened)</span> : null}
                         </td>

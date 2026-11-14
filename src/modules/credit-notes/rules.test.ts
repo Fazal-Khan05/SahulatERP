@@ -23,30 +23,45 @@ const after = (returned: Returned, quantity: Decimal, f: ReturnType<typeof credi
 });
 
 describe("a figure's share", () => {
-  it("is the figure in the proportion of the quantity, rounded to the paisa, half up", () => {
-    expect(creditShare(d("1900"), d(0), d(2), d(5), false).toFixed(2)).toBe("760.00");
-    expect(creditShare(d("100"), d(0), d(1), d(3), false).toFixed(2)).toBe("33.33");
-    expect(creditShare(d("200"), d(0), d(1), d(3), false).toFixed(2)).toBe("66.67");
+  it("is the figure in the proportion of what has come back, rounded to the paisa, half up", () => {
+    expect(creditShare(d("1900"), d(0), d(2), d(5)).toFixed(2)).toBe("760.00");
+    expect(creditShare(d("100"), d(0), d(1), d(3)).toFixed(2)).toBe("33.33");
+    expect(creditShare(d("200"), d(0), d(1), d(3)).toFixed(2)).toBe("66.67");
     // Exactly half a paisa goes up.
-    expect(creditShare(d("0.15"), d(0), d(1), d(10), false).toFixed(2)).toBe("0.02");
-    expect(creditShare(d("1.005"), d(0), d(1), d(2), false).toFixed(4)).toBe("0.5000");
-    expect(creditShare(d("0"), d(0), d(1), d(3), false).toFixed(2)).toBe("0.00");
+    expect(creditShare(d("0.15"), d(0), d(1), d(10)).toFixed(2)).toBe("0.02");
+    expect(creditShare(d("1.005"), d(0), d(1), d(2)).toFixed(4)).toBe("0.5000");
+    expect(creditShare(d("0"), d(0), d(1), d(3)).toFixed(2)).toBe("0.00");
   });
 
-  it("is whatever is left for the return that takes the last of the quantity", () => {
-    expect(creditShare(d("100"), d("66.66"), d(1), d(3), true).toFixed(2)).toBe("33.34");
-    expect(creditShare(d("100"), d("100"), d(1), d(3), true).toFixed(2)).toBe("0.00");
+  it("brings what has been credited up to the exact share so far, less what earlier credit notes took", () => {
+    // A third each time of 100: 33.33, then up to 66.67 (33.34 more), then all of it (33.33 more).
+    expect(creditShare(d("100"), d("33.33"), d(2), d(3)).toFixed(2)).toBe("33.34");
+    expect(creditShare(d("100"), d("66.67"), d(3), d(3)).toFixed(2)).toBe("33.33");
+    // Twenty pins billed 0.10 in all, coming back one at a time: never ahead of their share by more than half a paisa.
+    let gone = d(0);
+    const parts: string[] = [];
+    for (let pins = 1; pins <= 20; pins += 1) {
+      const part = creditShare(d("0.10"), gone, d(pins), d(20));
+      parts.push(part.toFixed(2));
+      gone = gone.plus(part);
+      expect(gone.minus(d("0.10").times(pins).div(20)).abs().lte("0.005"), `after ${pins} pins`).toBe(true);
+    }
+    expect(parts.join(" ")).toBe("0.01 0.00 0.01 0.00 0.01 0.00 0.01 0.00 0.01 0.00 0.01 0.00 0.01 0.00 0.01 0.00 0.01 0.00 0.01 0.00");
+    expect(gone.toFixed(2)).toBe("0.10");
   });
 
-  it("is never more than is left", () => {
-    // Two returns of a third each have taken 66.67 of 100 between them by rounding up; a share is capped at what remains.
-    expect(creditShare(d("0.02"), d("0.02"), d(1), d(3), false).toFixed(2)).toBe("0.00");
-    expect(creditShare(d("10"), d("9.99"), d(1), d(2), false).toFixed(2)).toBe("0.01");
+  it("is all that is left once everything has come back, whatever the figure's decimals", () => {
+    expect(creditShare(d("11.9826"), d("6.85"), d(7), d(7)).toFixed(4)).toBe("5.1326");
+    expect(creditShare(d("100"), d("100"), d(3), d(3)).toFixed(2)).toBe("0.00");
+    // And never more than the figure before that: 0.0149 is not rounded up to 0.02 for nine tenths of it.
+    expect(creditShare(d("0.0149"), d(0), d(9), d(10)).toFixed(4)).toBe("0.0100");
+    expect(creditShare(d("0.0049"), d(0), d(9), d(10)).toFixed(4)).toBe("0.0000");
+    expect(creditShare(d("0.0051"), d(0), d(999), d(1000)).toFixed(4)).toBe("0.0051");
   });
 
   it("keeps its digits whatever the size of the figures", () => {
-    expect(creditShare(d("999999999999999.99"), d(0), d("123456.7891"), d("999999.9999"), false).toFixed(2)).toBe("123456789112345.68");
-    expect(creditShare(d("0.01"), d(0), d("0.0001"), d("999999.9999"), false).toFixed(2)).toBe("0.00");
+    expect(creditShare(d("999999999999999.99"), d(0), d("123456.7891"), d("999999.9999")).toFixed(2)).toBe("123456789112345.68");
+    expect(creditShare(d("0.01"), d(0), d("0.0001"), d("999999.9999")).toFixed(2)).toBe("0.00");
   });
 });
 
@@ -69,10 +84,11 @@ describe("a line of a credit note", () => {
       shown.push(`${f.value.toFixed(2)} + ${f.taxAmount.toFixed(2)}`);
       returned = after(returned, quantity, f);
     }
-    expect(shown).toEqual(["19.02 + 3.42", "19.02 + 3.42", "28.53 + 5.14"]);
+    // Tax: two sevenths is 3.42; four sevenths is 6.85, so the second two take 3.43; the last three what is left.
+    expect(shown).toEqual(["19.02 + 3.42", "19.02 + 3.43", "28.53 + 5.13"]);
     expect(`${returned.value.toFixed(2)} ${returned.taxAmount.toFixed(2)}`).toBe("66.57 11.98");
-    // Taken before the other two, the three would have been three sevenths: 5.13.
-    expect(creditFigures(bolts, NOTHING_RETURNED, d(3), false).taxAmount.toFixed(2)).toBe("5.13");
+    // Taken first, two bolts are 3.42 of tax whichever two they are: a draft saved before another credit note was posted shows that figure.
+    expect(creditFigures(bolts, NOTHING_RETURNED, d(2), false).taxAmount.toFixed(2)).toBe("3.42");
     expect(stillToReturn(bolts, returned).toFixed()).toBe("0");
   });
 

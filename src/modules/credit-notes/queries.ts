@@ -96,10 +96,11 @@ export async function selectCreditNotesOf(tx: Tx, tenantId: string, invoiceId: s
 }
 
 /** What one credit note has been set against: its own invoice when it was posted, and any invoice its credit went to later. */
-export type SettledRow = { id: string; kind: "invoice" | "opening"; targetId: string; number: string | null; date: string | null; amount: Decimal; allocatedOn: string; later: boolean };
+/** `targetId`, `number` and `date` are null when the reader may not read the invoice the row settled: they see the amount and the day. */
+export type SettledRow = { id: string; kind: "invoice" | "opening"; targetId: string | null; number: string | null; date: string | null; amount: Decimal; allocatedOn: string; later: boolean };
 
 export async function selectSettled(tx: Tx, creditNoteId: string): Promise<SettledRow[]> {
-  const rows = await tx.execute<{ id: string; kind: "invoice" | "opening"; target_id: string; number: string | null; document_date: string | null; amount: string; allocated_on: string; later: boolean }>(sql`
+  const rows = await tx.execute<{ id: string; kind: "invoice" | "opening"; target_id: string | null; number: string | null; document_date: string | null; amount: string; allocated_on: string; later: boolean }>(sql`
     select id, kind, target_id, number, document_date::text, amount::text, allocated_on::text, later
     from app.credit_note_settled(${creditNoteId}::uuid)`);
   return rows.map((row) => ({ id: row.id, kind: row.kind, targetId: row.target_id, number: row.number, date: row.document_date, amount: exact(row.amount), allocatedOn: row.allocated_on, later: row.later }));

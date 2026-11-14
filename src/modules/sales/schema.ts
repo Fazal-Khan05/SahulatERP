@@ -204,6 +204,9 @@ export const salesLines = pgTable(
     // On a credit note only: how many of the quantity returned came back damaged and are written
     // off, not put back on the shelf. Nothing on any other kind of document.
     damagedQuantity: numeric("damaged_quantity", { precision: 20, scale: 4 }),
+    // On a posted credit note only: what the goods on the line cost when they left, as far as
+    // they came back. Written by the database when the credit note is posted.
+    returnedCost: numeric("returned_cost", { precision: 20, scale: 4 }),
     // The value of the supply before tax and after the discount, and what the buyer pays for the line.
     value: numeric({ precision: 20, scale: 4 }).notNull(),
     total: numeric({ precision: 20, scale: 4 }).notNull(),
@@ -230,6 +233,7 @@ export const salesLines = pgTable(
       .where(sql`${t.sourceLineId} is not null`),
     check("sales_lines_not_own_source", sql`${t.sourceLineId} is distinct from ${t.id}`),
     check("sales_lines_damaged_within_quantity", sql`${t.damagedQuantity} >= 0 and ${t.damagedQuantity} <= ${t.quantity}`),
+    check("sales_lines_returned_cost_sane", sql`${t.returnedCost} >= 0 and ${t.returnedCost} < 1e16`),
     check("sales_lines_line_no_positive", sql`${t.lineNo} >= 1`),
     check("sales_lines_description_length", sql`char_length(btrim(${t.description})) between 1 and 300`),
     check("sales_lines_quantity_positive", sql`${t.quantity} > 0 and ${t.quantity} < 1e12 and ${t.unitFactor} > 0 and ${t.unitFactor} < 1e12`),

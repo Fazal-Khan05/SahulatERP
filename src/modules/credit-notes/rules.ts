@@ -9,7 +9,7 @@ import { MAX_SALES_LINES } from "@/modules/sales/rules";
 // A credit note takes back part of one posted sales invoice, line by line: so many of what a
 // line billed, of which so many came back damaged. What a line of it comes to is not worked
 // out afresh from a price and a tax rate: it is the invoice line's own value and tax, in the
-// proportion of the quantity that comes back. The database works the same figures out when
+// proportion of the quantity that has come back. The database works the same figures out when
 // the credit note is posted and refuses one that differs, so the arithmetic here is the
 // arithmetic of app.credit_note_share in drizzle/0023_credit_notes.sql, digit for digit.
 
@@ -22,17 +22,18 @@ const typed = (value: unknown) => (typeof value === "string" ? value.trim() : ""
 const isNil = (text: string) => /^0+(\.0+)?$/.test(text);
 
 /**
- * One figure of a line of a credit note: `whole` (the invoice line's figure) in the proportion
- * of `quantity` to `of`, rounded to the paisa, half up; never more than is left of it after
- * `gone` (what earlier credit notes took). The return that takes the last of the quantity
- * takes whatever is left, so a line's credit notes never come to a paisa more or less than it.
+ * One figure of a line of a credit note. Every credit note brings what has been taken back of
+ * `whole` (the invoice line's figure) up to its exact share for `upto` of `of` (all that has
+ * come back so far, this credit note included, of what was invoiced), rounded to the paisa,
+ * half up; this credit note's part is that, less `gone` (what earlier credit notes took). So
+ * however a line comes back, what has been credited is never more than half a paisa from the
+ * exact share, and the credit notes of a line that has all come back are exactly the line.
  */
-export function creditShare(whole: Decimal, gone: Decimal, quantity: Decimal, of: Decimal, last: boolean): Decimal {
-  const left = whole.minus(gone);
-  if (last) return left;
-  // Whole-number arithmetic, as the database does it: floor((200 * whole * quantity + of) / (2 * of)) / 100.
-  const share = new Wide(whole).times(quantity).times(200).plus(of).dividedToIntegerBy(new Wide(of).times(2)).dividedBy(100);
-  return Decimal.min(new Decimal(share.toString()), left);
+export function creditShare(whole: Decimal, gone: Decimal, upto: Decimal, of: Decimal): Decimal {
+  if (upto.gte(of)) return whole.minus(gone);
+  // Whole-number arithmetic, as the database does it: floor((200 * whole * upto + of) / (2 * of)) / 100.
+  const share = new Wide(whole).times(upto).times(200).plus(of).dividedToIntegerBy(new Wide(of).times(2)).dividedBy(100);
+  return Decimal.min(new Decimal(share.toString()), whole).minus(gone);
 }
 
 /** What a line of an invoice billed, as far as a credit note needs it. */
@@ -63,8 +64,8 @@ export type CreditFigures = { gross: Decimal; discountAmount: Decimal; value: De
  * credit notes took `returned`. The caller has checked that no more comes back than is left.
  */
 export function creditFigures(line: InvoicedLine, returned: Returned, quantity: Decimal, pricesIncludeTax: boolean): CreditFigures {
-  const last = returned.quantity.plus(quantity).eq(line.quantity);
-  const part = (whole: Decimal, gone: Decimal) => creditShare(whole, gone, quantity, line.quantity, last);
+  const upto = returned.quantity.plus(quantity);
+  const part = (whole: Decimal, gone: Decimal) => creditShare(whole, gone, upto, line.quantity);
   const value = part(line.value, returned.value);
   const taxAmount = part(line.taxAmount, returned.taxAmount);
   const furtherTaxAmount = part(line.furtherTaxAmount, returned.furtherTaxAmount);

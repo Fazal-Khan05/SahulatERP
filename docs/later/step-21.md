@@ -21,8 +21,9 @@ of the database (`app.post_credit_note`), which:
 
 - refuses more than is left of what the invoice billed, line by line, over all its credit notes;
 - works each line out as the invoice line's own value and tax in the proportion of the quantity
-  (the last return of a line takes whatever is left, so a line's credit notes never come to a
-  paisa more or less than the line did), and refuses a credit note whose figures differ;
+  (each credit note brings the line up to its exact share for all that has come back so far,
+  so a line's credit notes never come to a paisa more or less than the line did), and refuses
+  a credit note whose figures differ;
 - takes the number (CN-2627-00001) and posts one journal: Sales, sales tax and further tax come
   down; the customer's account comes down by as much as is still unpaid of the invoice, and
   the rest is the customer's credit (Advances from customers); goods fit to sell go back into
@@ -53,7 +54,8 @@ These came up while building. Each is the option I would recommend; say if any s
 3. **The owner and an accountant set leftover credit against invoices.** The sales manager
    records the return but does not settle a customer's account.
 4. **Goods come back to the warehouse they left from**, at the cost they left at (not at
-   today's average cost). To put them somewhere else, transfer them afterwards.
+   today's average cost), in the unit they were sold in even if the item's units have changed
+   since. To put them somewhere else, transfer them afterwards.
 5. **A posted credit note is never cancelled**, like a posted invoice. One entered by mistake
    is put right by invoicing the goods again.
 6. **A credit note carries tax as its invoice did**, at the invoice line's own rates, even if
@@ -85,7 +87,8 @@ built here.
   `sales_line_salespeople` (the database refuses them): the salespeople and their shares are
   those of the invoice line, `sales_line_salespeople.line_id = sales_lines.source_line_id`.
   `damaged_quantity` says how much of the quantity was written off; it does not change the
-  value credited.
+  value credited. `returned_cost` is what the returned goods cost when they left (for a
+  commission on margin, and for Step 31's item profit).
 - *A credit note is not money collected.* What it settles is in `credit_note_allocations`,
   apart from `receipt_allocations`. If commission is released when an invoice is collected,
   the part of an invoice settled by a credit note was never collected. The hooks written in
@@ -133,3 +136,46 @@ payable under source type `credit_note`.
 - Batches and serial numbers on returned goods (they do not exist anywhere yet).
 - More than one draft credit note for an invoice at a time from the screen (the database
   allows it; the screen opens the draft there already is).
+
+## Reviewed
+
+An independent reviewer attacked the migration on a local database before anything was applied
+to the shared one, with this threat: someone running any SQL as the app's database role, as any
+member, in any kind of transaction, with several sessions at once. Fixed in the migration
+itself:
+
+- **High.** Opening balances could be reversed, from a transaction reading an older picture of
+  the database, while a credit note's credit (or a receipt, from Step 32) was set against
+  them: the customer's account in the books then no longer matched the unpaid invoices. An
+  opening entry is now reversed only in a read committed transaction (SE056). The check sits
+  in this step's own trigger and covers Step 32's as well.
+- **Medium.** A return was refused once the item's units had changed (a carton made smaller,
+  or removed) after the sale. A credit note's line is now held to its invoice line, not to
+  the item's units of today.
+- **Low.** The cost taken back was rounded credit note by credit note, so many small returns
+  could bring back a paisa or two more or less than the goods cost. Value and tax had a
+  milder form of the same. Both are now worked out as the exact share so far (see the worked
+  example), and the cost is kept on the line.
+- **Low.** A salesperson could learn the number of a colleague's invoice that the credit of
+  one of their own credit notes had been set against. They now see the amount and the day.
+- **Low.** The file that reverses the migration could miss a draft credit note written while
+  it ran. It now locks the table first.
+
+Held under attack: crediting more than was invoiced in every form tried (per line, over
+several credit notes, two at once, the same line twice); reaching the books past the posting
+function; changing, cancelling or removing a posted credit note or what it settled; forged
+audit rows and journals; every role that should not write, post or use credit; another branch
+or another company; malformed input to setting credit against invoices; receipts cancelled or
+bounced around a credit note; deadlocks between a credit note, an invoice and a receipt. The
+widened rules were compared line by line with the ones they replace: every added line applies
+only to a credit note.
+
+Not fixed here, because it is older than this step and not this track's to change: anyone
+with the app's database role can hold the lock that every posting for one customer takes, and
+so stall that customer's documents until they let go (first used in Step 16). Passed to the
+coordinator.
+
+The reviewer also found that the app's database role could make temporary objects that the
+database's functions would mistake for built-in types. That was found by another reviewer the
+same day and closed for every function in `drizzle/0023_safe_search_path.sql`; this
+migration's functions are written the safe way.

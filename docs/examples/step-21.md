@@ -4,7 +4,8 @@ Checked by Claude, not by an accountant (the founder has none; decided 2026-11-1
 journals were worked out from standard double-entry practice, worked out a second time by an
 independent reviewer who was given only the events below and the company's policies, not the
 first answer or the software, and both were compared with what the software posts. All three
-agree line for line, to the paisa, on every entry and every closing balance. The tests in
+agree line for line on every entry and every closing balance, with one deliberate difference
+of a paisa between two credit notes in section 4, explained there. The tests in
 `src/modules/credit-notes/credit-notes.test.ts` enter these returns and fail if the software
 ever posts anything else.
 
@@ -18,8 +19,9 @@ How it treats goods that come back (the founder's decisions, 2026-11-14, and the
 for him in `docs/later/step-21.md`):
 
 - A credit note is made against one invoice and takes back part of it, line by line: the
-  invoice line's own value and tax, in the proportion of the quantity. The last return of a
-  line takes whatever is left of the line's figures.
+  invoice line's own value and tax, in the proportion of the quantity. Each credit note brings
+  what has been taken back of a line up to the exact share for all that has come back so far,
+  rounded to the paisa; a line that has all come back has been credited exactly what it billed.
 - What it takes off the customer's account first settles whatever is still unpaid on its own
   invoice. Anything beyond that is the customer's **credit**, held in Advances from customers
   until it is set against another invoice.
@@ -101,16 +103,25 @@ SI-2627-00001 has 2,438.55 unpaid.
 
 22 October: the 7 bolts (66.57 + 11.98 of tax) come back on three credit notes, 2, 2 and 3.
 
-| Credit note | Bolts | Value | Sales tax | How |
-| --- | ---: | ---: | ---: | --- |
-| first | 2 | 19.02 | 3.42 | 66.57 x 2/7 = 19.02; 11.98 x 2/7 = 3.4229 |
-| second | 2 | 19.02 | 3.42 | the same |
-| third | 3 | 28.53 | 5.14 | what is left: 66.57 - 38.04; 11.98 - 6.84 |
-| | 7 | 66.57 | 11.98 | exactly what the line billed |
+| Credit note | Bolts | Value | Sales tax | Cost back in stock | How |
+| --- | ---: | ---: | ---: | ---: | --- |
+| first | 2 | 19.02 | 3.42 | 10.01 | two sevenths: 66.57 x 2/7 = 19.02; 11.98 x 2/7 = 3.4229; 35.04 x 2/7 = 10.0114 |
+| second | 2 | 19.02 | 3.43 | 10.01 | up to four sevenths: 38.04, 6.85 (6.8457) and 20.02, less the first |
+| third | 3 | 28.53 | 5.13 | 15.02 | all of it, less the first two |
+| | 7 | 66.57 | 11.98 | 35.04 | exactly what the line billed and cost |
 
-Three sevenths of the tax would be 5.13, a paisa short. The third credit note had been saved
-as a draft before the other two were posted, when 5.13 was right; posting it then is refused,
-and it is saved again at 5.14. SI-2627-00001 has 2,360.00 unpaid: the two helmets.
+The second credit note had been saved as a draft before the first was posted, when two
+sevenths, 3.42, was right for it; posting it then is refused, and it is saved again at 3.43.
+SI-2627-00001 has 2,360.00 unpaid: the two helmets.
+
+**The one difference from the independent derivation.** The reviewer was told that each return
+takes its own share and the last return of a line takes whatever is left, and so gave the tax
+as 3.42, 3.42 and 5.14. That was how the software first worked. A second reviewer, attacking
+it, showed what that rule does to goods that come back in many small lots: twenty pins billed
+at 0.10 in all, returned one at a time, were credited the whole 0.10 by the tenth pin. The
+software now brings each line up to its exact share so far instead, which gives 3.42, 3.43 and
+5.13 here: the same 11.98 in all, never more than half a paisa from the exact share on the way,
+and the same rule for what the goods cost.
 
 ## 5. A part-paid invoice: some settles the invoice, the rest is credit
 
@@ -152,9 +163,9 @@ scenario.
    as a figure in the accounts. It is visible as the list of credit notes, and can be a report.
 2. **Goods come back at the cost they left at**, and the warehouse's average cost is worked
    out afresh from what it then holds, as for any goods coming in.
-3. **A return's cost is its share of what the line's goods cost, rounded to the paisa.** Over
-   several part returns of one line the costs taken back can differ from the cost that left by
-   a paisa. The stock and its account still agree with each other exactly.
+3. **A return's cost is its share of what the line's goods cost when they left**, worked out
+   the same way as its value: goods that have all come back have brought back exactly what
+   they cost. The cost is kept on each line of the credit note.
 4. **Damaged goods are written off in full at once** (the founder's decision). The reviewer
    notes that goods with some salvage value would be carried at that value under IAS 2, and
    that a loss recoverable from a carrier or a supplier is not tracked. The reason is typed on
@@ -162,9 +173,9 @@ scenario.
 5. **Credit left over is kept with advances from customers**, apart from the receivable, until
    it is set against an invoice. Until then a customer can show as owing on one invoice while
    in credit on another; the customer's balance against the credit limit counts both.
-6. **The last return of a line takes what is left**, so one credit note's tax can be a paisa
-   away from 18% of its own value (5.14 on 28.53 above). The credit notes of a line together
-   are exactly the line.
+6. **Each credit note brings its line up to the exact share so far**, so one credit note's
+   tax can be a paisa away from 18% of its own value (3.43 on 19.02 above). The credit notes
+   of a line together are exactly the line.
 
 ## Questions this raised (for a tax adviser; not decided here)
 

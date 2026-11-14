@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
 import Decimal from "decimal.js";
 import { sql } from "drizzle-orm";
+import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb, withTenant } from "@/db";
 import { setBaseCurrency } from "@/modules/currencies/commands";
-import { addUnit, createItem } from "@/modules/items/commands";
+import { addUnit, createItem, removeItemUnit, setItemUnit } from "@/modules/items/commands";
 import { seedAccounts } from "@/modules/ledger/commands";
 import { openFiscalYear } from "@/modules/numbering/commands";
+import { addOpenDocument, postOpening, reverseOpening, startOpening } from "@/modules/opening/commands";
 import { createParty, setPartyArchived } from "@/modules/parties/commands";
 import { postReceipt, saveReceiptDraft } from "@/modules/receipts/commands";
 import { listOpenItems } from "@/modules/receipts/queries";
@@ -60,7 +62,7 @@ async function codeOf(who: TenantContext, statement: ReturnType<typeof sql>): Pr
     return e.cause?.code ?? e.code ?? "unknown";
   }
 }
-const line = (itemId: string, quantity: string, discountPercent = "") => ({ itemId, quantity, unitId: "", unitPrice: "", discountPercent, description: "" });
+const line = (itemId: string, quantity: string, discountPercent = "", unitId = "") => ({ itemId, quantity, unitId, unitPrice: "", discountPercent, description: "" });
 async function order(customerId: string, date: string, lines: ReturnType<typeof line>[]): Promise<string> {
   const { id } = await saveSalesDraft(as.salesperson, null, { kind: "order", date, customerId, warehouseId: warehouse, lines, shares: [{ userId: userIds.salesperson, percent: "100" }] });
   await submitSalesDocument(as.salesperson, id);
@@ -157,6 +159,10 @@ describe.skipIf(!hasDb)("credit notes", () => {
     await seedStock(admin, { ...seed, itemId: helmet, quantity: "10", value: "6000" });
     await seedStock(admin, { ...seed, itemId: chain, quantity: "20", value: "5400" });
     await seedStock(admin, { ...seed, itemId: bolt, quantity: "20", value: "100.10" });
+    // The books open on 1 October: Walk-in Rider still owes 500 on an old invoice.
+    await startOpening(as.owner, { date: "2026-10-01" });
+    await addOpenDocument(as.owner, "receivable", { party: "C-002", documentNumber: "OLD-9", documentDate: "2026-09-05", dueDate: "2026-09-20", amount: "500" });
+    await postOpening(as.owner);
 
     // 10 October: 2 helmets, 5 chains and 7 bolts are delivered to Registered Dealer; invoiced on the 12th.
     const order1 = await order(dealer, "2026-10-10", [line(helmet, "2"), line(chain, "5", "5"), line(bolt, "7", "5")]);
@@ -299,28 +305,32 @@ describe.skipIf(!hasDb)("credit notes", () => {
   });
 
   it("works a line's share out to the paisa, and refuses figures that another credit note has overtaken", async () => {
-    // Seven bolts were billed at 66.57 and 11.98 of tax. They come back 2, 2 and 3: the tax is 3.42, 3.42 and what is left, 5.14.
+    // Seven bolts were billed at 66.57 and 11.98 of tax, and cost 35.04. They come back 2, 2 and 3: each credit note brings
+    // what has been taken back up to the exact share so far. The tax is 3.42, then 3.43 (four sevenths are 6.85), then 5.13.
     const bolts = await lineOf(first, bolt);
-    const three = await anotherDraft(as.accountant, first, "2026-10-22");
-    await saveCreditNoteDraft(as.accountant, three, { date: "2026-10-22", lines: [back(bolts, "3")] });
-    // Saved while nothing had come back: three sevenths, 5.13 of tax.
-    expect((await getSalesDocument(as.accountant, three))!.lines.map(figures)).toEqual(["BT-3 3 (0 damaged): 28.53 + 5.13 + 0.00 = 33.66"]);
-    for (const number of ["CN-2627-00003", "CN-2627-00004"]) {
-      const two = await anotherDraft(as.accountant, first, "2026-10-22");
-      await saveCreditNoteDraft(as.accountant, two, { date: "2026-10-22", lines: [back(bolts, "2")] });
-      expect((await getSalesDocument(as.accountant, two))!.lines.map(figures)).toEqual(["BT-3 2 (0 damaged): 19.02 + 3.42 + 0.00 = 22.44"]);
-      expect((await postCreditNote(as.accountant, two)).number).toBe(number);
-    }
-    // The three now take the last of the line, which is 5.14: the draft's 5.13 is no longer right, and neither the app nor the database posts it.
-    await expect(postCreditNote(as.accountant, three)).rejects.toThrow("Another credit note for this invoice was posted after this one was saved. Check it and save it again.");
-    expect(await codeOf(as.accountant, sql`select * from app.post_credit_note(${three}::uuid)`)).toBe("SE115");
-    await saveCreditNoteDraft(as.accountant, three, { date: "2026-10-22", lines: [back(bolts, "3")] });
-    expect((await getSalesDocument(as.accountant, three))!.lines.map(figures)).toEqual(["BT-3 3 (0 damaged): 28.53 + 5.14 + 0.00 = 33.67"]);
-    await postCreditNote(as.accountant, three);
+    const second2 = await anotherDraft(as.accountant, first, "2026-10-22");
+    await saveCreditNoteDraft(as.accountant, second2, { date: "2026-10-22", lines: [back(bolts, "2")] });
+    // Saved while nothing had come back: two sevenths, 3.42 of tax.
+    expect((await getSalesDocument(as.accountant, second2))!.lines.map(figures)).toEqual(["BT-3 2 (0 damaged): 19.02 + 3.42 + 0.00 = 22.44"]);
+    const first2 = await anotherDraft(as.accountant, first, "2026-10-22");
+    await saveCreditNoteDraft(as.accountant, first2, { date: "2026-10-22", lines: [back(bolts, "2")] });
+    expect((await postCreditNote(as.accountant, first2)).number).toBe("CN-2627-00003");
+    // The other two now bring the line up to four sevenths, which is 3.43 more: the draft's 3.42 is no longer right, and neither the app nor the database posts it.
+    await expect(postCreditNote(as.accountant, second2)).rejects.toThrow("Another credit note for this invoice was posted after this one was saved. Check it and save it again.");
+    expect(await codeOf(as.accountant, sql`select * from app.post_credit_note(${second2}::uuid)`)).toBe("SE115");
+    await saveCreditNoteDraft(as.accountant, second2, { date: "2026-10-22", lines: [back(bolts, "2")] });
+    expect((await getSalesDocument(as.accountant, second2))!.lines.map(figures)).toEqual(["BT-3 2 (0 damaged): 19.02 + 3.43 + 0.00 = 22.45"]);
+    expect((await postCreditNote(as.accountant, second2)).number).toBe("CN-2627-00004");
+    const last3 = await anotherDraft(as.accountant, first, "2026-10-22");
+    await saveCreditNoteDraft(as.accountant, last3, { date: "2026-10-22", lines: [back(bolts, "3")] });
+    expect((await getSalesDocument(as.accountant, last3))!.lines.map(figures)).toEqual(["BT-3 3 (0 damaged): 28.53 + 5.13 + 0.00 = 33.66"]);
+    await postCreditNote(as.accountant, last3);
     const [credited] = await admin`
-      select sum(l.value)::text as value, sum(l.tax_amount)::text as tax, sum(l.quantity)::text as quantity
+      select sum(l.value)::text as value, sum(l.tax_amount)::text as tax, sum(l.quantity)::text as quantity, sum(l.returned_cost)::text as cost,
+             string_agg(trim_scale(l.returned_cost)::text, ' ' order by d.number) as costs
       from public.sales_lines l join public.sales_documents d on d.id = l.document_id where l.source_line_id = ${bolts} and d.kind = 'credit_note' and d.status = 'submitted'`;
-    expect(credited).toEqual({ value: "66.5700", tax: "11.9800", quantity: "7.0000" });
+    // Exactly what the line billed, and exactly what its goods cost: 10.01, then up to 20.02, then all 35.04.
+    expect(credited).toEqual({ value: "66.5700", tax: "11.9800", quantity: "7.0000", cost: "35.0400", costs: "10.01 10.01 15.02" });
     // All twenty bolts are on the shelf again, worth what they were.
     expect(await stock(bolt)).toBe("20 worth 100.1");
     expect(await open(dealer)).toEqual(["SI-2627-00001 2360.00 of 4680.55"]);
@@ -333,9 +343,9 @@ describe.skipIf(!hasDb)("credit notes", () => {
       const quantity = Decimal.max(of.times(Math.random()).toDecimalPlaces(i % 3 === 0 ? 4 : 0, Decimal.ROUND_DOWN), new Decimal(i % 3 === 0 ? "0.0001" : "1"));
       const whole = random(9, i % 2 === 0 ? 2 : 4);
       const gone = whole.times(Math.random() * 0.6).toDecimalPlaces(2, Decimal.ROUND_DOWN);
-      const last = i % 7 === 0;
-      const [row] = await admin`select app.credit_note_share(${whole.toFixed(4)}::numeric, ${gone.toFixed(4)}::numeric, ${quantity.toFixed(4)}::numeric, ${of.toFixed(4)}::numeric, ${last})::text as share`;
-      expect(creditShare(whole, gone, quantity, of, last).toFixed(4), `${whole} x ${quantity} / ${of}, ${gone} gone`).toBe(new Decimal(row.share).toFixed(4));
+      const upto = i % 7 === 0 ? of : quantity;
+      const [row] = await admin`select app.credit_note_share(${whole.toFixed(4)}::numeric, ${gone.toFixed(4)}::numeric, ${upto.toFixed(4)}::numeric, ${of.toFixed(4)}::numeric)::text as share`;
+      expect(creditShare(whole, gone, upto, of).toFixed(4), `${whole} x ${upto} / ${of}, ${gone} gone`).toBe(new Decimal(row.share).toFixed(4));
     }
   });
 
@@ -343,7 +353,7 @@ describe.skipIf(!hasDb)("credit notes", () => {
     // 14 October: Walk-in Rider pays the whole of SI-2627-00002 in cash.
     const receipt = await saveReceiptDraft(as.recovery_officer, null, { date: "2026-10-14", customerId: rider, method: "cash", accountId: cash, amount: "2684", allocations: [{ kind: "invoice", id: second, amount: "2684" }] });
     await postReceipt(as.recovery_officer, receipt.id);
-    expect(await open(rider)).toEqual([]);
+    expect(await open(rider)).toEqual(["OLD-9 500.00 of 500.00"]);
 
     // 18 October: the helmet comes back, fit to sell. Nothing is left to pay on the invoice, so the whole 1,220 is the customer's credit.
     const { id } = await startCreditNote(as.owner, second);
@@ -360,11 +370,11 @@ describe.skipIf(!hasDb)("credit notes", () => {
       "5100 Cost of goods sold: 0 / 600",
     ]);
     expect(await balance("customer_advances", rider)).toBe("-1220.00");
-    expect(await balance("ar", rider)).toBe("0.00");
+    expect(await balance("ar", rider)).toBe("500.00");
 
     // 19 October: the rider buys 2 chains, 976 with tax. On the 20th, 976 of the credit is set against that invoice.
     const third = await invoice(await order(rider, "2026-10-19", [line(chain, "2")]), "2026-10-19");
-    expect(await open(rider)).toEqual(["SI-2627-00003 976.00 of 976.00"]);
+    expect(await open(rider)).toEqual(["OLD-9 500.00 of 500.00", "SI-2627-00003 976.00 of 976.00"]);
     const pay = (invoiceId: string, amount: string) => [{ kind: "invoice", id: invoiceId, amount }];
     await expect(applyCredit(as.sales_manager, id, { date: "2026-10-20", allocations: pay(third, "976") })).rejects.toThrow("Only an owner or an accountant can set a customer's credit against invoices.");
     expect(await codeOf(as.sales_manager, sql`select app.apply_credit_note(${id}::uuid, '2026-10-20', ${JSON.stringify([{ invoice_id: third, amount: "976" }])}::jsonb)`)).toBe("42501");
@@ -374,9 +384,9 @@ describe.skipIf(!hasDb)("credit notes", () => {
     await expect(applyCredit(as.accountant, id, { date: "2026-10-20", allocations: pay(first, "100") })).rejects.toThrow("not an unpaid invoice of this customer");
     expect(await codeOf(as.accountant, sql`select app.apply_credit_note(${id}::uuid, '2026-10-20', ${JSON.stringify([{ invoice_id: first, amount: "100" }])}::jsonb)`)).toBe("SE102");
     expect(await applyCredit(as.accountant, id, { date: "2026-10-20", allocations: pay(third, "976") })).toEqual({ invoices: 1 });
-    expect(await open(rider)).toEqual([]);
+    expect(await open(rider)).toEqual(["OLD-9 500.00 of 500.00"]);
     expect(await balance("customer_advances", rider)).toBe("-244.00");
-    expect(await balance("ar", rider)).toBe("0.00");
+    expect(await balance("ar", rider)).toBe("500.00");
     const [applied] = await admin<{ id: string }[]>`select id from public.credit_note_allocations where credit_note_id = ${id} and invoice_id = ${third}`;
     expect(await journalOf("credit_application", applied.id)).toEqual(["2130 Advances from customers: 976 / 0 (Walk-in Rider)", "1200 Trade receivables: 0 / 976 (Walk-in Rider)"]);
     const facts = await getCreditNoteFacts(as.accountant, (await getSalesDocument(as.accountant, id))!);
@@ -463,6 +473,70 @@ describe.skipIf(!hasDb)("credit notes", () => {
     expect(await codeOf(otherOwner, sql`select * from app.post_credit_note(${posted.id}::uuid)`)).toBe("SE112");
     expect(await codeOf(otherOwner, sql`select app.apply_credit_note(${posted.id}::uuid, '2026-10-25', '[{"invoice_id": "00000000-0000-0000-0000-000000000000", "amount": "1"}]'::jsonb)`)).toBe("SE112");
     expect((await withTenant(ownerB, tenantB, (tx) => tx.execute(sql`select * from app.credit_note_settled(${posted.id}::uuid)`))).length).toBe(0);
+    await booksAgree();
+  });
+
+  it("sets credit against an invoice from before the books were opened, and those opening balances then stay", async () => {
+    const [old] = await admin<{ id: string }[]>`select b.id from public.opening_balances b where b.tenant_id = ${tenantA} and b.document_number = 'OLD-9'`;
+    const [note] = await admin<{ id: string; number: string }[]>`select id, number from public.sales_documents where tenant_id = ${tenantA} and kind = 'credit_note' and customer_id = ${rider} and status = 'submitted'`;
+    expect(await applyCredit(as.accountant, note.id, { date: "2026-10-25", allocations: [{ kind: "opening", id: old.id, amount: "100" }] })).toEqual({ invoices: 1 });
+    expect((await open(rider))[0]).toBe("OLD-9 400.00 of 500.00");
+    expect(await balance("customer_advances", rider)).toBe("-144.00");
+    // The owner reads which old invoice it was; a salesperson, who does not read the opening balances, sees the amount and the day.
+    const document = (await getSalesDocument(as.owner, note.id))!;
+    const row = (who: TenantContext) => getCreditNoteFacts(who, document).then((facts) => facts.settled.filter((r) => r.kind === "opening").map((r) => `${r.number} ${r.targetId === null ? "hidden" : "shown"} ${r.amount.toFixed(2)} ${r.allocatedOn}`));
+    expect(await row(as.owner)).toEqual(["OLD-9 shown 100.00 2026-10-25"]);
+    expect(await row(as.salesperson)).toEqual(["null hidden 100.00 2026-10-25"]);
+    // Nor does a salesperson read the rows themselves, or learn of an invoice that is not theirs.
+    expect((await withTenant(as.salesperson.userId, tenantA, (tx) => tx.execute(sql`select 1 from credit_note_allocations`))).length).toBe(0);
+    expect((await withTenant(as.sales_manager.userId, tenantA, (tx) => tx.execute(sql`select 1 from credit_note_allocations`))).length).toBeGreaterThan(0);
+
+    // Reversing the opening balances would leave the credit settling an invoice that is no longer in the books.
+    const refused = await reverseOpening(as.owner).then(
+      () => "reversed",
+      (error: { code?: string; cause?: { code?: string } }) => error.cause?.code ?? error.code,
+    );
+    expect(refused).toBe("SE119");
+    // Nor from a transaction that reads an older picture of the database, in which the credit might not be seen.
+    const [entry] = await admin<{ id: string; journal_id: string }[]>`select id, journal_id from public.opening_entries where tenant_id = ${tenantA} and status = 'posted'`;
+    const direct = postgres(process.env.DATABASE_URL!, { max: 1 });
+    try {
+      const stale = await direct
+        .begin("isolation level repeatable read", async (tx) => {
+          await tx`select set_config('app.user_id', ${userIds.owner}, true), set_config('app.tenant_id', ${tenantA}, true)`;
+          const [reversal] = await tx`select app.reverse_journal(${entry.journal_id}::uuid, '2026-10-01'::date, 'Reversal of the opening balances') as id`;
+          await tx`update public.opening_entries set status = 'reversed', reversal_journal_id = ${reversal.id}, reversed_at = now(), reversed_by = ${userIds.owner}, updated_at = now(), updated_by = ${userIds.owner} where id = ${entry.id}`;
+        })
+        .then(
+          () => "reversed",
+          (error: { code?: string }) => error.code,
+        );
+      expect(stale).toBe("SE056");
+    } finally {
+      await direct.end();
+    }
+    expect((await admin`select status from public.opening_entries where tenant_id = ${tenantA}`)[0].status).toBe("posted");
+    await booksAgree();
+  });
+
+  it("takes goods back in the unit they were sold in, whatever has become of the item's units since", async () => {
+    // A carton of 12 chains is sold; afterwards a carton is made to hold 10, and then is no longer a unit of the item at all.
+    const carton = (await addUnit(as.owner, { code: "ctn", name: "Carton" })).id;
+    await setItemUnit(as.owner, chain, { unit: carton, factor: "12" });
+    const sold = await invoice(await order(dealer, "2026-10-28", [line(chain, "1", "", carton)]), "2026-10-28");
+    const before = await stock(chain);
+    await setItemUnit(as.owner, chain, { unit: carton, factor: "10" });
+    const { id } = await startCreditNote(as.accountant, sold);
+    const cartons = await lineOf(sold, chain);
+    await saveCreditNoteDraft(as.accountant, id, { date: "2026-10-28", lines: [back(cartons, "0.5")] });
+    await removeItemUnit(as.owner, chain, carton);
+    await postCreditNote(as.accountant, id);
+    // Half the carton that left: six chains, at half of what the twelve cost.
+    const [move] = await admin`select quantity::text, value::text from public.stock_moves where source_id = ${id}`;
+    const [out] = await admin`select value::text from public.stock_moves where source_id = ${sold}`;
+    expect(move.quantity).toBe("6.0000");
+    expect(new Decimal(move.value).toFixed(2)).toBe(new Decimal(out.value).neg().div(2).toFixed(2));
+    expect(await stock(chain)).toBe(`${Number(before.split(" ")[0]) + 6} worth ${new Decimal(before.split(" ")[2]).plus(move.value).toNumber()}`);
     await booksAgree();
   });
 

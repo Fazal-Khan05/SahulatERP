@@ -176,13 +176,6 @@
       "when": 1794692372240,
       "tag": "0024_recovery",
       "breakpoints": true
-    },
-    {
-      "idx": 25,
-      "version": "7",
-      "when": 1794694912716,
-      "tag": "0025_commission_plans",
-      "breakpoints": true
     }
   ]
 }

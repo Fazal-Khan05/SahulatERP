@@ -16,7 +16,7 @@ import type { TaxCategoryKind } from "@/modules/tax/rules";
 // by anyone. Everything is decimal.js.
 
 /** The kinds of sales document that can be written so far. */
-export const SALES_KINDS = ["quotation", "order", "delivery", "invoice"] as const;
+export const SALES_KINDS = ["quotation", "order", "delivery", "invoice", "credit_note"] as const;
 export type SalesKind = (typeof SALES_KINDS)[number];
 export const isSalesKind = (value: unknown): value is SalesKind => typeof value === "string" && (SALES_KINDS as readonly string[]).includes(value);
 
@@ -25,14 +25,17 @@ export const ENTRY_KINDS = ["quotation", "order"] as const;
 export type EntryKind = (typeof ENTRY_KINDS)[number];
 export const isEntryKind = (value: unknown): value is EntryKind => typeof value === "string" && (ENTRY_KINDS as readonly string[]).includes(value);
 
-export const KIND_LABELS: Record<SalesKind, string> = { quotation: "Quotation", order: "Sales order", delivery: "Delivery note", invoice: "Sales invoice" };
-export const KIND_PLURALS: Record<SalesKind, string> = { quotation: "Quotations", order: "Sales orders", delivery: "Delivery notes", invoice: "Sales invoices" };
+export const KIND_LABELS: Record<SalesKind, string> = { quotation: "Quotation", order: "Sales order", delivery: "Delivery note", invoice: "Sales invoice", credit_note: "Credit note" };
+export const KIND_PLURALS: Record<SalesKind, string> = { quotation: "Quotations", order: "Sales orders", delivery: "Delivery notes", invoice: "Sales invoices", credit_note: "Credit notes" };
 
 export const SALES_STATUSES = ["draft", "on_hold", "submitted", "cancelled"] as const;
 export type SalesStatus = (typeof SALES_STATUSES)[number];
 export const STATUS_LABELS: Record<SalesStatus, string> = { draft: "Draft", on_hold: "Waiting for approval", submitted: "Submitted", cancelled: "Cancelled" };
-/** A delivery note that is submitted has moved its goods, and an invoice is in the books: they are "posted". */
-export const statusLabel = (kind: SalesKind, status: SalesStatus) => ((kind === "delivery" || kind === "invoice") && status === "submitted" ? "Posted" : STATUS_LABELS[status]);
+/** The kinds that go into the books or move goods when they are submitted. */
+export const postsToBooks = (kind: SalesKind) => kind === "delivery" || kind === "invoice" || kind === "credit_note";
+
+/** A delivery note that is submitted has moved its goods, and an invoice or a credit note is in the books: they are "posted". */
+export const statusLabel = (kind: SalesKind, status: SalesStatus) => (postsToBooks(kind) && status === "submitted" ? "Posted" : STATUS_LABELS[status]);
 
 /** A document typed by hand can hold this many lines. */
 export const MAX_SALES_LINES = 200;

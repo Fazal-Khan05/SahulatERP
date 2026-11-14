@@ -11,12 +11,15 @@ import { todayIso } from "@/lib/format";
 import { AMOUNT_SCALE, formatAmount } from "@/lib/money";
 import { formatIsoDate } from "@/modules/currencies/rules";
 import { submitProblem } from "@/modules/sales/commands";
+import { getCreditNoteFacts, getInvoiceReturns } from "@/modules/credit-notes/queries";
 import { getDocumentJournal, type Journal } from "@/modules/ledger/queries";
 import { getCustomerCredit, getDeliveryRows, getLineDefaults, getOrderDelivery, getSalesDocument, listInvoicesOf, listOrdersToDeliver, listSalesDocuments, listSalesPeople, listSalesWarehouses, type SalesDocument } from "@/modules/sales/queries";
 import { KIND_LABELS, KIND_PLURALS, creditRefusal, isEntryKind, isSalesKind, statusLabel, type CreditFacts, type EntryKind, type SalesKind, type SalesStatus } from "@/modules/sales/rules";
 import { getCompanySetup } from "@/modules/setup/queries";
 import { can } from "@/modules/tenant/rules";
 import { approveSalesAction, cancelDeliveryAction, cancelSalesAction, discardSalesAction, orderFromQuotationAction, releaseSalesAction, saveDeliveryAction, saveInvoiceAction, saveSalesAction, startDeliveryAction, startInvoiceAction } from "./actions";
+import { applyCreditAction, saveCreditNoteAction, startCreditNoteAction } from "./credit-actions";
+import { CreditNoteForm } from "./credit-note-form";
 import { DeliveryForm } from "./delivery-form";
 import { DocumentOutput } from "./output";
 import { SalesForm } from "./sales-form";
@@ -30,7 +33,7 @@ const plainNumber = (amount: Decimal) => amount.toFixed(AMOUNT_SCALE).replace(/\
 /** The kind of document a list shows: the one asked for, where this member may see it. The warehouse starts on delivery notes. */
 const kindOf = (session: Session, value: string | string[] | undefined): SalesKind => {
   const team = can(session.role, "sales.read");
-  if (isSalesKind(value) && (team || (value !== "quotation" && value !== "invoice"))) return value;
+  if (isSalesKind(value) && (team || (value !== "quotation" && value !== "invoice" && value !== "credit_note"))) return value;
   return team ? "order" : "delivery";
 };
 const entryKindOf = (value: string | string[] | undefined): EntryKind => (isEntryKind(value) ? value : "order");
@@ -79,7 +82,9 @@ export async function SalesListScreen({ searchParams }: { searchParams: Promise<
             ? "Delivery notes are made from submitted sales orders. Posting one takes its goods out of stock."
             : kind === "invoice"
               ? "Sales invoices are made from a posted delivery note, or straight from a sales order. Posting one puts it into the books."
-              : "Quotations and sales orders. A sales order is checked against the customer's credit limit when it is submitted."
+              : kind === "credit_note"
+                ? "A credit note is made from a posted sales invoice, on the invoice's own page, when goods come back. Posting one puts it into the books and the goods back into stock."
+                : "Quotations and sales orders. A sales order is checked against the customer's credit limit when it is submitted."
         }
       />
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -88,6 +93,7 @@ export async function SalesListScreen({ searchParams }: { searchParams: Promise<
           {can(session.role, "sales.read") ? tab("quotation") : null}
           {can(session.role, "delivery.read") ? tab("delivery") : null}
           {can(session.role, "sales.read") ? tab("invoice") : null}
+          {can(session.role, "sales.read") ? tab("credit_note") : null}
         </nav>
         {isEntryKind(kind) && can(session.role, "sales.manage") ? (
           <Link href={`/sales/new?kind=${kind}`} className={buttonVariants({ className: "ml-auto" })}>
@@ -293,6 +299,7 @@ function LinesTable({ document, prices = true }: { document: SalesDocument; pric
               </td>
               <td className="py-2 pr-4 text-right whitespace-nowrap tabular-nums">
                 {plainNumber(line.quantity)} {line.unitCode}
+                {line.damagedQuantity !== null && !line.damagedQuantity.isZero() ? <span className="block text-xs text-muted-foreground">{plainNumber(line.damagedQuantity)} damaged</span> : null}
               </td>
               <td className="py-2 pr-4 text-right whitespace-nowrap tabular-nums">
                 {formatAmount(line.unitPrice)}
@@ -360,11 +367,11 @@ function Facts({ document, team, customerLink, sales = true }: { document: Sales
         <StatusPill kind={document.kind} status={document.status} testId="document-status" />
         {document.status === "cancelled" && document.cancelReason ? <span className="text-muted-foreground"> {document.cancelReason}</span> : null}
       </dd>
-      <dt className="text-muted-foreground">Goods leave from</dt>
+      <dt className="text-muted-foreground">{document.kind === "credit_note" ? "Goods come back to" : "Goods leave from"}</dt>
       <dd>{document.warehouseName}</dd>
       {document.customerReference ? (
         <>
-          <dt className="text-muted-foreground">Customer&apos;s reference</dt>
+          <dt className="text-muted-foreground">{document.kind === "credit_note" ? "Customer's debit note" : "Customer's reference"}</dt>
           <dd>{document.customerReference}</dd>
         </>
       ) : null}
@@ -376,7 +383,7 @@ function Facts({ document, team, customerLink, sales = true }: { document: Sales
       ) : null}
       {document.notes ? (
         <>
-          <dt className="text-muted-foreground">Notes</dt>
+          <dt className="text-muted-foreground">{document.kind === "credit_note" ? "Reason" : "Notes"}</dt>
           <dd>{document.notes}</dd>
         </>
       ) : null}
@@ -442,6 +449,7 @@ export async function SalesDocumentScreen({ params, searchParams }: { params: Pr
 
   if (document.kind === "delivery") return <DeliveryNote session={session} document={document} back={back} />;
   if (document.kind === "invoice") return <Invoice session={session} document={document} back={back} />;
+  if (document.kind === "credit_note") return <CreditNote session={session} document={document} back={back} />;
 
   if (document.status === "draft" && manager && isEntryKind(document.kind)) {
     const entryKind = document.kind;
@@ -877,7 +885,9 @@ async function Invoice({ session, document, back }: { session: Session; document
     );
   }
 
-  const [people, journal] = await Promise.all([listSalesPeople(session), document.status === "draft" ? null : getDocumentJournal(session, "sales_invoice", document.id)]);
+  const [people, journal, returns] = await Promise.all([listSalesPeople(session), document.status === "draft" ? null : getDocumentJournal(session, "sales_invoice", document.id), getInvoiceReturns(session, document)]);
+  const returnable = returns.lines.some((line) => line.left.gt(0));
+  const draftNote = returns.creditNotes.find((note) => note.status === "draft");
   return (
     <>
       {back}
@@ -889,8 +899,201 @@ async function Invoice({ session, document, back }: { session: Session; document
         </Card>
         {journal ? <Books journal={journal} /> : null}
         {document.status === "submitted" ? (
-          <p className="text-sm text-muted-foreground">A posted invoice is never changed or cancelled. A mistake on it is put right with a credit note, which comes with sales returns.</p>
+          <Card title="Returns and credit notes">
+            {returns.creditNotes.length === 0 ? (
+              <p className="mb-3 text-sm text-muted-foreground">A posted invoice is never changed or cancelled. When goods come back, or it billed something it should not have, it is put right with a credit note.</p>
+            ) : (
+              <ul aria-label="Credit notes" className="mb-3 divide-y text-sm">
+                {returns.creditNotes.map((note) => (
+                  <li key={note.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2">
+                    <Link href={`/sales/${note.id}`} className="font-medium underline-offset-4 hover:underline">
+                      {note.number ?? "Draft credit note"}
+                    </Link>
+                    <span className="text-muted-foreground">{formatIsoDate(note.date)}</span>
+                    <span className="tabular-nums">{formatAmount(note.total)}</span>
+                    <StatusPill kind="credit_note" status={note.status} />
+                  </li>
+                ))}
+              </ul>
+            )}
+            {!can(session.role, "credit_note.manage") ? (
+              <p className="text-sm text-muted-foreground">An owner, an accountant or the sales manager records a return.</p>
+            ) : draftNote ? (
+              <Link href={`/sales/${draftNote.id}`} className={buttonVariants({ variant: "outline" })}>
+                Open the draft credit note
+              </Link>
+            ) : returnable ? (
+              <ActionForm action={startCreditNoteAction.bind(null, document.id)} submitLabel="Record a return" compact />
+            ) : (
+              <p className="text-sm text-muted-foreground">Everything on this invoice has been returned.</p>
+            )}
+          </Card>
         ) : null}
+        <DocumentOutput session={session} document={document} />
+      </div>
+    </>
+  );
+}
+
+/** A credit note: a draft to fill in and post, or a posted one to read, with what it put into the books and what it was set against. */
+async function CreditNote({ session, document, back }: { session: Session; document: NonNullable<Awaited<ReturnType<typeof getSalesDocument>>>; back: React.ReactNode }) {
+  const writer = can(session.role, "credit_note.manage");
+  const loadedAt = document.updatedAt.toISOString();
+  const source = document.source;
+  const facts = await getCreditNoteFacts(session, document);
+
+  if (document.status === "draft" && writer && source) {
+    const today = todayIso(new Date());
+    return (
+      <>
+        {back}
+        <PageHead title="Draft credit note" sub={`For ${document.customerName}. Nothing reaches the books or the stock until it is posted.`} />
+        <div className="flex max-w-5xl flex-col gap-5">
+          <p className="text-sm text-muted-foreground">
+            Takes back part of{" "}
+            <Link href={`/sales/${source.id}`} className="font-medium text-foreground underline underline-offset-4">
+              sales invoice {source.number}
+            </Link>
+            . The goods come back to {document.warehouseName}.
+          </p>
+          <Card>
+            <CreditNoteForm
+              action={saveCreditNoteAction.bind(null, document.id, loadedAt)}
+              date={document.date}
+              earliest={source.date}
+              latest={today}
+              notes={document.notes ?? ""}
+              reference={document.customerReference ?? ""}
+              rows={facts.returnable
+                .filter((line) => line.left.gt(0) || document.lines.some((saved) => saved.sourceLineId === line.id))
+                .map((line) => {
+                  const saved = document.lines.find((candidate) => candidate.sourceLineId === line.id);
+                  return {
+                    sourceLineId: line.id,
+                    itemCode: line.itemCode,
+                    description: line.description,
+                    unitCode: line.unitCode,
+                    invoiced: plainNumber(line.quantity),
+                    returned: plainNumber(line.returned.quantity),
+                    left: plainNumber(line.left),
+                    quantity: saved ? plainNumber(saved.quantity) : "",
+                    damaged: saved?.damagedQuantity && !saved.damagedQuantity.isZero() ? plainNumber(saved.damagedQuantity) : "",
+                  };
+                })}
+            />
+          </Card>
+          {document.lines.length > 0 ? (
+            <Card title="As saved">
+              <LinesTable document={document} />
+            </Card>
+          ) : null}
+          <Card title="Throw this draft away">
+            <p className="mb-3 text-sm text-muted-foreground">A draft has no number and is not in the books, so removing it leaves nothing behind.</p>
+            <ActionForm action={discardSalesAction.bind(null, document.id, loadedAt)} submitLabel="Discard draft" compact />
+          </Card>
+        </div>
+      </>
+    );
+  }
+
+  const [people, journal] = await Promise.all([listSalesPeople(session), document.status === "draft" ? null : getDocumentJournal(session, "credit_note", document.id)]);
+  const latest = (date: string) => {
+    const today = todayIso(new Date());
+    return today < date ? date : today;
+  };
+  return (
+    <>
+      {back}
+      <PageHead title={document.number ?? "Draft credit note"} sub={`Credit note for ${document.customerName}`} />
+      <div className="flex max-w-5xl flex-col gap-5">
+        <Card>
+          <Facts document={document} team={people} customerLink={can(session.role, "customer.read")} />
+          <LinesTable document={document} />
+        </Card>
+        {document.status === "submitted" ? (
+          <Card title="What it was set against">
+            {facts.settled.length === 0 ? (
+              <Empty>Nothing yet.</Empty>
+            ) : (
+              <div className="overflow-x-auto">
+                <table aria-label="What it was set against" className="w-full min-w-[420px] text-left text-sm">
+                  <thead className="border-b text-muted-foreground">
+                    <tr>
+                      <th className="py-2 pr-4 font-medium">Invoice</th>
+                      <th className="py-2 pr-4 font-medium">From</th>
+                      <th className="py-2 text-right font-medium">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {facts.settled.map((row) => (
+                      <tr key={row.id}>
+                        <td className="py-2 pr-4 font-medium whitespace-nowrap">
+                          {row.kind === "invoice" && row.number ? (
+                            <Link href={`/sales/${row.targetId}`} className="underline-offset-4 hover:underline">
+                              {row.number}
+                            </Link>
+                          ) : (
+                            (row.number ?? "An invoice of another branch")
+                          )}
+                          {row.kind === "opening" && row.number ? <span className="font-normal text-muted-foreground"> (from before the books were opened)</span> : null}
+                        </td>
+                        <td className="py-2 pr-4 whitespace-nowrap">{formatIsoDate(row.allocatedOn)}</td>
+                        <td className="py-2 text-right whitespace-nowrap tabular-nums">{formatAmount(row.amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="mt-3 text-sm" data-testid="credit-left">
+              {facts.left.gt(0) ? (
+                <>
+                  Not set against an invoice, kept as the customer&apos;s credit: <span className="font-semibold tabular-nums">{formatAmount(facts.left)}</span>.
+                </>
+              ) : (
+                <span className="text-muted-foreground">All of it is set against invoices.</span>
+              )}
+            </p>
+          </Card>
+        ) : null}
+        {document.status === "submitted" && facts.left.gt(0) && can(session.role, "credit_note.apply") && facts.open.length > 0 ? (
+          <Card title="Set the credit against invoices">
+            <ActionForm action={applyCreditAction.bind(null, document.id)} submitLabel="Set against these invoices">
+              <Field label="From" name="date" id="apply-date" type="date" defaultValue={latest(document.date)} min={document.date} required className="max-w-[12rem]" />
+              <div className="overflow-x-auto">
+                <table aria-label="Unpaid invoices" className="w-full min-w-[480px] text-left text-sm">
+                  <thead className="border-b text-muted-foreground">
+                    <tr>
+                      <th className="py-2 pr-4 font-medium">Invoice</th>
+                      <th className="py-2 pr-4 font-medium">Date</th>
+                      <th className="py-2 pr-4 text-right font-medium">Still to pay</th>
+                      <th className="w-36 py-2 text-right font-medium">From the credit</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {facts.open.map((item) => (
+                      <tr key={`${item.kind}:${item.id}`}>
+                        <td className="py-1 pr-4 font-medium whitespace-nowrap">
+                          {item.number}
+                          <input type="hidden" name="allocKind" value={item.kind} />
+                          <input type="hidden" name="allocId" value={item.id} />
+                          <input type="hidden" name="allocLabel" value={item.number} />
+                        </td>
+                        <td className="py-1 pr-4 whitespace-nowrap">{formatIsoDate(item.date)}</td>
+                        <td className="py-1 pr-4 text-right tabular-nums">{formatAmount(item.outstanding)}</td>
+                        <td className="py-1">
+                          <Input name="allocAmount" aria-label={`From the credit, ${item.number}`} inputMode="decimal" autoComplete="off" className="text-right tabular-nums" />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </ActionForm>
+          </Card>
+        ) : null}
+        {journal ? <Books journal={journal} /> : null}
+        {document.status === "submitted" ? <p className="text-sm text-muted-foreground">A posted credit note is never changed or cancelled.</p> : null}
         <DocumentOutput session={session} document={document} />
       </div>
     </>

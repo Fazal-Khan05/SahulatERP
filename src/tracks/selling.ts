@@ -17,6 +17,11 @@ export const permissions = {
   // (2026-11-14): the sales team sees what a customer owes and does not record money.
   "receipt.read": ["owner", "accountant", "auditor", "recovery_officer"],
   "receipt.manage": ["owner", "accountant", "recovery_officer"],
+  // Step 33. Recovery is worked by the recovery officer, the owner, the accountant and the sales
+  // manager; the auditor reads it (the founder's decision, 2026-11-14). The database's policies
+  // and functions in drizzle/0023_recovery.sql name the same roles.
+  "recovery.read": ["owner", "accountant", "auditor", "recovery_officer", "sales_manager"],
+  "recovery.manage": ["owner", "accountant", "recovery_officer", "sales_manager"],
 } as const satisfies TrackPermissions;
 
 /**
@@ -24,13 +29,13 @@ export const permissions = {
  * words and the order of each role's menu are in src/modules/tenant/rules.ts and do not change.
  */
 export const links = {
-  collections: "/receipts",
+  collections: "/recovery",
   salesReports: null,
   cheques: "/receipts/cheques",
-  overdueCustomers: null,
-  followUps: null,
+  overdueCustomers: "/recovery/overdue",
+  followUps: "/recovery/follow-ups",
   receipts: "/receipts",
-  customerStatements: null,
+  customerStatements: "/recovery/statements",
 } as const satisfies TrackLinks;
 
 /**
@@ -46,4 +51,12 @@ export const controls = {} as const satisfies Record<string, string>;
 export const documents = {} as const satisfies Record<string, string>;
 
 /** This track's reports, listed on the Reports page under headings of its own. */
-export const reports: readonly ReportSection[] = [];
+export const reports: readonly ReportSection[] = [
+  {
+    title: "Receivables",
+    reports: [
+      { label: "Aged receivables", href: "/recovery/ageing", about: "What each customer owes, by days past the due date.", permission: "recovery.read", module: "collections" },
+      { label: "Customer statements", href: "/recovery/statements", about: "A customer's invoices and payments over a period, with the balance after each.", permission: "recovery.read", module: "collections" },
+    ],
+  },
+];

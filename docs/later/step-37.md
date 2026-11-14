@@ -1,6 +1,7 @@
 # Step 37: commission plans and the sales hierarchy
 
-To be built in track C (commissions). This file is filled in as the step goes.
+Track C. Built on 2026-11-15 by the Finisher session (moved from the Builder so that it overlaps
+with the Builder's Step 21). Migration `0025_commission_plans`.
 
 ## Decided by the founder (2026-11-14, asked once for the batch of Steps 32, 21 and 37)
 
@@ -15,6 +16,73 @@ To be built in track C (commissions). This file is filled in as the step goes.
   line alone (the old prototype measured each line).
 - **Only the owner creates and changes commission plans** and says who reports to whom. The
   accountant and the auditor read them.
+
+## What was built
+
+- **Commission plans**: a plan for one salesperson, or the default plan for everyone without one;
+  flat, by item category, by customer class, per unit, or slabs on the month's sales; a monthly
+  target with a multiplier; a team rate for managers; from a day, to a day or no end. A person's
+  plans, and the default plans, never overlap (refused by the database, SE301).
+- **The sales hierarchy**: one manager for each member of the sales team, never in a circle
+  (refused by the database, SE302).
+- **The working-out** in `src/modules/commissions/rules.ts` and, identically, in the database
+  (`app.commission_on_line` and friends, see "For the other steps"). Nothing is accrued or posted:
+  that is Step 38.
+- **Screens**: `/commissions` (the plans and who reports to whom; the owner's and the sales
+  manager's Commissions, the auditor's too; the accountant's way in is Reports, "Commission
+  plans"), `/commissions/plans/new` and `/commissions/plans/<id>` for the owner.
+
+**The acceptance test**, "Old unit tests pass against the new rules.ts": the old prototype's
+calculation and validation tests (COM-003 to COM-016, COM-032, COM-033, COM-038, COM-039, COM-049,
+COM-050, COM-069 to COM-072, COM-077) are ported by hand in `rules.test.ts` and pass, and the
+database gives the same figures (`commissions.test.ts`). **COM-014 is changed on purpose**: the
+founder decided slabs are measured on the month's sales, so a second sale of 100,000 after
+600,000 in the same month earns 3,000 at 3%, not 2,000 at 2% as the old per-line rule gave. The
+old tests of accrual, release, approval and payroll (COM-017 to COM-031, COM-034 to COM-037 and
+the rest) belong to Step 38 and later.
+
+## Decided for Fazal, to confirm
+
+- **The sales manager reads the plans** as well as the accountant and the auditor: the sales
+  manager's menu has a Commissions entry, and they manage the team the plans pay.
+- **A plan may have no end date**; a new plan for the same person must then start after the old
+  one is given an end.
+- **The multiplier is at most 10**, against a typing slip; the old prototype had no limit.
+- **Customer classes match whatever their capitals and outer spaces** ("Wholesaler" and
+  " wholesaler " are the same class), because the class is typed freely on each customer.
+- **A manager's share does not use targets or slabs**: it is the manager's team rate on the
+  seller's sale, at every level above the seller.
+- **The hierarchy has no dates.** Who reports to whom is as it stands when an invoice is posted;
+  Step 38 keeps what it accrued, so a later change does not move past commission.
+- **A plan can be edited and removed by the owner.** An edit changes what is worked out for
+  invoices posted afterwards only; Step 38 keeps the amounts it accrued. Once Step 38 has accrued
+  on a plan, its foreign key keeps the plan from being removed (it can be ended with a date).
+
+## Review of the migration
+
+An independent reviewer attacked `0025_commission_plans` as arbitrary SQL from the app's role
+(2026-11-15). Nothing crossed a company or let a non-owner write. Fixed in the migration, each
+with a test:
+
+- the overlap and circle checks refused nothing under repeatable read, where two transactions
+  could each miss the other's row and together close a circle (which would have paid the
+  managers in it many times over): they now let in read committed transactions only (SE304);
+- the checks ran before row-level security, so their answer ("dates overlap", "a circle") told a
+  non-owner or a stranger what plans and hierarchy were there: they now first make sure the
+  writer is the company's owner;
+- they took advisory locks that anyone could hold, stalling another company's saves: they now
+  lock the company's row, which the app's role cannot;
+- `app.commission_on_line` let "infinity" through and returned "not a number": refused (SE303).
+
+## Later
+
+- **The salesperson's own view of their plan** ("My commission") comes with the statements of
+  Step 39.
+- **Returns and the month's total**: whether a credit note takes its sale out of the month's
+  total that slabs and the target are measured on is Step 38's to decide, since it passes the
+  month's total in.
+- **Plans in a currency other than rupees**: amounts are in the base currency.
+- **A per-unit plan counts in the item's own unit**, whatever unit the line was sold in.
 
 ## For the other steps
 

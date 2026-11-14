@@ -12,6 +12,7 @@ DROP TRIGGER sales_hierarchy_no_cycle ON public.sales_hierarchy;
 DROP FUNCTION app.check_sales_hierarchy();
 DROP TRIGGER commission_plans_dates ON public.commission_plans;
 DROP FUNCTION app.check_commission_plan_dates();
+DROP FUNCTION app.guard_commission_setup(uuid);
 DROP TABLE public.commission_plan_rates, public.commission_plan_tiers, public.sales_hierarchy, public.commission_plans;
 
 -- The row drizzle-kit wrote for 0025_commission_plans (its "when" in drizzle/meta/_journal.json).

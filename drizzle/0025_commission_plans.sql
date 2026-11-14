@@ -173,17 +173,42 @@ CREATE POLICY sales_hierarchy_delete ON public.sales_hierarchy FOR DELETE TO app
   USING (tenant_id = (SELECT app.tenant_id()) AND (SELECT app.tenant_role()) = 'owner');
 --> statement-breakpoint
 
+-- ── hand-written: the guard of the two checks below ─────────────────────────────────────────────
+-- Both checks read the whole company's plans or hierarchy, which the writer may not be allowed to
+-- read, so before anything else they make sure the writer is this company's owner: otherwise
+-- their answer ("dates overlap", "a circle") would tell a stranger what is there. They read what
+-- is committed now, so a transaction that reads an older picture of the database (repeatable
+-- read, serializable) is not let in: two of those could each miss the other's row and together
+-- close a circle or overlap two plans. Two writers at once are taken one after the other by
+-- locking the company's row, which the app's role cannot lock itself (it has no UPDATE on
+-- tenants), so nobody can stall another company's saves. The database's own migrations, run as
+-- postgres, are not held to the owner check. Found by this step's review (2026-11-15).
+CREATE FUNCTION app.guard_commission_setup(p_tenant uuid) RETURNS void
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+  AS $$
+BEGIN
+  IF session_user <> 'postgres' AND (p_tenant IS DISTINCT FROM app.tenant_id() OR app.tenant_role() IS DISTINCT FROM 'owner') THEN
+    RAISE EXCEPTION 'only the owner sets up commission plans' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF pg_catalog.current_setting('transaction_isolation') <> 'read committed' THEN
+    RAISE EXCEPTION 'commission plans are written in read committed transactions' USING ERRCODE = 'SE304';
+  END IF;
+  PERFORM 1 FROM public.tenants t WHERE t.id = p_tenant FOR NO KEY UPDATE;
+END $$;
+--> statement-breakpoint
+REVOKE ALL ON FUNCTION app.guard_commission_setup(uuid) FROM PUBLIC;
+--> statement-breakpoint
+
 -- ── hand-written: plans of one person never overlap ─────────────────────────────────────────────
 -- Each person's plans, and the default plans (no person), cover separate stretches of time, so
--- that one plan applies to a sale. Two saves at once are taken one after the other: each takes a
--- lock for that person's plans first. Ranges that only touch end to end are allowed. It reads
+-- that one plan applies to a sale. Ranges that only touch end to end are allowed. It reads
 -- every plan of the company whoever writes, so it runs as the table's owner; every name in it is
 -- written in full and its search path ends with the temporary schema (0023_safe_search_path).
 CREATE FUNCTION app.check_commission_plan_dates() RETURNS trigger
   LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
   AS $$
 BEGIN
-  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(NEW.tenant_id::pg_catalog.text || ':commission_plans:' || coalesce(NEW.user_id::pg_catalog.text, 'default'), 0));
+  PERFORM app.guard_commission_setup(NEW.tenant_id);
   IF EXISTS (
     SELECT 1 FROM public.commission_plans p
     WHERE p.tenant_id = NEW.tenant_id AND p.id <> NEW.id AND p.user_id IS NOT DISTINCT FROM NEW.user_id
@@ -203,8 +228,8 @@ CREATE TRIGGER commission_plans_dates
 --> statement-breakpoint
 
 -- ── hand-written: the hierarchy has no circles ──────────────────────────────────────────────────
--- Walking up from the new manager must never come back to the member. The company's hierarchy
--- is locked while it is checked, so two changes at once cannot close a circle between them.
+-- Walking up from the new manager must never come back to the member. The guard above takes
+-- two changes at once one after the other, so they cannot close a circle between them.
 CREATE FUNCTION app.check_sales_hierarchy() RETURNS trigger
   LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
   AS $$
@@ -212,7 +237,7 @@ DECLARE
   v_at uuid := NEW.manager_user_id;
   v_steps integer := 0;
 BEGIN
-  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(NEW.tenant_id::pg_catalog.text || ':sales_hierarchy', 0));
+  PERFORM app.guard_commission_setup(NEW.tenant_id);
   LOOP
     IF v_at = NEW.user_id THEN
       RAISE EXCEPTION 'The sales hierarchy cannot contain a cycle.' USING ERRCODE = 'SE302';
@@ -287,8 +312,9 @@ DECLARE
   v_rate numeric;
   v_amount numeric;
 BEGIN
-  IF p_base IS NULL OR p_base < 0 OR p_base = 'NaN'::numeric OR p_quantity IS NULL OR p_quantity < 0 OR p_quantity = 'NaN'::numeric
-     OR p_month_before IS NULL OR p_month_before < 0 OR p_month_before = 'NaN'::numeric THEN
+  -- "Infinity" and "not a number" both sort at or above 'Infinity'.
+  IF p_base IS NULL OR p_base < 0 OR p_base >= 'Infinity'::numeric OR p_quantity IS NULL OR p_quantity < 0 OR p_quantity >= 'Infinity'::numeric
+     OR p_month_before IS NULL OR p_month_before < 0 OR p_month_before >= 'Infinity'::numeric THEN
     RAISE EXCEPTION 'a commission is worked out on amounts of nothing or more' USING ERRCODE = 'SE303';
   END IF;
   SELECT * INTO v_plan FROM public.commission_plans p WHERE p.tenant_id = p_tenant AND p.id = app.commission_plan_for(p_tenant, p_user, p_date);

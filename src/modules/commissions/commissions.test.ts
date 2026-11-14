@@ -147,8 +147,10 @@ describe.skipIf(!hasDb)("commission plans and the sales hierarchy", () => {
     expect(await inDatabase(sellers.none, "2026-06-30", lamp, retailer, "10000", "100", "0")).toBeNull();
     expect(await inDatabase(sellers.none, "2027-07-01", lamp, retailer, "10000", "100", "0")).toBeNull();
     expect((await inDatabase(sellers.flat, "2027-07-01", lamp, retailer, "10000", "100", "0"))?.amount).toBe("200.0000");
-    // Amounts below nothing are refused.
-    await expect(admin`select * from app.commission_on_line(${tenantA}::uuid, ${sellers.flat}::uuid, '2026-11-10'::date, ${lamp}::uuid, ${retailer}::uuid, -1, 1, 0)`).rejects.toMatchObject({ code: "SE303" });
+    // Amounts below nothing, "infinity" and "not a number" are refused.
+    for (const bad of ["-1", "Infinity", "NaN"]) {
+      await expect(admin`select * from app.commission_on_line(${tenantA}::uuid, ${sellers.flat}::uuid, '2026-11-10'::date, ${lamp}::uuid, ${retailer}::uuid, ${bad}::numeric, 1, 0)`, bad).rejects.toMatchObject({ code: "SE303" });
+    }
   });
 
   it("keeps the hierarchy free of circles, and gives each manager above a seller their team rate", async () => {
@@ -181,6 +183,12 @@ describe.skipIf(!hasDb)("commission plans and the sales hierarchy", () => {
     // Overlapping dates and circles are refused by the database itself (the flat seller reports to the area manager).
     expect(await codeOf(owner, insertPlan(owner, tenantA, null, "2026-08-01"))).toBe("SE301");
     expect(await codeOf(owner, sql`insert into public.sales_hierarchy (tenant_id, user_id, manager_user_id, created_by, updated_by) values (${tenantA}, ${area}, ${sellers.flat}, ${me}, ${me})`)).toBe("SE302");
+    // The checks answer only the company's owner: a stranger or a salesperson learns nothing from them (SE301 would say a plan is there).
+    expect(await codeOf(as.salesperson, insertPlan(as.salesperson, tenantA, null, "2026-08-01"))).toBe("42501");
+    expect(await codeOf(other, insertPlan(other, tenantA, null, "2026-08-01"))).toBe("42501");
+    expect(await codeOf(as.salesperson, sql`insert into public.sales_hierarchy (tenant_id, user_id, manager_user_id, created_by, updated_by) values (${tenantA}, ${area}, ${sellers.flat}, ${userIds.salesperson}, ${userIds.salesperson})`)).toBe("42501");
+    // A transaction reading an older picture of the database is not let in: two of them could each miss the other's row.
+    await expect(admin.begin("isolation level repeatable read", (tx) => tx`insert into public.sales_hierarchy (tenant_id, user_id, manager_user_id, created_by, updated_by) values (${tenantA}, ${sellers.none}, ${region}, ${me}, ${me})`)).rejects.toMatchObject({ code: "SE304" });
     // Out-of-range figures are refused.
     expect(await codeOf(owner, sql`insert into public.commission_plans (tenant_id, name, kind, rate, effective_from, created_by, updated_by) values (${tenantA}, 'Bad', 'flat', 101, '2040-01-01', ${me}, ${me})`)).toBe("23514");
     expect(await codeOf(owner, sql`insert into public.commission_plans (tenant_id, name, kind, rate, multiplier, effective_from, created_by, updated_by) values (${tenantA}, 'Bad', 'flat', 1, 'NaN', '2040-01-01', ${me}, ${me})`)).toBe("23514");

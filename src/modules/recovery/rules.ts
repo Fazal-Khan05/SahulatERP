@@ -165,7 +165,9 @@ export function buildStatement(opening: { debit: Decimal; credit: Decimal }, lin
   const sorted = [...lines].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.writtenAt.getTime() - b.writtenAt.getTime()));
   const rows = sorted.map((line) => {
     balance = balance.plus(line.debit).minus(line.credit);
-    return { date: line.date, what: SOURCE_WORDS[line.sourceType] ?? "Entry", number: line.number, debit: line.debit, credit: line.credit, balance };
+    // A cheque that bounces before it clears, or a receipt cancelled, is taken back by reversing the receipt's entry.
+    const what = line.sourceType === "reversal" ? (line.debit.gt(0) ? "Receipt taken back" : "Entry reversed") : (SOURCE_WORDS[line.sourceType] ?? "Entry");
+    return { date: line.date, what, number: line.number, debit: line.debit, credit: line.credit, balance };
   });
   return { opening: start, rows, closing: balance, debits: sum(rows.map((row) => row.debit)), credits: sum(rows.map((row) => row.credit)) };
 }

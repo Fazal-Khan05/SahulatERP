@@ -79,6 +79,12 @@ was this step's full browser suite on the Finisher's database (92 of 92 passed).
 
 ## Later
 
+- **A receipt taken back shows no number on the statement.** A cheque that bounces before it
+  clears (and a cancelled receipt) is undone by a reversal journal, which has no document number
+  of its own; the statement says "Receipt taken back". Showing the receipt's number needs
+  `app.customer_statement` to return the reversed journal's number: a new function in a later
+  migration (found by the demo company, 2026-11-15).
+
 - **Advances are not taken off the ageing.** It ages what is owed on invoices; money received
   and not yet set against an invoice shows on the statement and in the receipts, not here.
 - **The ageing is as at today.** An ageing as at a past day needs what was settled by that day,

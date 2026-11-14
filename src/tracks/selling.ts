@@ -32,7 +32,7 @@ export const links = {
   collections: "/recovery",
   salesReports: null,
   cheques: "/receipts/cheques",
-  overdueCustomers: "/recovery",
+  overdueCustomers: "/recovery/overdue",
   followUps: "/recovery/follow-ups",
   receipts: "/receipts",
   customerStatements: "/recovery/statements",

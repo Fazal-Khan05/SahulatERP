@@ -16,8 +16,8 @@ Track A. Waits for Step 32 (receipts).
 
 ## What was built
 
-- **Overdue customers** (`/recovery`, the owner's and sales manager's Collections, the recovery
-  officer's Overdue customers): everyone with money past its due date, most overdue first, with
+- **Overdue customers** (`/recovery/overdue`; `/recovery` is the owner's and sales manager's
+  Collections and opens on it; the recovery officer's Overdue customers): everyone with money past its due date, most overdue first, with
   the oldest days late, what is not yet due, the next follow-up and broken promises.
 - **A customer's recovery page** (`/recovery/customers/<id>`): what is owed by band and invoice
   by invoice, promises to pay with whether each was kept, and the follow-up log, with forms to add

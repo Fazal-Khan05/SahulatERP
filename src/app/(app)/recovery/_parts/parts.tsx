@@ -22,12 +22,12 @@ export function Refused({ title, reason }: { title: string; reason: string }) {
   );
 }
 
-type Section = "/recovery" | "/recovery/follow-ups" | "/recovery/statements" | "/recovery/ageing";
+type Section = "/recovery/overdue" | "/recovery/follow-ups" | "/recovery/statements" | "/recovery/ageing";
 
 /** The recovery screens, and the receipts screens for those who read them, as a row of links. */
 export function Sections({ session, current }: { session: TenantSession; current: Section | null }) {
   const links: [string, string][] = [
-    ["/recovery", "Overdue customers"],
+    ["/recovery/overdue", "Overdue customers"],
     ["/recovery/follow-ups", "Follow-ups and promises"],
     ["/recovery/statements", "Customer statements"],
     ["/recovery/ageing", "Aged receivables"],

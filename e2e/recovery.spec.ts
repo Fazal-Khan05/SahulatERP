@@ -73,7 +73,7 @@ test("an overdue invoice shows on the overdue list and in the aged receivables, 
 
   // Collections opens the overdue list; the aged receivables show the same 3,000 past due.
   await rail(page).getByRole("link", { name: "Collections", exact: true }).click();
-  await expect(page).toHaveURL(/\/recovery$/);
+  await expect(page).toHaveURL(/\/recovery\/overdue$/);
   const overdue = shown(page.getByRole("table", { name: "Overdue customers" })).locator("tbody tr");
   await expect(overdue).toHaveCount(1);
   await expect(overdue.first()).toContainText("Khan Autos");
@@ -116,6 +116,9 @@ test("the recovery officer notes a promise and a follow-up, and prints the state
   await page.goto(`/recovery/statements?customer=${customerId}&from=2026-10-01&to=${inDays(0)}`);
   await expect(shown(page.getByRole("table", { name: "Statement" })).locator("tbody tr").filter({ hasText: "SI-2627-00001" })).toContainText("3,000.00");
   await expect(visible(page, "statement-closing")).toHaveText("3,000.00");
+  // The menu marks the page the officer is on, and only that one.
+  await expect(rail(page).getByRole("link", { name: "Customer statements", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(rail(page).getByRole("link", { name: "Overdue customers", exact: true })).not.toHaveAttribute("aria-current", "page");
   await expect(visible(page, "email-not-set-up")).toBeVisible();
   const pdf = await page.request.get(`/print/statement/${customerId}/pdf?from=2026-10-01&to=${inDays(0)}`);
   expect(pdf.status()).toBe(200);

@@ -39,8 +39,8 @@ async function CustomerRecovery({ params }: { params: Promise<{ id: string }> })
   const writer = can(session.role, "recovery.manage");
   return (
     <>
-      <Sections session={session} current={null} />
       <PageHead title={page.name} sub={`${formatAmount(page.ageing.total)} owed, ${formatAmount(page.ageing.overdue)} of it overdue`} />
+      <Sections session={session} current={null} />
       <div className="flex max-w-5xl flex-col gap-5">
         <Card title="What is owed">
           <dl className="mb-4 grid grid-cols-5 gap-2 text-sm max-sm:grid-cols-2">

@@ -53,9 +53,10 @@ row-level security.
 
 ## Later
 
-- **Returned goods** (Step 21) are not in these reports yet. When sales returns land, their stock
-  moves join movement and ageing by themselves (they are stock moves); item profit must then take
-  credit notes off sales and the returned goods' cost off cost of goods sold.
+- **Returned goods** (Step 21's credit notes) are in since 2026-11-15: item profit takes a
+  credit note's quantity and value off sales, and the cost of the goods that came back onto the
+  shelf off the cost (goods written off as damaged stay a cost); stock movement names credit
+  notes; ageing counts goods that came back as arriving that day.
 - **The warehouse and the sales team see only low stock.** Stock moves can be read only by an
   owner, an accountant or an auditor (row-level security on `stock_moves`, Step 19), and the
   founder chose that costs are theirs; a quantities-only movement or ageing report for the

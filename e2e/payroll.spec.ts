@@ -52,21 +52,21 @@ test("the owner adds an employee on Rs 150,000 a month and sees Rs 6,000 of inco
   await expect(page).toHaveURL(/\/payroll\/employees$/);
   await expect(page.getByText("No employees yet.")).toBeVisible();
   await page.getByRole("link", { name: "New employee" }).click();
-  await page.getByLabel("Code").fill("E-001");
-  await page.getByLabel("Name").fill("Imran Qureshi");
-  await page.getByLabel("Designation").fill("Sales manager");
-  await page.getByLabel("Works in (province)").selectOption("punjab");
-  await page.getByLabel("Joined on").fill("2026-07-01");
+  await shown(page.getByLabel("Code", { exact: true })).fill("E-001");
+  await shown(page.getByLabel("Name", { exact: true })).fill("Imran Qureshi");
+  await shown(page.getByLabel("Designation", { exact: true })).fill("Sales manager");
+  await shown(page.getByLabel("Works in (province)", { exact: true })).selectOption("punjab");
+  await shown(page.getByLabel("Joined on", { exact: true })).fill("2026-07-01");
   await page.getByRole("button", { name: "Add employee" }).click();
   await expect(page.getByRole("heading", { name: "E-001 Imran Qureshi" })).toBeVisible();
   await expect(page.getByText("No pay is set yet.")).toBeVisible();
 
-  await page.getByLabel("Part of the pay").selectOption("basic");
-  await page.getByLabel("Amount a month").fill("150000");
-  await page.getByLabel("From", { exact: true }).fill("2026-07-01");
+  await shown(page.getByLabel("Part of the pay", { exact: true })).selectOption("basic");
+  await shown(page.getByLabel("Amount a month", { exact: true })).fill("150000");
+  await shown(page.getByLabel("From", { exact: true })).fill("2026-07-01");
   await page.getByRole("button", { name: "Save pay" }).click();
-  await expect(visible(page, "employee-gross")).toHaveText("150,000.00");
-  await expect(visible(page, "employee-tax")).toContainText("Income tax on this pay: 6,000.00 a month (72,000.00 on 1,800,000.00 a year)");
+  await expect(visible(page, "employee-gross")).toHaveText("1,50,000.00");
+  await expect(visible(page, "employee-tax")).toContainText("Income tax on this pay: 6,000.00 a month (72,000.00 on 18,00,000.00 a year)");
   await expect(page.getByText("Minimum wage in Punjab: 40,000.00 a month")).toBeVisible();
 });
 
@@ -75,27 +75,30 @@ test("the payroll administrator adds a daily-wage worker and imports the month's
   await rail(page).getByRole("link", { name: "Employees", exact: true }).click();
   await expect(page).toHaveURL(/\/payroll\/employees$/);
   await page.getByRole("link", { name: "New employee" }).click();
-  await page.getByLabel("Code").fill("D-001");
-  await page.getByLabel("Name").fill("Rashid Khan");
-  await page.getByLabel("Paid").selectOption("daily");
-  await page.getByLabel("Works in (province)").selectOption("sindh");
-  await page.getByLabel("Joined on").fill("2026-07-01");
+  await shown(page.getByLabel("Code", { exact: true })).fill("D-001");
+  await shown(page.getByLabel("Name", { exact: true })).fill("Rashid Khan");
+  await shown(page.getByLabel("Paid", { exact: true })).selectOption("daily");
+  await shown(page.getByLabel("Works in (province)", { exact: true })).selectOption("sindh");
+  await shown(page.getByLabel("Joined on", { exact: true })).fill("2026-07-01");
   await page.getByRole("button", { name: "Add employee" }).click();
   await expect(page.getByRole("heading", { name: "D-001 Rashid Khan" })).toBeVisible();
-  await page.getByLabel("Amount a day").fill("1600");
+  await shown(page.getByLabel("Amount a day", { exact: true })).fill("1600");
   await page.getByRole("button", { name: "Save pay" }).click();
   await expect(page.getByRole("table", { name: "Pay today" })).toContainText("1,600.00");
 
-  await page.getByRole("navigation", { name: "Payroll" }).getByRole("link", { name: "Attendance" }).click();
+  // Back to the list, and across to the month's attendance.
+  await shown(page.getByRole("link", { name: "Employees", exact: true })).first().click();
+  await expect(page).toHaveURL(/\/payroll\/employees$/);
+  await shown(page.getByRole("navigation", { name: "Payroll" })).getByRole("link", { name: "Attendance" }).click();
   await expect(page).toHaveURL(/\/payroll\/attendance$/);
   // A bad file first: nothing is imported, and every wrong row is listed.
   const bad = "Code,Days worked,Unpaid days\nE-001,,2\nD-001,24.5,1\nX-404,3,\n";
-  await page.getByLabel("CSV file").setInputFiles({ name: "attendance.csv", mimeType: "text/csv", buffer: Buffer.from(bad) });
+  await shown(page.getByLabel("CSV file", { exact: true })).setInputFiles({ name: "attendance.csv", mimeType: "text/csv", buffer: Buffer.from(bad) });
   await page.getByRole("button", { name: "Import" }).click();
   await expect(visible(page, "import-problems")).toContainText("Nothing was imported. 2 rows need correcting");
   await expect(visible(page, "import-problems")).toContainText("No employee has this code.");
   const good = "Code,Days worked,Unpaid days\nE-001,,2\nD-001,24.5,\n";
-  await page.getByLabel("CSV file").setInputFiles({ name: "attendance.csv", mimeType: "text/csv", buffer: Buffer.from(good) });
+  await shown(page.getByLabel("CSV file", { exact: true })).setInputFiles({ name: "attendance.csv", mimeType: "text/csv", buffer: Buffer.from(good) });
   await page.getByRole("button", { name: "Import" }).click();
   await expect(visible(page, "import-done")).toHaveText("Imported 2 rows.");
   const table = page.getByRole("table", { name: "Attendance", exact: true });
@@ -104,8 +107,8 @@ test("the payroll administrator adds a daily-wage worker and imports the month's
   const [rows] = await sql<{ n: number }[]>`select count(*)::int as n from public.employee_attendance where tenant_id = ${tenantId} and month = ${`${month()}-01`}`;
   expect(rows.n).toBe(2);
 
-  await page.getByRole("navigation", { name: "Payroll" }).getByRole("link", { name: "Statutory rates" }).click();
-  await expect(page.getByRole("table", { name: "Salary tax slabs from 2026-07-01" })).toContainText("1,424,000.00 + 35% of the amount over 7,000,000.00");
+  await shown(page.getByRole("navigation", { name: "Payroll" })).getByRole("link", { name: "Statutory rates" }).click();
+  await expect(page.getByRole("table", { name: "Salary tax slabs from 2026-07-01" })).toContainText("14,24,000.00 + 35% of the amount over 70,00,000.00");
   await expect(page.getByRole("table", { name: "Statutory rates" })).toContainText("SO(L-II)/13-3/2016-II");
 });
 

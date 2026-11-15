@@ -72,8 +72,8 @@ function Back({ href, label }: { href: string; label: string }) {
   );
 }
 
-/** What one costs, with no more decimals than it was typed with, and never fewer than two. */
-const cost = (value: Decimal) => value.toFixed(Math.min(Math.max(value.decimalPlaces(), 2), UNIT_COST_SCALE));
+/** What one costs: as an amount, or with the third and fourth decimals it was typed with. */
+const cost = (value: Decimal) => (value.decimalPlaces() <= 2 ? formatAmount(value) : value.toFixed(Math.min(value.decimalPlaces(), UNIT_COST_SCALE)));
 const NO_ORDERS = "Only an owner, an accountant or an auditor can see purchase orders. The warehouse receives goods under Receive goods.";
 const NO_RECEIPTS = "Your role does not include goods received.";
 const refusedNote = (refused: string | string[] | undefined, word: string) => (typeof refused === "string" && refused !== "" ? `Saved as a draft, but not ${word}. Try again to see why.` : undefined);

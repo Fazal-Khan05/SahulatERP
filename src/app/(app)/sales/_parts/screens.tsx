@@ -13,13 +13,16 @@ import { formatIsoDate } from "@/modules/currencies/rules";
 import { submitProblem } from "@/modules/sales/commands";
 import { getInvoiceCommission } from "@/modules/commission-ledger/queries";
 import { standingLabel } from "@/modules/commission-ledger/rules";
+import { getCounterSaleOfInvoice } from "@/modules/counter-sales/queries";
 import { getCreditNoteFacts, getInvoiceReturns } from "@/modules/credit-notes/queries";
 import { getDocumentJournal, type Journal } from "@/modules/ledger/queries";
 import { getCustomerCredit, getDeliveryRows, getLineDefaults, getOrderDelivery, getSalesDocument, listInvoicesOf, listOrdersToDeliver, listSalesDocuments, listSalesPeople, listSalesWarehouses, type SalesDocument } from "@/modules/sales/queries";
 import { KIND_LABELS, KIND_PLURALS, creditRefusal, isEntryKind, isSalesKind, statusLabel, type CreditFacts, type EntryKind, type SalesKind, type SalesStatus } from "@/modules/sales/rules";
+import { listMoneyAccounts } from "@/modules/receipts/queries";
 import { getCompanySetup } from "@/modules/setup/queries";
 import { can } from "@/modules/tenant/rules";
 import { approveSalesAction, cancelDeliveryAction, cancelSalesAction, discardSalesAction, orderFromQuotationAction, releaseSalesAction, saveDeliveryAction, saveInvoiceAction, saveSalesAction, startDeliveryAction, startInvoiceAction } from "./actions";
+import { counterSaleAction } from "./counter-actions";
 import { applyCreditAction, saveCreditNoteAction, startCreditNoteAction } from "./credit-actions";
 import { CreditNoteForm } from "./credit-note-form";
 import { DeliveryForm } from "./delivery-form";
@@ -83,7 +86,7 @@ export async function SalesListScreen({ searchParams }: { searchParams: Promise<
           kind === "delivery"
             ? "Delivery notes are made from submitted sales orders. Posting one takes its goods out of stock."
             : kind === "invoice"
-              ? "Sales invoices are made from a posted delivery note, or straight from a sales order. Posting one puts it into the books."
+              ? "Sales invoices are made from a posted delivery note, or straight from a sales order. Posting one puts it into the books. A walk-in buyer who pays at once is a counter sale."
               : kind === "credit_note"
                 ? "A credit note is made from a posted sales invoice, on the invoice's own page, when goods come back. Posting one puts it into the books and the goods back into stock."
                 : "Quotations and sales orders. A sales order is checked against the customer's credit limit when it is submitted."
@@ -100,6 +103,11 @@ export async function SalesListScreen({ searchParams }: { searchParams: Promise<
         {isEntryKind(kind) && can(session.role, "sales.manage") ? (
           <Link href={`/sales/new?kind=${kind}`} className={buttonVariants({ className: "ml-auto" })}>
             New {KIND_LABELS[kind].toLowerCase()}
+          </Link>
+        ) : null}
+        {kind === "invoice" && can(session.role, "counter_sale.manage") ? (
+          <Link href="/sales/counter" className={buttonVariants({ className: "ml-auto" })}>
+            New counter sale
           </Link>
         ) : null}
       </div>
@@ -396,6 +404,49 @@ function Facts({ document, team, customerLink, sales = true }: { document: Sales
         </>
       ) : null}
     </dl>
+  );
+}
+
+/** Step 22: a sale at the counter to a walk-in buyer, who pays at once. */
+export async function CounterSaleScreen() {
+  const session = await requireTenant();
+  const title = "New counter sale";
+  if (closed(session) || !can(session.role, "counter_sale.manage")) {
+    return (
+      <>
+        <PageHead title={title} />
+        <p className="text-muted-foreground">{closed(session) ?? "Only the owner or an accountant sells at the counter: it takes the money as it sells."}</p>
+      </>
+    );
+  }
+  const [choices, accounts] = await Promise.all([formChoices(session), listMoneyAccounts(session)]);
+  return (
+    <>
+      <p className="mb-2 text-sm">
+        <Link href="/sales?kind=invoice" className="text-muted-foreground underline-offset-4 hover:underline">
+          Sales invoices
+        </Link>
+      </p>
+      <PageHead title={title} sub="For a buyer who is not on your customer list and pays now. The goods leave stock, the invoice goes into the books and the payment is recorded, all at once." />
+      {choices.warehouses.length === 0 ? (
+        <NoWarehouse />
+      ) : (
+        <Card className="max-w-5xl">
+          <SalesForm
+            action={counterSaleAction}
+            kind="counter"
+            moneyAccounts={accounts}
+            taxed={choices.taxed}
+            pricesIncludeTax={choices.pricesIncludeTax}
+            warehouses={choices.warehouses}
+            salesPeople={choices.salesPeople}
+            documentId={null}
+            credit={null}
+            initial={{ date: todayIso(new Date()), validUntil: "", customer: null, warehouseId: choices.warehouses[0].id, customerReference: "", notes: "", furtherTaxExcluded: false, lines: [], shares: [] }}
+          />
+        </Card>
+      )}
+    </>
   );
 }
 
@@ -887,19 +938,35 @@ async function Invoice({ session, document, back }: { session: Session; document
     );
   }
 
-  const [people, journal, returns, commission] = await Promise.all([
+  const [people, journal, returns, commission, counter] = await Promise.all([
     listSalesPeople(session),
     document.status === "draft" ? null : getDocumentJournal(session, "sales_invoice", document.id),
     getInvoiceReturns(session, document),
     document.status === "submitted" && session.modules.commissions ? getInvoiceCommission(session, document.id) : null,
+    document.status === "submitted" ? getCounterSaleOfInvoice(session, document.id) : null,
   ]);
   const returnable = returns.lines.some((line) => line.left.gt(0));
   const draftNote = returns.creditNotes.find((note) => note.status === "draft");
   return (
     <>
       {back}
-      <PageHead title={document.number ?? "Draft sales invoice"} sub={`Sales invoice for ${document.customerName}`} />
+      <PageHead title={document.number ?? "Draft sales invoice"} sub={counter ? `Counter sale to ${counter.buyerName}, a walk-in buyer` : `Sales invoice for ${document.customerName}`} />
       <div className="flex max-w-5xl flex-col gap-5">
+        {counter ? (
+          <p role="status" data-testid="counter-sale" className="text-sm">
+            Paid in full at the counter
+            {counter.receipt ? (
+              <>
+                {" "}
+                {counter.receipt.method === "cash" ? "in cash" : "into the bank"}, receipt{" "}
+                <Link href={`/receipts/${counter.receipt.id}`} className="font-medium underline underline-offset-4">
+                  {counter.receipt.number}
+                </Link>
+              </>
+            ) : null}
+            .{counter.buyerPhone ? ` Buyer's phone: ${counter.buyerPhone}.` : ""}
+          </p>
+        ) : null}
         <Card>
           <Facts document={document} team={people} customerLink={can(session.role, "customer.read")} />
           <LinesTable document={document} />

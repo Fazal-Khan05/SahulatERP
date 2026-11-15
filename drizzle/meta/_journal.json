@@ -204,6 +204,13 @@
       "when": 1794701555014,
       "tag": "0028_commission_statements",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1794736223918,
+      "tag": "0029_counter_sales",
+      "breakpoints": true
     }
   ]
 }

@@ -11,6 +11,7 @@ import { branches } from "@/modules/tenant/schema";
 import { selectOpenItems, selectReceipt, type Receipt } from "./queries";
 import { allocated, readAllocations, readReason, readReceipt, type Allocation, type RawReceipt, type ReceiptDraft } from "./rules";
 import { receiptAllocations, receipts } from "./schema";
+import { WALK_IN_AT_COUNTER, isWalkInCustomer } from "@/modules/counter-sales/queries";
 
 // The commands behind the receipts screens. A draft is written here, by the app, under
 // row-level security. Everything that changes the books is not: each of those commands only
@@ -89,7 +90,7 @@ const describeStored = (receipt: Receipt) => ({
 });
 
 /** What the database refused, in words for the person, or null for anything unexpected. */
-function receiptRefusal(error: unknown, date: string): UserError | null {
+export function receiptRefusal(error: unknown, date: string): UserError | null {
   const code = pgCode(error);
   const closed = periodRefusal(code, date);
   if (closed) return new UserError(closed);
@@ -116,62 +117,73 @@ export async function saveReceiptDraft(ctx: TenantContext, id: unknown, raw: Raw
   const draft = read.draft;
   try {
     return await withTenant(ctx.userId, ctx.tenantId, async (tx) => {
-      if (!isUuid(draft.customerId)) throw new UserError("Choose the customer.");
-      const [customer] = await tx.select({ name: customers.name }).from(customers).where(and(eq(customers.tenantId, ctx.tenantId), eq(customers.id, draft.customerId)));
-      if (!customer) throw new UserError("Choose the customer.");
-      await requireBranch(tx, ctx, draft.branchId);
-      if (draft.accountId !== null && !isUuid(draft.accountId)) throw new UserError("Choose the account the money went into.");
-      const problem = await allocationProblem(tx, draft.customerId, draft.date, draft.allocations);
-      if (problem) throw new UserError(problem);
-      const values = {
-        receiptDate: draft.date,
-        customerId: draft.customerId,
-        method: draft.method,
-        accountId: draft.accountId,
-        amount: draft.amount.toFixed(AMOUNT_SCALE),
-        bankCharges: draft.bankCharges.toFixed(AMOUNT_SCALE),
-        reference: draft.reference,
-        note: draft.note,
-        branchId: draft.branchId,
-        chequeNumber: draft.cheque?.number ?? null,
-        chequeBank: draft.cheque?.bank ?? null,
-        chequeDate: draft.cheque?.date ?? null,
-        updatedBy: ctx.userId,
-      };
-      let saved: { id: string; updatedAt: Date };
-      let before: unknown = null;
-      if (id === null || id === undefined || id === "") {
-        [saved] = await tx
-          .insert(receipts)
-          .values({ tenantId: ctx.tenantId, createdBy: ctx.userId, ...values })
-          .returning({ id: receipts.id, updatedAt: receipts.updatedAt });
-      } else {
-        const stored = await findReceipt(tx, ctx, id, loadedAt);
-        if (stored.status !== "draft") throw new UserError("This receipt is posted and cannot be changed. Cancel it instead.");
-        if (stored.customerId !== draft.customerId) throw new UserError("A receipt keeps its customer. Throw this draft away and start one for the other customer.");
-        before = describeStored(stored);
-        await tx.delete(receiptAllocations).where(and(eq(receiptAllocations.tenantId, ctx.tenantId), eq(receiptAllocations.receiptId, stored.id)));
-        [saved] = await tx
-          .update(receipts)
-          .set({ ...values, updatedAt: sql`now()` })
-          .where(and(eq(receipts.tenantId, ctx.tenantId), eq(receipts.id, stored.id)))
-          .returning({ id: receipts.id, updatedAt: receipts.updatedAt });
-      }
-      // Written column by column: the app may name the invoice and the amount and nothing else.
-      for (const row of draft.allocations) {
-        await tx.execute(sql`
-          insert into public.receipt_allocations (tenant_id, receipt_id, invoice_id, opening_balance_id, amount, created_by)
-          values (${ctx.tenantId}, ${saved.id}, ${row.kind === "invoice" ? row.id : null}, ${row.kind === "opening" ? row.id : null}, ${row.amount.toFixed(AMOUNT_SCALE)}, ${ctx.userId})`);
-      }
-      await audit(tx, ctx, { action: before === null ? "receipt.create" : "receipt.update", entity: "receipt", entityId: saved.id, before, after: describe(draft, customer.name) });
-      return saved;
+      if (await isWalkInCustomer(tx, ctx.tenantId, draft.customerId)) throw new UserError(WALK_IN_AT_COUNTER);
+      return saveReceiptDraftIn(tx, ctx, id, draft, loadedAt);
     });
   } catch (error) {
-    // The table's own checks, for what a form cannot send: a cheque with an account, charges on cash.
-    if (pgCode(error) === "23514") throw new UserError("That receipt could not be saved as it stands. Check how the money came and where it went.");
-    if (pgCode(error) === "23503") throw new UserError("The account or the invoices named are not in this company. Reload the page.");
-    throw receiptRefusal(error, draft.date) ?? error;
+    throw savedRefusal(error, draft.date);
   }
+}
+
+/** What the database's refusals of a saved receipt mean. */
+export function savedRefusal(error: unknown, date: string): unknown {
+  // The table's own checks, for what a form cannot send: a cheque with an account, charges on cash.
+  if (pgCode(error) === "23514") return new UserError("That receipt could not be saved as it stands. Check how the money came and where it went.");
+  if (pgCode(error) === "23503") return new UserError("The account or the invoices named are not in this company. Reload the page.");
+  return receiptRefusal(error, date) ?? error;
+}
+
+/** The work of saveReceiptDraft, in the caller's transaction. A counter sale (Step 22) writes its receipt with it. */
+export async function saveReceiptDraftIn(tx: Tx, ctx: TenantContext, id: unknown, draft: ReceiptDraft, loadedAt?: unknown): Promise<{ id: string; updatedAt: Date }> {
+  if (!isUuid(draft.customerId)) throw new UserError("Choose the customer.");
+  const [customer] = await tx.select({ name: customers.name }).from(customers).where(and(eq(customers.tenantId, ctx.tenantId), eq(customers.id, draft.customerId)));
+  if (!customer) throw new UserError("Choose the customer.");
+  await requireBranch(tx, ctx, draft.branchId);
+  if (draft.accountId !== null && !isUuid(draft.accountId)) throw new UserError("Choose the account the money went into.");
+  const problem = await allocationProblem(tx, draft.customerId, draft.date, draft.allocations);
+  if (problem) throw new UserError(problem);
+  const values = {
+    receiptDate: draft.date,
+    customerId: draft.customerId,
+    method: draft.method,
+    accountId: draft.accountId,
+    amount: draft.amount.toFixed(AMOUNT_SCALE),
+    bankCharges: draft.bankCharges.toFixed(AMOUNT_SCALE),
+    reference: draft.reference,
+    note: draft.note,
+    branchId: draft.branchId,
+    chequeNumber: draft.cheque?.number ?? null,
+    chequeBank: draft.cheque?.bank ?? null,
+    chequeDate: draft.cheque?.date ?? null,
+    updatedBy: ctx.userId,
+  };
+  let saved: { id: string; updatedAt: Date };
+  let before: unknown = null;
+  if (id === null || id === undefined || id === "") {
+    [saved] = await tx
+      .insert(receipts)
+      .values({ tenantId: ctx.tenantId, createdBy: ctx.userId, ...values })
+      .returning({ id: receipts.id, updatedAt: receipts.updatedAt });
+  } else {
+    const stored = await findReceipt(tx, ctx, id, loadedAt);
+    if (stored.status !== "draft") throw new UserError("This receipt is posted and cannot be changed. Cancel it instead.");
+    if (stored.customerId !== draft.customerId) throw new UserError("A receipt keeps its customer. Throw this draft away and start one for the other customer.");
+    before = describeStored(stored);
+    await tx.delete(receiptAllocations).where(and(eq(receiptAllocations.tenantId, ctx.tenantId), eq(receiptAllocations.receiptId, stored.id)));
+    [saved] = await tx
+      .update(receipts)
+      .set({ ...values, updatedAt: sql`now()` })
+      .where(and(eq(receipts.tenantId, ctx.tenantId), eq(receipts.id, stored.id)))
+      .returning({ id: receipts.id, updatedAt: receipts.updatedAt });
+  }
+  // Written column by column: the app may name the invoice and the amount and nothing else.
+  for (const row of draft.allocations) {
+    await tx.execute(sql`
+      insert into public.receipt_allocations (tenant_id, receipt_id, invoice_id, opening_balance_id, amount, created_by)
+      values (${ctx.tenantId}, ${saved.id}, ${row.kind === "invoice" ? row.id : null}, ${row.kind === "opening" ? row.id : null}, ${row.amount.toFixed(AMOUNT_SCALE)}, ${ctx.userId})`);
+  }
+  await audit(tx, ctx, { action: before === null ? "receipt.create" : "receipt.update", entity: "receipt", entityId: saved.id, before, after: describe(draft, customer.name) });
+  return saved;
 }
 
 /** Throws a draft receipt away. A posted one is never removed. */
@@ -215,11 +227,14 @@ export async function postReceipt(ctx: TenantContext, id: unknown, loadedAt?: un
     (receipt) => {
       if (receipt.status !== "draft") throw new UserError("This receipt is already posted.");
     },
-    async (tx, receipt) => {
-      const [row] = await tx.execute<{ number: string }>(sql`select app.post_receipt(${receipt.id}) as number`);
-      return { number: row.number };
-    },
+    (tx, receipt) => postReceiptIn(tx, receipt.id),
   );
+}
+
+/** Posts a draft receipt in the caller's transaction: the database's own function does it, or refuses. */
+export async function postReceiptIn(tx: Tx, receiptId: string): Promise<{ number: string }> {
+  const [row] = await tx.execute<{ number: string }>(sql`select app.post_receipt(${receiptId}) as number`);
+  return { number: row.number };
 }
 
 const readDay = (raw: unknown, what: string): string => {

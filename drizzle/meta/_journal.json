@@ -218,6 +218,13 @@
       "when": 1794736253071,
       "tag": "0030_supplier_bills",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1794738592329,
+      "tag": "0031_supplier_payments",
+      "breakpoints": true
     }
   ]
 }

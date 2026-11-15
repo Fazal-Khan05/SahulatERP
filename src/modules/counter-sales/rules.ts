@@ -37,8 +37,9 @@ export const PHONE_PATTERN = /^\+?[0-9][0-9 -]{5,18}[0-9]$/;
 export function readCounterSale(raw: RawCounterSale, today: string): { ok: true; sale: CounterSale } | { ok: false; reason: string } {
   if (isIsoDate(raw.date) && raw.date > today) return { ok: false, reason: "A counter sale is recorded on the day of the sale or later, never before it." };
   const name = tidy(raw.buyerName);
-  if (name.length < 2) return { ok: false, reason: "Enter the buyer's name." };
-  if (name.length > 120) return { ok: false, reason: "The buyer's name: use at most 120 characters." };
+  // Counted as the database counts: in characters, not in the code units JavaScript keeps.
+  if ([...name].length < 2) return { ok: false, reason: "Enter the buyer's name." };
+  if ([...name].length > 120) return { ok: false, reason: "The buyer's name: use at most 120 characters." };
   const phone = tidy(raw.buyerPhone);
   if (phone !== "" && !PHONE_PATTERN.test(phone)) return { ok: false, reason: "Enter the buyer's phone as digits, such as 0300 1234567, or leave it empty." };
   // The walk-in customer is named when the sale is made; any text here passes the reader's own check.

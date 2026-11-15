@@ -31,6 +31,7 @@ export async function counterSaleAction(_: SalesFormState, formData: FormData): 
       method: formData.get("method"),
       accountId: formData.get("accountId"),
       reference: formData.get("reference"),
+      clientKey: formData.get("clientKey"),
     });
     return { location: `/sales/${sale.invoiceId}?counter=1` };
   } catch (error) {

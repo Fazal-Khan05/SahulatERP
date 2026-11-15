@@ -108,6 +108,8 @@ export function SalesForm({ action, kind, moneyAccounts = [], taxed, pricesInclu
   const counter = kind === "counter";
   const word = kind === "order" ? "order" : kind === "counter" ? "sale" : "quotation";
   const [method, setMethod] = useState<"cash" | "bank">("cash");
+  // One key for this sale, however many times it is sent: the server records it once.
+  const [clientKey] = useState(() => crypto.randomUUID());
   const payInto = moneyAccounts.filter((account) => account.kind === method);
 
   /** The price of one of a unit, from the price of one of the item's own unit. */
@@ -165,6 +167,7 @@ export function SalesForm({ action, kind, moneyAccounts = [], taxed, pricesInclu
           if (typeof value === "string") data.set(name, value);
         }
         data.set("customerId", customer?.id ?? "");
+        if (counter) data.set("clientKey", clientKey);
         data.set("intent", submitter instanceof HTMLButtonElement && submitter.value === "submit" ? "submit" : "save");
         // Rows with nothing in them are not sent, so "Line 2" in a message is the second line on the screen.
         const filled = rows.filter((row) => row.item !== null || row.quantity.trim() !== "" || row.unitPrice.trim() !== "" || row.discountPercent.trim() !== "");

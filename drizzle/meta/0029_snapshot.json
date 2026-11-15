@@ -1424,6 +1424,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "client_key": {
+          "name": "client_key",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1507,6 +1513,14 @@
           "columns": [
             "tenant_id",
             "id"
+          ]
+        },
+        "counter_sales_client_key": {
+          "name": "counter_sales_client_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "tenant_id",
+            "client_key"
           ]
         },
         "counter_sales_order_key": {

@@ -53,11 +53,14 @@ export const counterSales = pgTable(
     // Who bought, as typed at the counter. The name is copied onto the order and the invoice.
     buyerName: text("buyer_name").notNull(),
     buyerPhone: text("buyer_phone"),
+    // Sent by the form once per sale, so a sale sent twice (a double click, a retry) is recorded once.
+    clientKey: uuid("client_key").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     createdBy: uuid("created_by").notNull(),
   },
   (t) => [
     unique("counter_sales_tenant_id_id_key").on(t.tenantId, t.id),
+    unique("counter_sales_client_key").on(t.tenantId, t.clientKey),
     unique("counter_sales_order_key").on(t.tenantId, t.orderId),
     unique("counter_sales_invoice_key").on(t.tenantId, t.invoiceId),
     unique("counter_sales_receipt_key").on(t.tenantId, t.receiptId),

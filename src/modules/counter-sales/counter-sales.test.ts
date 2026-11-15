@@ -10,9 +10,9 @@ import { addUnit, createItem } from "@/modules/items/commands";
 import { addAccount, seedAccounts } from "@/modules/ledger/commands";
 import { openFiscalYear } from "@/modules/numbering/commands";
 import { createParty } from "@/modules/parties/commands";
-import { applyAdvance, postReceipt, saveReceiptDraft } from "@/modules/receipts/commands";
+import { applyAdvance, cancelReceipt, postReceipt, postReceiptIn, saveReceiptDraft, saveReceiptDraftIn } from "@/modules/receipts/commands";
 import { findCustomers, listOpenItems } from "@/modules/receipts/queries";
-import { postInvoice, saveInvoiceDraft, saveSalesDraft, saveSalesDraftIn, startInvoice, submitIn, submitSalesDocument } from "@/modules/sales/commands";
+import { postInvoice, postInvoiceIn, saveInvoiceDraft, saveSalesDraft, saveSalesDraftIn, startInvoice, startInvoiceIn, submitIn, submitSalesDocument } from "@/modules/sales/commands";
 import { getSalesDocument, searchCustomers } from "@/modules/sales/queries";
 import type { TenantContext } from "@/modules/tenant/rules";
 import { adminSql, deleteTenants, hasAdminDb, type AdminSql } from "../../../tests/support/admin-db";
@@ -78,6 +78,38 @@ const counts = async () =>
         || (select count(*) from public.counter_sales where tenant_id = ${tenantA})::text || ' counter sales' as v`
   )[0].v;
 const walkIn = async () => (await admin<{ id: string }[]>`select customer_id as id from public.walk_in_customers where tenant_id = ${tenantA}`)[0]?.id;
+
+/**
+ * A counter sale made by hand, past postCounterSale, as far as `upTo` and then committed: to show
+ * the database itself refuses one left without its receipt, or paid in part.
+ */
+async function byHand(upTo: "invoice" | "part-paid"): Promise<string | undefined> {
+  return refusedWith(as.owner, async (tx) => {
+    const [walk] = await tx.execute<{ id: string }>(sql`select app.walk_in_customer() as id`);
+    const draft = await saveSalesDraftIn(tx, as.owner, null, {
+      kind: "order",
+      date: DAY,
+      validUntil: null,
+      customerId: walk.id,
+      warehouseId: mainWarehouse,
+      customerReference: null,
+      notes: null,
+      furtherTaxExcluded: false,
+      lines: [{ itemId: helmet, description: null, unitId: null, quantity: new Decimal(1), unitPrice: null, discountPercent: null }],
+      shares: [],
+    });
+    await tx.execute(sql`insert into public.counter_sales (tenant_id, order_id, buyer_name, client_key, created_by) values (${tenantA}, ${draft.id}, 'By Hand', gen_random_uuid(), ${userIds.owner})`);
+    await submitIn(tx, as.owner, draft.id, undefined, {});
+    const invoice = await startInvoiceIn(tx, as.owner, draft.id, DAY);
+    await tx.execute(sql`update public.counter_sales set invoice_id = ${invoice.id} where order_id = ${draft.id}`);
+    await postInvoiceIn(tx, as.owner, invoice.id);
+    if (upTo === "invoice") return;
+    const one = new Decimal(1);
+    const receipt = await saveReceiptDraftIn(tx, as.owner, null, { date: DAY, customerId: walk.id, method: "cash", accountId: cash, amount: one, bankCharges: new Decimal(0), reference: null, note: null, branchId: null, cheque: null, allocations: [{ kind: "invoice", id: invoice.id, amount: one }] });
+    await tx.execute(sql`update public.counter_sales set receipt_id = ${receipt.id} where order_id = ${draft.id}`);
+    await postReceiptIn(tx, receipt.id);
+  });
+}
 
 describe.skipIf(!hasDb)("counter sales", () => {
   beforeAll(async () => {
@@ -166,6 +198,22 @@ describe.skipIf(!hasDb)("counter sales", () => {
     expect(await onHand()).toBe("97");
   });
 
+  it("is never left unpaid or paid in part, even when made past the app", async () => {
+    const before = await counts();
+    expect(await byHand("invoice")).toBe("SE123");
+    expect(await byHand("part-paid")).toBe("SE122");
+    expect(await counts()).toBe(before);
+  });
+
+  it("records a sale sent twice once", async () => {
+    const clientKey = randomUUID();
+    const first = await postCounterSale(as.owner, sale({ clientKey, buyerName: "Twice Sent" }));
+    const before = await counts();
+    const again = await postCounterSale(as.owner, sale({ clientKey, buyerName: "Twice Sent" }));
+    expect(again).toEqual(first);
+    expect(await counts()).toBe(before);
+  });
+
   it("reads what was typed, and says what is wrong", async () => {
     await expect(postCounterSale(as.owner, sale({ buyerName: " " }))).rejects.toThrow("Enter the buyer's name.");
     await expect(postCounterSale(as.owner, sale({ buyerPhone: "call me" }))).rejects.toThrow("Enter the buyer's phone as digits");
@@ -229,6 +277,29 @@ describe.skipIf(!hasDb)("counter sales", () => {
         sql`with r as (insert into public.receipts (id, tenant_id, receipt_date, customer_id, method, account_id, amount, created_by, updated_by) values (${stray[0].id}, ${tenantA}, ${DAY}, ${customer}, 'cash', ${cash}, 500, ${userIds.accountant}, ${userIds.accountant}) returning id) select app.post_receipt((select id from r))`,
       ),
     ).toBe("SE122");
+  });
+
+  it("never takes a counter sale's money back by cancelling its receipt", async () => {
+    const [receipt] = await admin<{ id: string }[]>`select receipt_id as id from public.counter_sales where tenant_id = ${tenantA} order by created_at limit 1`;
+    await expect(cancelReceipt(as.accountant, receipt.id, { date: DAY, reason: "Wrong account" })).rejects.toThrow("Money from a walk-in buyer is a counter sale's own receipt");
+    // Nor is a second invoice made from a counter sale's order.
+    const [first] = await admin<{ order_id: string; customer_id: string }[]>`
+      select c.order_id, o.customer_id from public.counter_sales c join public.sales_documents o on o.id = c.order_id where c.tenant_id = ${tenantA} order by c.created_at limit 1`;
+    expect(
+      await codeOf(
+        as.owner,
+        sql`insert into public.sales_documents (tenant_id, kind, document_date, customer_id, warehouse_id, branch_id, currency, source_document_id, created_by, updated_by)
+            values (${tenantA}, 'invoice', ${DAY}, ${first.customer_id}, ${mainWarehouse}, ${mainBranch}, 'PKR', ${first.order_id}, ${userIds.owner}, ${userIds.owner})`,
+      ),
+    ).toBe("SE122");
+  });
+
+  it("keeps the walk-in customer what it is: never archived, given credit, or given a tax identity", async () => {
+    const customer = (await walkIn())!;
+    for (const change of [sql`archived_at = now(), archived_by = ${userIds.owner}`, sql`credit_limit = 50000`, sql`credit_days = 30`, sql`cnic = '4210112345671'`]) {
+      expect(await codeOf(as.owner, sql`update public.customers set ${change} where id = ${customer}`)).toBe("SE124");
+    }
+    expect(await codeOf(as.owner, sql`update public.customers set customer_class = 'Counter' where id = ${customer}`)).toBeUndefined();
   });
 
   it("names the buyer on a return, as the invoice did", async () => {

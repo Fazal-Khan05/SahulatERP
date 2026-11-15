@@ -50,9 +50,17 @@ in the Customers list, statements and reports.
   refused, an order to it is not submitted unless it is a counter sale's, and an invoice to it
   must be made from a counter sale's order (SE122).
 - Money from it is only a counter sale's own receipt: cash or bank, never a cheque, posted only
-  as paying the counter sale's invoice in full (SE122).
+  as paying the counter sale's invoice's whole total, and never cancelled (SE122).
+- A counter sale is whole when its transaction ends: its posted invoice and the posted receipt
+  for the invoice's total, or the transaction is refused (SE123, asked at commit). A counter
+  sale's order is invoiced once, by its own invoice.
 - A counter sale names its invoice and its receipt once each and never changes otherwise, and
   is never removed (SE123; the app's role may write only those two columns after the row).
+- The walk-in customer can be renamed, given a code, a class or a price list, but not archived,
+  given credit days or a credit limit, or registered for tax with an NTN, STRN or CNIC (SE124);
+  and its counter sales never carry a customer's NTN, STRN, CNIC or address.
+- A sale sent twice (a double click, a retried request) is recorded once: the form sends one key
+  per sale, kept unique on `counter_sales`, and the second send returns the first sale.
 - The buyer's typed name goes onto the order, the invoice and a later credit note as each is
   submitted (a trigger that runs after `sales_documents_check`).
 - The app leaves the walk-in customer out of the customer pickers for orders, quotations and
@@ -71,11 +79,11 @@ in the Customers list, statements and reports.
    credit until it clears.
 4. **The buyer's phone is optional, and is not printed on the invoice.** It shows on the
    invoice's page. The buyer's CNIC is not asked for (see Later).
-5. **A return from a walk-in buyer is a credit note, as for any invoice.** Because the sale was
-   paid, what comes back is owed to the walk-in customer as credit until refunds exist (Step 34
-   builds refunding an advance). A counter sale entered by mistake is undone with a credit note
-   for everything, then cancelling its receipt and setting the credit against the invoice; the
-   cash then leaves the books with the receipt.
+5. **A return from a walk-in buyer is a credit note, as for any invoice, and a counter sale's
+   receipt is never cancelled.** Because the sale was paid, what comes back is owed to the walk-in
+   customer as credit until refunds exist (Step 34 builds refunding an advance). A counter sale
+   entered by mistake is undone the same way: a credit note for everything, then the refund. Money
+   put into the wrong account is moved with a journal from one account to the other.
 6. **The counter sale's date may be today or earlier, never later**, so yesterday's sales can be
    entered the next morning.
 
@@ -88,6 +96,16 @@ proves it again for this step: 5,000 received before any invoice is an advance o
 invoice of 3,000 follows; 3,000 of the advance is set against it; the customer then owes nothing
 on the invoice, 2,000 of the advance is left, and every journal balances.
 
+## Review
+
+An independent review (2026-11-15) found no critical problem and three medium ones, all fixed in
+the migration before it reached any shared database: the database did not itself require the
+whole invoice to be paid (or paid at all, past the app); a counter sale's receipt could be
+cancelled, leaving a walk-in buyer owing for good; and the walk-in customer could be archived,
+given credit or a tax identity. Also fixed: a sale sent twice, clearer refusals, and the new
+triggers always on, as their neighbours are. Opening balances can still name the walk-in customer
+(the opening screens are shared code); see Later.
+
 ## Tests
 
 - `src/modules/counter-sales/rules.test.ts`: what is typed, cleaned, and what is said when it is wrong.
@@ -95,7 +113,9 @@ on the invoice, 2,000 of the advance is left, and every journal balances.
   and their journals, stock out, nothing owed; the same walk-in customer every time and a bank
   payment; nothing made when any part is refused; who may sell at the counter; a counter sale
   never changed; the walk-in customer refused everywhere else, by the app and by the database;
-  the buyer named on a return; the acceptance above.
+  one made past the app without its receipt, or paid in part, refused; a sale sent twice
+  recorded once; its receipt never cancelled and its order never invoiced twice; the walk-in
+  customer kept as it is; the buyer named on a return; the acceptance above.
 - `e2e/counter-sales.spec.ts`, in the browser: a cash sale and a bank sale at the counter, a sale
   refused whole for want of stock, the walk-in customer not offered elsewhere, and a salesperson
   with no way in.
@@ -111,3 +131,5 @@ on the invoice, 2,000 of the advance is left, and every journal balances.
   for sales tax and FBR asks for it; FBR invoicing is out of scope for now.
 - **A receipt printed at the counter** (a short slip rather than the A4 invoice).
 - **Who may sell at the counter** may want a role of its own (a cashier) once a pilot asks.
+- **Opening balances naming the walk-in customer** are not refused (the opening module is shared
+  code); a walk-in buyer's debt from before the books opened would sit there uncollected.

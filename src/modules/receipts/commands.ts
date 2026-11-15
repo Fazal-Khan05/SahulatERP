@@ -102,6 +102,7 @@ export function receiptRefusal(error: unknown, date: string): UserError | null {
   if (code === "SE108") return new UserError("That date is too early: it is before the receipt, the date on the cheque, or the last thing that happened to it.");
   if (code === "SE110") return new UserError("That is more than is left of this advance. Reload the page and check the amounts.");
   if (code === "SE111") return new UserError("That date has not come yet. Nothing is recorded before it happens.");
+  if (code === "SE122") return new UserError("Money from a walk-in buyer is a counter sale's own receipt, paying its invoice in full, and it is not cancelled. Goods that come back are a credit note.");
   if (code === "42501") return new UserError("Your role cannot do that.");
   if (code === "SE100" || code === "SE101" || code === "SE104" || code === "SE105" || code === "SE107" || code === "SE074") {
     return new UserError("That could not be done to this receipt as it stands. Reload the page and try again.");

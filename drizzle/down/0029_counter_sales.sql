@@ -6,9 +6,13 @@
 -- customer.
 
 BEGIN;
+DROP TRIGGER customers_walk_in ON public.customers;
+DROP TRIGGER counter_sales_whole ON public.counter_sales;
 DROP TRIGGER receipts_walk_in ON public.receipts;
 DROP TRIGGER sales_documents_walk_in ON public.sales_documents;
 DROP TRIGGER counter_sales_check ON public.counter_sales;
+DROP FUNCTION app.check_walk_in_customer();
+DROP FUNCTION app.check_counter_sale_whole();
 DROP FUNCTION app.check_walk_in_receipt();
 DROP FUNCTION app.check_walk_in_document();
 DROP FUNCTION app.check_counter_sale();

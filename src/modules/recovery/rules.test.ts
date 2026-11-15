@@ -84,6 +84,12 @@ describe("the customer statement", () => {
       { date: "2026-11-05", writtenAt: at(3), sourceType: "cheque_return", number: "RC-2627-00001", debit: d(1500), credit: d(0) },
     ]);
     expect(statement.rows.map((row) => `${row.what} ${row.balance.toFixed()}`)).toEqual(["Invoice 3000", "Received 1500", "Cheque returned 3000"]);
+    // A cheque that bounced before clearing reverses its receipt's entry.
+    const reversed = buildStatement({ debit: d(0), credit: d(0) }, [{ date: "2026-11-06", writtenAt: at(4), sourceType: "reversal", number: null, debit: d(1500), credit: d(0) }]);
+    expect(reversed.rows[0].what).toBe("Receipt taken back");
+    // A return (Step 21's credit note) takes the goods' value off what the customer owes.
+    const returned = buildStatement({ debit: d(3000), credit: d(0) }, [{ date: "2026-11-07", writtenAt: at(5), sourceType: "credit_note", number: "CN-2627-00001", debit: d(0), credit: d(896.8) }]);
+    expect(`${returned.rows[0].what} ${returned.closing.toFixed()}`).toBe("Credit note 2103.2");
     expect(statement.closing.toFixed()).toBe("3000");
     expect(`${statement.debits.toFixed()} ${statement.credits.toFixed()}`).toBe("3500 1500");
     // Paid ahead: the opening is a credit.

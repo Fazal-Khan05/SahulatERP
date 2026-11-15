@@ -24,6 +24,8 @@
     "owner:create": "node --env-file-if-exists=.env.local scripts/owner-create.mjs",
     "invites:send": "node --env-file-if-exists=.env.local scripts/invites-send.mjs",
     "worker": "node --env-file-if-exists=.env.local scripts/worker.mjs",
+    "demo:seed": "DEMO_ACTION=seed vitest run --config vitest.demo.config.ts",
+    "demo:reset": "DEMO_ACTION=reset vitest run --config vitest.demo.config.ts",
     "check": "npm run check:migrations && npm run typecheck && npm run lint && npm run test"
   },
   "dependencies": {

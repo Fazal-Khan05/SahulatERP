@@ -108,6 +108,7 @@ const DOCUMENT_WORDS: Record<string, string> = {
   stock_transfer: "Transfer",
   stock_adjustment: "Adjustment",
   stock_count: "Stock count",
+  credit_note: "Credit note",
 };
 
 /** The moves of one item in a period, with the documents behind them. */
@@ -127,7 +128,7 @@ async function itemMoves(tx: Tx, ctx: TenantContext, filter: StockFilter, itemId
         coalesce(sd.number, st.number, sa.number, sc.number) as number, m.reverses_move_id is not null as reversal
       from public.stock_moves m
       join public.warehouses w on w.tenant_id = m.tenant_id and w.id = m.warehouse_id
-      left join public.sales_documents sd on m.source_type in ('delivery_note', 'sales_invoice') and sd.tenant_id = m.tenant_id and sd.id = m.source_id
+      left join public.sales_documents sd on m.source_type in ('delivery_note', 'sales_invoice', 'credit_note') and sd.tenant_id = m.tenant_id and sd.id = m.source_id
       left join public.stock_transfers st on m.source_type = 'stock_transfer' and st.tenant_id = m.tenant_id and st.id = m.source_id
       left join public.stock_adjustments sa on m.source_type = 'stock_adjustment' and sa.tenant_id = m.tenant_id and sa.id = m.source_id
       left join public.stock_counts sc on m.source_type = 'stock_count' and sc.tenant_id = m.tenant_id and sc.id = m.source_id
@@ -231,23 +232,36 @@ async function lowStock(tx: Tx, ctx: TenantContext, filter: StockFilter, today: 
 
 async function itemProfit(tx: Tx, ctx: TenantContext, filter: StockFilter): Promise<ReportTable> {
   const rows = await tx.execute<{ code: string; name: string; unit: string; quantity: string; sales: string; cost: string }>(sql`
-    select i.code, i.name, u.code as unit, sum(l.base_quantity)::text as quantity,
-      round(sum(l.value * s.exchange_rate), 4)::text as sales, coalesce(sum(c.cost), 0)::text as cost
-    from public.sales_lines l
-    join public.sales_documents s on s.tenant_id = l.tenant_id and s.id = l.document_id
-    join public.items i on i.tenant_id = l.tenant_id and i.id = l.item_id
+    with sold as (
+      -- Posted invoices in the period, with what the goods on each line left stock at: on the
+      -- invoice itself when it delivered them, or on the delivery note line it bills.
+      select l.item_id, l.base_quantity as quantity, l.value * s.exchange_rate as sales, coalesce(c.cost, 0) as cost
+      from public.sales_lines l
+      join public.sales_documents s on s.tenant_id = l.tenant_id and s.id = l.document_id
+      left join lateral (
+        select -sum(m.value) as cost from public.stock_moves m
+        where m.tenant_id = l.tenant_id
+          and ((m.source_type = 'sales_invoice' and m.source_id = s.id and m.source_line_id = l.id)
+            or (m.source_type = 'delivery_note' and l.source_line_id is not null and m.source_line_id = l.source_line_id))
+      ) c on true
+      where l.tenant_id = ${ctx.tenantId} and s.kind = 'invoice' and s.status = 'submitted'
+        and s.document_date between ${filter.from}::date and ${filter.to}::date
+        and (${filter.branchId}::uuid is null or s.branch_id = ${filter.branchId}::uuid)
+      union all
+      -- Posted credit notes (Step 21) in the period take back their quantity and value, and the
+      -- cost of the goods that came back onto the shelf; goods written off as damaged stay a cost.
+      select l.item_id, -l.base_quantity, -(l.value * s.exchange_rate), -coalesce(cc.cost - cc.written_off, 0)
+      from public.sales_lines l
+      join public.sales_documents s on s.tenant_id = l.tenant_id and s.id = l.document_id
+      left join public.credit_note_line_costs cc on cc.tenant_id = l.tenant_id and cc.line_id = l.id
+      where l.tenant_id = ${ctx.tenantId} and s.kind = 'credit_note' and s.status = 'submitted'
+        and s.document_date between ${filter.from}::date and ${filter.to}::date
+        and (${filter.branchId}::uuid is null or s.branch_id = ${filter.branchId}::uuid)
+    )
+    select i.code, i.name, u.code as unit, sum(sold.quantity)::text as quantity, round(sum(sold.sales), 4)::text as sales, sum(sold.cost)::text as cost
+    from sold
+    join public.items i on i.tenant_id = ${ctx.tenantId} and i.id = sold.item_id
     join public.units u on u.tenant_id = i.tenant_id and u.id = i.base_unit_id
-    -- What the goods on the line left stock at: on the invoice itself when it delivered them, or
-    -- on the delivery note line it bills.
-    left join lateral (
-      select -sum(m.value) as cost from public.stock_moves m
-      where m.tenant_id = l.tenant_id
-        and ((m.source_type = 'sales_invoice' and m.source_id = s.id and m.source_line_id = l.id)
-          or (m.source_type = 'delivery_note' and l.source_line_id is not null and m.source_line_id = l.source_line_id))
-    ) c on true
-    where l.tenant_id = ${ctx.tenantId} and s.kind = 'invoice' and s.status = 'submitted'
-      and s.document_date between ${filter.from}::date and ${filter.to}::date
-      and (${filter.branchId}::uuid is null or s.branch_id = ${filter.branchId}::uuid)
     group by i.id, i.code, i.name, u.code
     order by lower(i.code)`);
   return itemProfitTable(

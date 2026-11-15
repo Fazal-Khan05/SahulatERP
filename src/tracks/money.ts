@@ -15,6 +15,13 @@ export const permissions = {
   // database's policies in drizzle/0025_commission_plans.sql name the same roles.
   "commission.read": ["owner", "accountant", "auditor", "sales_manager"],
   "commission.manage": ["owner"],
+  // Step 38. What the sales team has earned. The owner, an accountant and the auditor read
+  // everyone's; whoever can earn commission reads their own. The owner and an accountant
+  // approve it for payment and pay it (the founder's decision, 2026-11-15).
+  "commission_earned.read": ["owner", "accountant", "auditor"],
+  "commission_earned.own": ["owner", "sales_manager", "salesperson"],
+  "commission.approve": ["owner", "accountant"],
+  "commission.pay": ["owner", "accountant"],
 } as const satisfies TrackPermissions;
 
 /**
@@ -24,7 +31,7 @@ export const permissions = {
 export const links = {
   cashAndBank: null,
   commissions: "/commissions",
-  myCommission: null,
+  myCommission: "/commissions/earned",
   payroll: null,
   employees: null,
   payrollRuns: null,
@@ -41,7 +48,10 @@ export const controls = {} as const satisfies Record<string, string>;
  * Kinds of document this track numbers, by their two letters. The migration adds a function
  * app.document_type_<letters>() for each.
  */
-export const documents = {} as const satisfies Record<string, string>;
+export const documents = {
+  // Step 38: a commission payment to one person.
+  CP: "Commission payment",
+} as const satisfies Record<string, string>;
 
 /** This track's reports, listed on the Reports page under headings of its own. */
 export const reports: readonly ReportSection[] = [
@@ -50,6 +60,7 @@ export const reports: readonly ReportSection[] = [
     reports: [
       // The accountant's menu has no Commissions entry; this is how an accountant reaches the plans.
       { label: "Commission plans", href: "/commissions", about: "Who is on which plan, its rates, slabs and target, and who reports to whom.", permission: "commission.read", module: "commissions" },
+      { label: "Commission earned", href: "/commissions/earned", about: "What each person has earned, what the customers' payments have released, what has been paid and what is owed back. Approve and pay here.", permission: "commission_earned.read", module: "commissions" },
     ],
   },
 ];

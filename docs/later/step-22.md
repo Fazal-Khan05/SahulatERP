@@ -131,5 +131,8 @@ triggers always on, as their neighbours are. Opening balances can still name the
   for sales tax and FBR asks for it; FBR invoicing is out of scope for now.
 - **A receipt printed at the counter** (a short slip rather than the A4 invoice).
 - **Who may sell at the counter** may want a role of its own (a cashier) once a pilot asks.
+- **The Customers screens say only "That did not work"** when someone tries to archive the walk-in
+  customer or give it credit or a tax number: the database refuses it (SE124), but the parties
+  module is shared code and does not put that refusal into words. A shared change.
 - **Opening balances naming the walk-in customer** are not refused (the opening module is shared
   code); a walk-in buyer's debt from before the books opened would sit there uncollected.

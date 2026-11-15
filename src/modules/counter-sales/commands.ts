@@ -28,7 +28,6 @@ export type CounterSaleResult = { invoiceId: string; invoiceNumber: string; rece
 function counterRefusal(error: unknown, date: string): unknown {
   if (error instanceof UserError) return error;
   const code = pgCode(error);
-  if (code === "SE052") return new UserError("The walk-in customer cannot be sold to as it stands. Check it under Customers: it is not archived, and has no credit limit.");
   if (code === "SE122" || code === "SE123" || code === "SE124") return new UserError("The walk-in customer is sold to only at the counter, and pays at once. Reload the page and try again.");
   // The tables' own checks, for what the form cannot send.
   if (code === "23514" || code === "23503") return new UserError("This sale could not be recorded as it stands. Check the buyer, the lines and the account the money went into.");
@@ -65,7 +64,8 @@ export async function postCounterSale(ctx: TenantContext, raw: RawCounterSale & 
         insert into public.counter_sales (tenant_id, order_id, buyer_name, buyer_phone, client_key, created_by)
         values (${ctx.tenantId}, ${draft.id}, ${buyer.name}, ${buyer.phone}, ${clientKey}, ${ctx.userId})`);
       const submitted = await submitIn(tx, ctx, draft.id, undefined, {});
-      if (submitted.status !== "submitted") throw new UserError("The walk-in customer has a credit limit, so a counter sale would wait for approval. Clear its credit limit on the customer's page.");
+      // The walk-in customer has no credit limit (the database keeps it so), so an order is never held.
+      if (submitted.status !== "submitted") throw new UserError("This sale could not be recorded as it stands. Reload the page and try again.");
       // Billed at once, on the sale's own date: the invoice takes the goods out of stock as it posts.
       const invoice = await startInvoiceIn(tx, ctx, draft.id, order.date);
       await tx.update(counterSales).set({ invoiceId: invoice.id }).where(and(eq(counterSales.tenantId, ctx.tenantId), eq(counterSales.orderId, draft.id)));

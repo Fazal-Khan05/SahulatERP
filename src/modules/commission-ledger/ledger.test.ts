@@ -157,7 +157,9 @@ async function booksAgree(tenantId = tenantA): Promise<void> {
   expect(off.length, "accruals that are not the sum of their movements").toBe(0);
 }
 
-describe.skipIf(!hasDb)("commission earned, released, taken back and paid", () => {
+// Each case posts and pays a run of documents. On the hosted database every round trip crosses the
+// network, and the longest of them need several minutes there (seconds on a local one).
+describe.skipIf(!hasDb)("commission earned, released, taken back and paid", { timeout: 600_000 }, () => {
   beforeAll(async () => {
     admin = adminSql();
     const stale = await admin<{ id: string }[]>`select id from public.tenants where name like ${PREFIX + "%"}`;

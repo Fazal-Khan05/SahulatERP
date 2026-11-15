@@ -84,13 +84,13 @@ test("an owner switches withholding on and bills goods from a company that is no
   await expect(shown(page.getByLabel("Price of one, line 1", { exact: true }))).toHaveValue("1000");
   await expect(page.getByLabel("Income tax (section 153)")).toHaveValue("income_tax.goods.company");
   await page.getByRole("button", { name: "Bill all of it" }).click();
-  await expect(visible(page, "goods-amount-1")).toHaveText("100,000.00");
+  await expect(visible(page, "goods-amount-1")).toHaveText("1,00,000.00");
   await page.getByLabel("Supplier's invoice number").fill("KM-501");
   await page.getByRole("button", { name: "Save as draft" }).click();
 
   // The draft says what posting it will do, from the tax tables: 10% of 100,000 from a company that is not on the list.
   await expect(page.getByRole("heading", { name: "Draft bill from Karachi Motors (Pvt) Ltd" })).toBeVisible();
-  await expect(page.getByText("Income tax withheld: Goods, from a company, 10% of 100,000.00")).toBeVisible();
+  await expect(page.getByText("Income tax withheld: Goods, from a company, 10% of 1,00,000.00")).toBeVisible();
   await expect(visible(page, "bill-payable")).toHaveText("90,000.00");
   expect(await journal("PB-2627-00001")).toEqual([]);
   await page.getByRole("button", { name: "Post bill" }).click();

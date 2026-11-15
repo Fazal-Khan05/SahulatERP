@@ -1,3 +1,4 @@
+import type Decimal from "decimal.js";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ActionForm } from "@/components/action-form";
@@ -19,7 +20,8 @@ import { Back, Pill, Refused, Sections } from "./screens";
 const NO_BILLS = "Only an owner, an accountant or an auditor can see supplier bills.";
 const SELECT = "h-8 w-full min-w-0 rounded-lg border border-input bg-card px-2 text-sm";
 const first = (value: string | string[] | undefined) => (typeof value === "string" ? value : "");
-const price = (value: { toFixed(places?: number): string; decimalPlaces(): number }) => value.toFixed(Math.min(Math.max(value.decimalPlaces(), 2), 4));
+/** A price of one: as an amount, or with the third and fourth decimals it was typed with. */
+const price = (value: Decimal) => (value.decimalPlaces() <= 2 ? formatAmount(value) : value.toFixed(Math.min(value.decimalPlaces(), 4)));
 
 // ── the list ────────────────────────────────────────────────────────────────────────────────────
 

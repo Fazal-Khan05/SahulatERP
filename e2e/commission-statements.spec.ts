@@ -98,7 +98,7 @@ test("a salesperson's statement shows the sale and what the customer's payment r
   await signIn(page, seller);
   await page.goto("/commissions/earned");
   await shown(page.getByRole("link", { name: "My statement" })).click();
-  await expect(page).toHaveURL(new RegExp(`/commissions/statements/${seller.id}\\?from=`));
+  await expect(page).toHaveURL(new RegExp(`/commissions/statements/${seller.id}$`));
   await expect(page.getByRole("heading", { name: "My commission statement" })).toBeVisible();
   await expect(lines(page)).toHaveCount(3);
   await expect(lines(page).nth(1)).toContainText("Earned on the sale");

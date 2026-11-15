@@ -136,7 +136,8 @@ three tracks agree on):
       select * from supplier_bills sb where sb.bill_date >= f.d order by sb.bill_date offset 0) b;
     ```
 
-    The first pass of the lateral scan runs the tenant InitPlan while the setting is still A;
+    As the reviewer read it (the result was observed; the mechanism is its explanation): the
+    first pass of the lateral scan runs the tenant InitPlan while the setting is still A;
     the materialised CTE's second row then switches the setting to B; the role InitPlan is run
     only when a row first reaches that test, by which time the setting is B, where the caller
     is the owner. The policy's test becomes "tenant is A and role is owner". The same statement

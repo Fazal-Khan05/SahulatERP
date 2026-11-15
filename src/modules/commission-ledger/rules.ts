@@ -82,3 +82,10 @@ export function paymentOf(approved: Decimal, owed: Decimal): { gross: Decimal; r
   const recovered = Decimal.min(approved, owed);
   return { gross: approved, recovered, amount: approved.minus(recovered), carried: owed.minus(recovered) };
 }
+
+/** A payment that was made, in one line: its number, and what was approved, taken back and paid. */
+export function paidLine(payment: { number: string; gross: Decimal; recovered: Decimal; amount: Decimal }): string {
+  return payment.recovered.isZero()
+    ? `${payment.number}: ${payment.amount.toFixed(2)} paid.`
+    : `${payment.number}: ${payment.gross.toFixed(2)} approved, ${payment.recovered.toFixed(2)} of what was owed back taken out of it, ${payment.amount.toFixed(2)} paid.`;
+}

@@ -6,7 +6,7 @@ import { requireTenant } from "@/lib/auth/session";
 import { todayIso } from "@/lib/format";
 import { formatAmount } from "@/lib/money";
 import { getEarned, listPayments, type Accrual } from "@/modules/commission-ledger/queries";
-import { owedBack, payable, paymentOf, standingLabel, totalsOf } from "@/modules/commission-ledger/rules";
+import { owedBack, paidLine, payable, paymentOf, standingLabel, totalsOf } from "@/modules/commission-ledger/rules";
 import { formatIsoDate } from "@/modules/currencies/rules";
 import { listMoneyAccounts } from "@/modules/receipts/queries";
 import { can } from "@/modules/tenant/rules";
@@ -24,7 +24,7 @@ const what = (row: Accrual, names: Record<string, string>) => (row.kind === "own
  * their own. The owner and an accountant approve what the customers' payments have released,
  * and pay it.
  */
-export async function EarnedScreen({ searchParams }: { searchParams: Promise<{ person?: string | string[] }> }) {
+export async function EarnedScreen({ searchParams }: { searchParams: Promise<{ person?: string | string[]; paid?: string | string[] }> }) {
   const session = await requireTenant();
   const everyone = can(session.role, "commission_earned.read");
   const own = can(session.role, "commission_earned.own");
@@ -50,6 +50,8 @@ export async function EarnedScreen({ searchParams }: { searchParams: Promise<{ p
   const totals = totalsOf(rows);
   const toApprove = rows.filter((row) => payable(row).gt(0) && !row.approved);
   const due = paymentOf(totals.approved, totals.owedBack);
+  // The payment just made, when the page was loaded again after paying: one of this person's own.
+  const justPaid = typeof query.paid === "string" && person ? payments.find((payment) => payment.id === query.paid && payment.userId === person) : undefined;
 
   return (
     <>
@@ -187,6 +189,11 @@ export async function EarnedScreen({ searchParams }: { searchParams: Promise<{ p
 
         {person && payer && chosen ? (
           <Card title={`Pay ${chosen.name}`}>
+            {justPaid ? (
+              <p role="status" className="text-sm font-medium" data-testid="commission-paid">
+                {paidLine(justPaid)}
+              </p>
+            ) : null}
             {totals.approved.isZero() ? (
               <p className="text-sm text-muted-foreground">Nothing is approved for payment. Approve what has been released first.</p>
             ) : (

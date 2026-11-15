@@ -457,16 +457,17 @@ CREATE FUNCTION app.reversal_backed_supplier_payment(p_reversal public.journals,
       WHERE p.tenant_id = p_original.tenant_id AND p.journal_id = p_original.id AND p.status = 'cancelled' AND p.cancelled_on = p_reversal.journal_date)
   $$;
 --> statement-breakpoint
--- The journal that sets an advance against bills stands with the rows that name it, and is
--- reversed only when their payment has been cancelled.
+-- The journal that sets an advance against a bill stands with the row that names it (one
+-- journal for each bill, with no document number of its own), and is reversed only when the
+-- payment has been cancelled.
 CREATE FUNCTION app.journal_backed_supplier_advance_application(p_journal public.journals) RETURNS boolean
   LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
   AS $$
-    SELECT EXISTS (
+    SELECT p_journal.document_number IS NULL AND EXISTS (
       SELECT 1 FROM public.supplier_payment_allocations a
       JOIN public.supplier_payments p ON p.tenant_id = a.tenant_id AND p.id = a.payment_id
-      WHERE a.tenant_id = p_journal.tenant_id AND a.journal_id = p_journal.id AND a.payment_id = p_journal.source_id
-        AND a.applied_on = p_journal.journal_date AND p.number = p_journal.document_number AND p.status <> 'draft')
+      WHERE a.tenant_id = p_journal.tenant_id AND a.id = p_journal.source_id AND a.journal_id = p_journal.id
+        AND a.applied_on = p_journal.journal_date AND p.status <> 'draft')
   $$;
 --> statement-breakpoint
 CREATE FUNCTION app.reversal_backed_supplier_advance_application(p_reversal public.journals, p_original public.journals) RETURNS boolean
@@ -696,8 +697,8 @@ GRANT EXECUTE ON FUNCTION app.post_supplier_payment(uuid) TO app_runtime;
 -- ── hand-written: setting an advance against bills ──────────────────────────────────────────────
 -- What is left of a posted payment (its advance) is set against posted bills of the same
 -- supplier and branch, on a day on or after the payment and each bill: debit Trade payables,
--- credit Advances to suppliers. p_allocations is a list of {"bill_id", "amount"}. Returns how
--- many bills it was set against.
+-- credit Advances to suppliers, one journal for each bill. p_allocations is a list of
+-- {"bill_id", "amount"}. Returns how many bills it was set against.
 CREATE FUNCTION app.apply_supplier_advance(p_payment uuid, p_date date, p_allocations jsonb) RETURNS integer
   LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
   AS $$
@@ -712,6 +713,7 @@ DECLARE
   v_total numeric := 0;
   v_lines integer := 0;
   v_journal uuid;
+  v_id uuid;
 BEGIN
   IF v_doc.status <> 'posted' THEN
     RAISE EXCEPTION 'an advance is set against a bill from a posted payment' USING ERRCODE = 'SE236';
@@ -727,9 +729,6 @@ BEGIN
   v_left := v_doc.amount - coalesce((SELECT sum(a.amount) FROM public.supplier_payment_allocations a WHERE a.tenant_id = v_tenant AND a.payment_id = v_doc.id), 0);
 
   SET CONSTRAINTS public.journals_balanced, public.journal_lines_balanced, public.journals_with_document DEFERRED;
-  INSERT INTO public.journals (tenant_id, journal_date, source_type, source_id, document_number, memo, branch_id, created_by)
-    VALUES (v_tenant, p_date, 'supplier_advance_application', v_doc.id, v_doc.number, left('Advance to ' || v_supplier || ' set against bills', 500), v_doc.branch_id, v_user)
-    RETURNING id INTO v_journal;
   FOR v_line IN
     SELECT (x.value->>'bill_id')::uuid AS bill_id, (x.value->>'amount')::numeric AS amount, b.status AS bill_status, b.supplier_id, b.branch_id, b.bill_date, b.number,
            count(*) OVER (PARTITION BY x.value->>'bill_id') AS times
@@ -750,23 +749,28 @@ BEGIN
     IF v_line.amount > app.bill_owed(v_tenant, v_line.bill_id) THEN
       RAISE EXCEPTION 'more set against bill % than is still owed on it', v_line.number USING ERRCODE = 'SE239';
     END IF;
-    INSERT INTO public.supplier_payment_allocations (tenant_id, payment_id, bill_id, amount, applied_on, journal_id, created_by)
-      VALUES (v_tenant, v_doc.id, v_line.bill_id, v_line.amount, p_date, v_journal, v_user);
     v_total := v_total + v_line.amount;
+    IF v_total > v_left THEN
+      RAISE EXCEPTION 'more set against bills than is left of the advance: % against %', v_total, v_left USING ERRCODE = 'SE240';
+    END IF;
+    -- One journal for each bill, which stands with the row written for it.
+    v_id := gen_random_uuid();
+    INSERT INTO public.journals (tenant_id, journal_date, source_type, source_id, document_number, memo, branch_id, created_by)
+      VALUES (v_tenant, p_date, 'supplier_advance_application', v_id, NULL, left('Advance ' || v_doc.number || ' to ' || v_supplier || ' set against ' || v_line.number, 500), v_doc.branch_id, v_user)
+      RETURNING id INTO v_journal;
+    INSERT INTO public.journal_lines (tenant_id, journal_id, line_no, account_id, debit, credit, description, supplier_id)
+      VALUES (v_tenant, v_journal, 1, app.control_account(v_tenant, 'ap'), v_line.amount, 0, 'Advance set against ' || v_line.number, v_doc.supplier_id),
+             (v_tenant, v_journal, 2, app.control_account(v_tenant, 'supplier_advances'), 0, v_line.amount, 'Advance ' || v_doc.number || ' set against ' || v_line.number, v_doc.supplier_id);
+    INSERT INTO public.audit_log (tenant_id, actor_user_id, actor_role, action, entity, entity_id, after)
+      VALUES (v_tenant, v_user, v_role, 'journal.post', 'journal', v_journal,
+        jsonb_build_object('date', p_date, 'source', 'supplier_advance_application', 'sourceId', v_id, 'number', NULL, 'lines', 2, 'total', v_line.amount::text));
+    INSERT INTO public.supplier_payment_allocations (id, tenant_id, payment_id, bill_id, amount, applied_on, journal_id, created_by)
+      VALUES (v_id, v_tenant, v_doc.id, v_line.bill_id, v_line.amount, p_date, v_journal, v_user);
     v_lines := v_lines + 1;
   END LOOP;
-  IF v_total > v_left THEN
-    RAISE EXCEPTION 'more set against bills than is left of the advance: % against %', v_total, v_left USING ERRCODE = 'SE240';
-  END IF;
-  INSERT INTO public.journal_lines (tenant_id, journal_id, line_no, account_id, debit, credit, description, supplier_id)
-    VALUES (v_tenant, v_journal, 1, app.control_account(v_tenant, 'ap'), v_total, 0, 'Advance set against bills', v_doc.supplier_id),
-           (v_tenant, v_journal, 2, app.control_account(v_tenant, 'supplier_advances'), 0, v_total, 'Advance ' || v_doc.number || ' set against bills', v_doc.supplier_id);
-  INSERT INTO public.audit_log (tenant_id, actor_user_id, actor_role, action, entity, entity_id, after)
-    VALUES (v_tenant, v_user, v_role, 'journal.post', 'journal', v_journal,
-      jsonb_build_object('date', p_date, 'source', 'supplier_advance_application', 'sourceId', v_doc.id, 'number', v_doc.number, 'lines', 2, 'total', v_total::text));
   INSERT INTO public.audit_log (tenant_id, actor_user_id, actor_role, action, entity, entity_id, after)
     VALUES (v_tenant, v_user, v_role, 'supplier_payment.apply_advance', 'supplier_payment', v_doc.id,
-      jsonb_build_object('number', v_doc.number, 'supplier', v_supplier, 'date', p_date, 'amount', v_total::text, 'bills', v_lines, 'left', (v_left - v_total)::text, 'journalId', v_journal));
+      jsonb_build_object('number', v_doc.number, 'supplier', v_supplier, 'date', p_date, 'amount', v_total::text, 'bills', v_lines, 'left', (v_left - v_total)::text));
   RETURN v_lines;
 END $$;
 --> statement-breakpoint

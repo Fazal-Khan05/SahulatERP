@@ -30,6 +30,9 @@ export const permissions = {
   // Step 25. A supplier's bill carries what was bought, what it cost and what tax was withheld.
   "supplier_bill.read": ["owner", "accountant", "auditor"],
   "supplier_bill.manage": ["owner", "accountant"],
+  // Step 26. Paying suppliers, their advances, and the challans tax withheld is paid under.
+  "supplier_payment.read": ["owner", "accountant", "auditor"],
+  "supplier_payment.manage": ["owner", "accountant"],
 } as const satisfies TrackPermissions;
 
 /**

@@ -49,7 +49,10 @@ export const links = {
  * Locked accounts this track adds, by what each is for. The account itself is added in the
  * step's migration with a function app.chart_extra_<name>().
  */
-export const controls = {} as const satisfies Record<string, string>;
+export const controls = {
+  // Step 25. Where a supplier's bill differs from what its goods came into stock at.
+  purchase_price_difference: "Purchase price differences",
+} as const satisfies Record<string, string>;
 
 /**
  * Kinds of document this track numbers, by their two letters. The migration adds a function

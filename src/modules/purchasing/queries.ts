@@ -354,7 +354,7 @@ export async function getGrni(ctx: TenantContext): Promise<{ rows: GrniRow[]; to
     const [rows, [ledger]] = await Promise.all([
       tx.execute<{ receipt_id: string; receipt_number: string; receipt_date: string; supplier_name: string; order_number: string; item_code: string; description: string; unit_code: string; quantity: string; value: string }>(sql`
         select r.id as receipt_id, r.number as receipt_number, r.receipt_date::text, s.name as supplier_name, o.number as order_number,
-               i.code as item_code, ol.description, u.code as unit_code, l.quantity::text, m.value::text
+               i.code as item_code, ol.description, u.code as unit_code, (l.quantity - billed.quantity)::text as quantity, (m.value - billed.value)::text as value
         from goods_receipts r
         join goods_receipt_lines l on l.tenant_id = r.tenant_id and l.receipt_id = r.id
         join purchase_orders o on o.tenant_id = r.tenant_id and o.id = r.order_id
@@ -363,7 +363,12 @@ export async function getGrni(ctx: TenantContext): Promise<{ rows: GrniRow[]; to
         join items i on i.tenant_id = l.tenant_id and i.id = l.item_id
         join units u on u.tenant_id = ol.tenant_id and u.id = ol.unit_id
         join stock_moves m on m.tenant_id = l.tenant_id and m.source_type = 'goods_receipt' and m.source_id = r.id and m.source_line_id = l.id
-        where r.tenant_id = ${ctx.tenantId}::uuid and r.status = 'posted'
+        -- What posted supplier bills (Step 25) have billed of the line, and cleared of its value.
+        cross join lateral (
+          select coalesce(sum(bl.quantity), 0) as quantity, coalesce(sum(bl.received_value), 0) as value
+          from supplier_bill_lines bl join supplier_bills b on b.tenant_id = bl.tenant_id and b.id = bl.bill_id
+          where bl.tenant_id = l.tenant_id and bl.receipt_line_id = l.id and b.status = 'posted') billed
+        where r.tenant_id = ${ctx.tenantId}::uuid and r.status = 'posted' and l.quantity > billed.quantity
         order by r.receipt_date, r.number, l.line_no`),
       tx.execute<{ balance: string }>(sql`
         select coalesce(sum(jl.credit - jl.debit), 0)::text as balance

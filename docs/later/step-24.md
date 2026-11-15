@@ -2,6 +2,12 @@
 
 Built in track B (stock and buying) by the Builder. Migration `0029_purchase_orders`.
 
+## Decided by the founder (2026-11-15, in the Builder's chat)
+
+- **The migration was applied to the shared development database** on the founder's yes, after
+  the independent review and the local tests. The same yes covers Steps 25 and 26, each after
+  its own review.
+
 ## What was built
 
 - **Purchase orders.** An order names a supplier, the warehouse the goods are to arrive at, a

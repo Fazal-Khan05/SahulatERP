@@ -147,7 +147,7 @@ Fifty-two steps in nine phases. Phases finish in order; steps inside a phase mos
 
 | Step | Deliverable | Acceptance | Status |
 | --- | --- | --- | --- |
-| 24 | Purchase order and GRN (partial), goods-received-not-billed accrual | GRN without bill shows in the GRNI report at cost | |
+| 24 | Purchase order and GRN (partial), goods-received-not-billed accrual | GRN without bill shows in the GRNI report at cost | Done 2026-11-15 |
 | 25 | Supplier bill: match to GRNs, input tax by supplier STRN, s.153 income-tax withholding by supplier type and ATL, Eleventh Schedule sales-tax withholding, provincial services tax on service bills; `withholding_entries` | A Rs 100,000 goods bill from a non-ATL company withholds 10% and posts to the withholding payable account | |
 | 26 | Supplier payments with withholding deducted, challan recording, supplier advances in foreign currency with revaluation | Payment of a bill with an advance applied nets correctly | |
 | 27 | Supplier returns (debit notes) | Reverses GRNI or AP as appropriate | |

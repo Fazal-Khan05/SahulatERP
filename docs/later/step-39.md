@@ -80,6 +80,20 @@ These came up while building. Each is the option I would recommend; say if any s
    Commission earned for the owner, an accountant and the auditor, and "Commission statements"
    under Reports.
 
+## The demo company, with commission
+
+The seed (`scripts/demo/seed.ts`) now makes commission really earned, by the real posting: the
+plans and the hierarchy come first, then the two months of selling. Two changes, decided for
+Fazal to confirm:
+
+- **Ali's October commission is approved and paid on the 1st of this month** (by the owner,
+  from cash), before this month's money comes in: so his statement shows a payment, and Commission
+  earned still has commission released this month waiting to be approved and paid in the demo.
+- **The return now comes from Ali's first invoice of last month** (five brake shoes, one
+  damaged), which was paid in full in October and on which he has been paid: part of his paid
+  commission is taken back and comes off his next payment. Before, it came from this month's
+  first invoice, where it took nothing back.
+
 ## Tests
 
 - `src/modules/commission-statements/rules.test.ts`: the statement from movements, on its own.

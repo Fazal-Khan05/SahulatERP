@@ -80,7 +80,44 @@ the option I would recommend; say if any should change.
 13. **Goods arrive at the order's own warehouse.** To put them elsewhere, receive them and
     transfer them.
 
+## The independent review (2026-11-15)
+
+A reviewer who had not seen the work attacked the migration as a signed-in member running any
+SQL as the app's database role, with real sessions racing each other. Nothing serious was
+found: every promise above held, including cancelling an order against starting a note, posting
+against a line being removed, and two notes for one order. Two small gaps in this migration
+were closed, each with a test:
+
+- **An order waiting as a draft while an item's carton size is changed** could be submitted
+  with the old size, and the goods would later come into stock by it. Submitting now checks
+  every line against the item's units again and refuses (SE222); saving the draft again puts it
+  right.
+- **The refusal for a goods received note** told someone who may not receive into a warehouse
+  whether the order they named existed. It no longer looks the order up for them: the answer is
+  the same either way.
+
+Also tightened: an order is not submitted on a day that has not come, and a date must be a real
+day (the database's "infinity" is refused).
+
+Found by the review but not this step's to change. Each touches something every track uses, so
+it needs a migration the three tracks agree on (told to the coordinator):
+
+- **Any member except the auditor can take the next PO or GR number** by calling the numbering
+  function directly, which leaves a gap in the series. The function is open to the app's role
+  because manual journals take their number through it (migration 0008).
+- **Look-alike audit rows.** The audit rows only the database may write are protected by their
+  exact name; a row named with a trailing space or a capital letter is accepted. A rule on the
+  shape of an audit action would close this for every document.
+- **A member running their own SQL could lock a table for every company.** The app's role has
+  no time limit on a lock or a statement. This is true of every table the app writes.
+
 ## Later
+
+- **Step 25 must clear Goods received not invoiced by what was received, not by the order's
+  amount**: an order received in several lots can differ from its line by a paisa or two (seven
+  grips at 33.3333 received one at a time come to 233.31, the order line to 233.33).
+- **A note worth nothing** (a free sample, or a value that rounds to nil) posts with no journal.
+  The stock still comes in, at nil.
 
 - **Supplier bills (Step 25).** Until bills exist, everything received is "not yet billed", so
   the report lists every posted note. Step 25 must take billed lines off it.

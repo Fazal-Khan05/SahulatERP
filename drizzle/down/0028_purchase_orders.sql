@@ -31,6 +31,6 @@ DROP FUNCTION app.check_purchase_document_line();
 DROP FUNCTION app.check_purchase_document();
 
 -- The row drizzle-kit wrote for 0028_purchase_orders (its "when" in drizzle/meta/_journal.json).
-DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1794702054994;
+DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1794734267752;
 
 COMMIT;

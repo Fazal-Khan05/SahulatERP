@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { todayIso } from "@/lib/format";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb, withTenant } from "@/db";
@@ -402,6 +403,37 @@ describe.skipIf(!hasDb)("purchase orders and goods received", () => {
     expect(await codeOf(as.owner, sql`delete from public.goods_receipts where id = ${posted.id}`)).toBeUndefined();
     expect(await rowsOf(as.owner, sql`select 1 from public.goods_receipts where id = ${posted.id}`)).toBe(1);
     await discardReceipt(as.warehouse_manager, draft.id);
+  });
+
+  it("holds what the review of the migration tried", async () => {
+    const me = userIds.owner;
+    // An item's carton is changed while a draft that orders by the carton is waiting: the draft
+    // is not submitted with a carton size the item no longer has. Saved again, it is.
+    const waiting = await saveOrderDraft(as.owner, null, { ...head(), lines: [line(chain, "1", "3000", carton)] });
+    await admin`update public.item_units set factor = 10 where tenant_id = ${tenantA} and item_id = ${chain} and unit_id = ${carton}`;
+    await expect(submitOrder(as.owner, waiting.id)).rejects.toThrow("An item on this order is no longer bought in the unit the order names");
+    expect(await codeOf(as.owner, sql`select app.submit_purchase_order(${waiting.id}::uuid)`)).toBe("SE222");
+    await admin`update public.item_units set factor = 12 where tenant_id = ${tenantA} and item_id = ${chain} and unit_id = ${carton}`;
+    expect((await submitOrder(as.owner, waiting.id)).number).toMatch(/^PO-2627-\d{5}$/);
+
+    // Someone who may not receive into a warehouse is told the same thing whether the order they
+    // name is there or not: nothing about the order can be learnt from the refusal.
+    const note = (orderId: string, by: string) => sql`insert into public.goods_receipts (tenant_id, receipt_date, order_id, supplier_id, warehouse_id, created_by, updated_by) values (${tenantA}, ${ARRIVED}, ${orderId}, ${supplier}, ${mainWarehouse}, ${by}, ${by})`;
+    for (const [who, id] of [[keeper, northKeeper], [as.salesperson, userIds.salesperson]] as const) {
+      const there = await codeOf(who, note(waiting.id, id));
+      expect(there, who.role).toBe("42501");
+      expect(await codeOf(who, note(randomUUID(), id)), who.role).toBe(there);
+    }
+    await cancelOrder(as.owner, waiting.id, "Written for a test");
+
+    // Nothing is ordered on a day that has not come, and a date is a day on the calendar.
+    const tomorrow = todayIso(new Date(Date.now() + 24 * 60 * 60 * 1000));
+    const early = await saveOrderDraft(as.owner, null, { ...head(), date: tomorrow, lines: [line(helmet, "1", "600")] });
+    await expect(submitOrder(as.owner, early.id)).rejects.toThrow("That date has not come yet.");
+    await discardOrder(as.owner, early.id);
+    for (const [date, expected] of [["infinity", null], [ORDERED, "infinity"]] as const) {
+      expect(await codeOf(as.owner, sql`insert into public.purchase_orders (tenant_id, order_date, expected_on, supplier_id, warehouse_id, created_by, updated_by) values (${tenantA}, ${date}, ${expected}, ${supplier}, ${mainWarehouse}, ${me}, ${me})`), `${date} ${expected}`).toBe("SE220");
+    }
   });
 
   it("either cancels an order or starts goods received against it, never both, when the two come at the same moment", async () => {

@@ -52,6 +52,8 @@ function purchaseRefusal(error: unknown, date: string, what: string): UserError 
   if (code === "SE218") return new UserError("Goods have been received against this order, or a goods received note is waiting as a draft, so it cannot be cancelled. Throw the draft away first; an order with goods received stays.");
   if (code === "SE220") return new UserError("That date has not come yet.");
   if (code === "SE221") return new UserError("The supplier is archived. Restore the supplier before submitting the order.");
+  if (code === "SE222") return new UserError("An item on this order is no longer bought in the unit the order names: the item's units were changed after the order was written. Open the draft, check the line and save it again, then submit it.");
+  if (code === "40P01") return new UserError("Someone else was working on the same order at that moment. Nothing was changed; try again.");
   if (code === "23505") return new UserError("A goods received note for this order is already waiting as a draft. Open that one.");
   if (code === "42501") return new UserError("Your role cannot do that.");
   if (code === "SE212" || code === "SE213" || code === "SE214" || code === "SE219" || code === "23514") {

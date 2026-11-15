@@ -211,6 +211,13 @@
       "when": 1794736223918,
       "tag": "0029_counter_sales",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1794737467199,
+      "tag": "0030_payroll_employees",
+      "breakpoints": true
     }
   ]
 }

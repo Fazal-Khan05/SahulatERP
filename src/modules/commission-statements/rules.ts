@@ -1,4 +1,5 @@
 import Decimal from "decimal.js";
+import type { MovementType } from "@/modules/commission-ledger/rules";
 
 // Pure rules for a commission statement (Step 39): one person's commission over a period. No I/O.
 //
@@ -9,9 +10,7 @@ import Decimal from "decimal.js";
 // what they came to before the period, each one in it, and what they come to at its end. So it
 // always equals the movements for the period.
 
-/** Step 38's movement types (src/modules/commission-ledger/rules.ts). */
-export const MOVEMENT_TYPES = ["accrued", "entitlement_adjusted", "released", "release_reversed", "paid", "recovery_recorded"] as const;
-export type MovementType = (typeof MOVEMENT_TYPES)[number];
+export type { MovementType };
 
 const NIL = new Decimal(0);
 

@@ -1,19 +1,13 @@
 # Step 39: commission statements, the approval screen, manager override percentage
 
 Track C (commissions), the Finisher's. Built on Step 38's ledger (the Builder's, migration
-`0027_commission_ledger`) and Step 23's print parts. Migration `0028_commission_statements`
-(hand-written: three read functions, no tables).
+`0027_commission_ledger`, branch `claude/dazzling-nightingale-915437` at a6c46da, merged into
+this branch) and Step 23's print parts. Migration `0028_commission_statements` (hand-written:
+three read functions, no tables).
 
-Prepared while Step 38 was still on its branch: the rules and their tests, the screens, the
-print page, the PDF, the read functions (drafted in `docs/later/step-39.draft.sql`) and the
-database tests (`src/modules/commission-statements/statements.test.ts`). The database tests pass
-against Step 38's migration as it stood on the Builder's branch (commit 483f859), on a local
-database of their own.
-
-**When Step 38 is on main:** turn the draft into `drizzle/0028_commission_statements.sql` (with
-`drizzle-kit generate --custom`) and its down file, and delete the draft; pay through Step 38's
-`approveCommission` and `payCommission` in the tests; link the statements from Commission earned
-and from Reports; write the browser test; run everything.
+**Not on main yet, on purpose**: Step 38 waits for the founder, and Step 39 must not reach main
+before it. This branch carries both; it was built and tested on the Finisher's own databases
+(dev2 and the local one), where both migrations are applied.
 
 ## Decided by the founder (2026-11-15, through the coordinator)
 
@@ -67,20 +61,24 @@ on the manager's plan (Step 37) and shows on every team line of the statement.
 These came up while building. Each is the option I would recommend; say if any should change.
 
 1. **"A manager's team" is everyone below them in the sales hierarchy, at any depth, as it
-   stands today.** Move Ali to another manager and his old manager no longer sees his
-   statements, past months included; the new manager sees all of them.
+   stands today**, as for Commission earned (Step 38's `app.commission_team`). Move Ali to
+   another manager and his old manager no longer sees his statements, past months included;
+   the new manager sees all of them.
 2. **A statement covers every branch.** A manager who works in one branch still sees the whole
    of a team member's statement. An accountant or auditor who works in some branches only sees
    their own and their team's (as for paying commission, Step 38).
-3. **The Commission earned page is unchanged**: there a manager still sees only their own (Step
-   38's decision 10). Only statements open the team.
-4. **The statement names the receipt and the credit note behind each line** even to a
+3. **The statement names the receipt and the credit note behind each line** even to a
    salesperson, who cannot otherwise read receipts: it is their own commission, and they need
    to see what released it.
-5. **A period is any two dates**, this month so far by default; statements are not "closed" or
-   numbered. The PDF says when it was printed.
-6. **A balance below nothing** (commission paid and since taken back) is shown with a minus sign
+4. **A period is any two dates**, this month so far by default, with "This month" and "Last
+   month" a click away; statements are not "closed" or numbered. The PDF says when it was
+   printed.
+5. **A balance below nothing** (commission paid and since taken back) is shown with a minus sign
    and "Owed back, from the next payment".
+6. **Where the statements are found**: "My statement" on My commission for a salesperson or a
+   manager, "My team's statements" for a manager, "Statements" and each person's statement on
+   Commission earned for the owner, an accountant and the auditor, and "Commission statements"
+   under Reports.
 
 ## Tests
 
@@ -92,9 +90,10 @@ These came up while building. Each is the option I would recommend; say if any s
   Sales commission and Commission payable in the books; and who reads whose (a salesperson, a
   manager at any depth and after a move, the owner, an accountant, the auditor, an accountant
   of one branch, another company's owner).
-- To write: `e2e/commission-statements.spec.ts`: the owner opens the list, a salesperson's
-  statement, prints it and downloads the PDF; the salesperson is sent straight to their own and
-  cannot open another's (not found); a manager sees their team in the list.
+- `e2e/commission-statements.spec.ts`, in the browser: a salesperson's statement from My
+  commission, with the sale and what the customer's cash released; they cannot open anyone
+  else's (not found); a manager sees their own (with the team rate and who sold) and their
+  team's; the owner finds the statements under Reports, prints one and downloads its PDF.
 
 ## Later
 

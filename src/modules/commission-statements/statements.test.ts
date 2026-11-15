@@ -3,6 +3,7 @@ import Decimal from "decimal.js";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb, withTenant } from "@/db";
+import { approveCommission, payCommission } from "@/modules/commission-ledger/commands";
 import { savePlan, setManager } from "@/modules/commissions/commands";
 import { postCreditNote, saveCreditNoteDraft, startCreditNote } from "@/modules/credit-notes/commands";
 import { setBaseCurrency } from "@/modules/currencies/commands";
@@ -79,14 +80,11 @@ async function chequeIn(date: string, invoiceId: string, amount: string): Promis
   const draft = await saveReceiptDraft(as.accountant, null, { date, customerId: retailer, method: "cheque", amount, chequeNumber: String(chequeNo), chequeBank: "Meezan Bank", chequeDate: date, allocations: [{ kind: "invoice", id: invoiceId, amount }] });
   return { id: draft.id, number: (await postReceipt(as.accountant, draft.id)).number };
 }
-/** Approves everything released and unpaid of one person, and pays it from cash, as the owner. */
+/** Approves everything released and unpaid of one person, and pays it from cash, as the owner (Step 38's commands). */
 async function approveAndPay(key: string, date: string): Promise<string> {
   const ids = (await admin<{ id: string }[]>`select id from public.commission_accruals where tenant_id = ${tenant} and user_id = ${people[key]} and released > paid and approved_at is null`).map((row) => row.id);
-  return withTenant(as.owner.userId, tenant, async (tx) => {
-    await tx.execute(sql`select app.approve_commission(${`{${ids.join(",")}}`}::uuid[])`);
-    const [paid] = await tx.execute<{ number: string }>(sql`select number from app.pay_commission(${people[key]}::uuid, ${date}::date, ${cash}::uuid, null)`);
-    return paid.number;
-  });
+  await approveCommission(as.owner, ids);
+  return (await payCommission(as.owner, people[key], { date, accountId: cash })).number;
 }
 /** The database's code for what a statement run as this member was refused with, or undefined when it went through. */
 async function codeOf(who: TenantContext, statement: ReturnType<typeof sql>): Promise<string | undefined> {

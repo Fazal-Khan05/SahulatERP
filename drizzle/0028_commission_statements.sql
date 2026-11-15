@@ -5,18 +5,17 @@
 --
 -- A person's commission statement is their commission movements (Step 38,
 -- drizzle/0027_commission_ledger.sql) over a period, with what came before it. It is read
--- through functions of its own for two reasons. A statement names the invoice, the customer and
--- the receipt or credit note behind each movement, which the person may not otherwise read (a
--- salesperson reads no receipts, and only their own invoices). And a manager reads their team's
--- statements (the founder's decision, 2026-11-15), which Step 38's policies do not give them:
--- those stay as they are, so the Commission earned page still shows a manager only their own.
+-- through functions of its own because a statement names the invoice, the customer and the
+-- receipt or credit note behind each movement, which the person may not otherwise read (a
+-- salesperson reads no receipts, and only the invoices they wrote or were credited with).
 --
--- Who reads whose statement:
+-- Who reads whose statement (the founder's decision, 2026-11-15), as Step 38's policies decide
+-- whose commission a member reads:
 --   the owner, an accountant and the auditor, working across the whole company: everyone's;
---   anyone else: their own, and their team's: everyone below them in the sales hierarchy as it
---   stands today, at any depth.
--- A statement covers every branch, as a commission payment does (Step 38): a member who works
--- in some branches only reads their own and their team's, like a salesperson.
+--   anyone else: their own and their team's, everyone below them in the sales hierarchy as it
+--   stands today, at any depth (app.commission_team, Step 38).
+-- A statement covers every branch, as a commission payment does: a member who works in some
+-- branches only reads their own and their team's, like a salesperson.
 
 -- Whose statements the signed-in member may read: null for everyone's.
 CREATE FUNCTION app.commission_statement_people() RETURNS uuid[]
@@ -25,19 +24,7 @@ CREATE FUNCTION app.commission_statement_people() RETURNS uuid[]
     SELECT CASE
       WHEN app.tenant_id() IS NULL OR app.tenant_role() IS NULL OR app.current_user_id() IS NULL THEN ARRAY[]::uuid[]
       WHEN app.tenant_role() IN ('owner', 'accountant', 'auditor') AND app.tenant_branch_ids() IS NULL THEN NULL
-      ELSE ARRAY(
-        WITH RECURSIVE down (user_id, depth) AS (
-          SELECT h.user_id, 1 FROM public.sales_hierarchy h
-          WHERE h.tenant_id = app.tenant_id() AND h.manager_user_id = app.current_user_id()
-          UNION ALL
-          SELECT h.user_id, down.depth + 1 FROM down
-          JOIN public.sales_hierarchy h ON h.tenant_id = app.tenant_id() AND h.manager_user_id = down.user_id
-          WHERE down.depth < 50
-        )
-        SELECT app.current_user_id()
-        UNION
-        SELECT down.user_id FROM down
-      )
+      ELSE app.commission_team()
     END
   $$;
 --> statement-breakpoint

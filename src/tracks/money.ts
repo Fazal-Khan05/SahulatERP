@@ -61,6 +61,8 @@ export const reports: readonly ReportSection[] = [
       // The accountant's menu has no Commissions entry; this is how an accountant reaches the plans.
       { label: "Commission plans", href: "/commissions", about: "Who is on which plan, its rates, slabs and target, and who reports to whom.", permission: "commission.read", module: "commissions" },
       { label: "Commission earned", href: "/commissions/earned", about: "What each person has earned, what the customers' payments have released, what has been paid and what is owed back. Approve and pay here.", permission: "commission_earned.read", module: "commissions" },
+      // Step 39. Each person's statement for a period, with its print and PDF.
+      { label: "Commission statements", href: "/commissions/statements", about: "Each person's commission over a period: earned, released by the customers' payments, paid, and what is owed. Print or download each as a PDF.", permission: "commission_earned.read", module: "commissions" },
     ],
   },
 ];

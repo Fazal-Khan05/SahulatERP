@@ -86,6 +86,32 @@ change.
 11. **A bill cannot be dated in the future**, in a locked period, or before the books opened.
 12. **An archived supplier can still be billed** for goods already received from it.
 
+## The independent review (2026-11-15)
+
+A reviewer who had not seen the work attacked the migration as a signed-in member running any
+SQL as the app's database role, on a database of its own. **It found nothing to fix in this
+migration.** What it tried and what held: a draft written by hand with a false tax or rate is
+refused when posted; more billed than received is refused, also when two bills are posted at
+the same moment; what a bill clears from Goods received not invoiced comes out exactly at what
+the goods came in at; the app's role cannot write a bill's status, number, journal, what was
+withheld or what a line cleared, nor any withholding entry or the audit row of a posting; an
+expense cannot be charged to a locked, heading, archived or foreign account; a supplier's
+invoice number is posted once; rates come only from the dated tables; dates in the future, off
+the calendar or in a closed period are refused; the reverse file takes everything away again.
+
+Found by the review but not this step's to change (told to the coordinator, for a migration the
+three tracks agree on):
+
+- **Every table's access rule can be read past by someone running their own SQL who belongs to
+  two companies.** A rule asks "which company?" and "which role?" as two separate questions. A
+  member who is, say, a salesperson in company A and the owner of a company B of their own can
+  change the company setting part-way through one statement, so the first question is answered
+  for A and the second for B, and they read A's rows that only an owner, an accountant or an
+  auditor should see. Shown on supplier bills and on the chart of accounts, so it is every
+  table's. Reading only: every write is checked again by a trigger and refused. The app never
+  lets anyone run their own SQL, so this matters only if another hole lets them. The fix is one
+  function that answers both questions together.
+
 ## For a tax adviser
 
 No accountant or tax adviser has checked any of this. The second, independent working of the

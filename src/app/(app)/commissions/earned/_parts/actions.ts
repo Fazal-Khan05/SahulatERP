@@ -38,12 +38,9 @@ export async function payCommissionAction(userId: string, _: FormState, formData
   try {
     const session = await requireCommissions();
     const paid = await payCommission(session, userId, { date: formData.get("date"), accountId: formData.get("accountId"), note: formData.get("note") });
-    refresh();
-    return {
-      message: paid.recovered.isZero()
-        ? `${paid.number}: ${paid.amount.toFixed(2)} paid.`
-        : `${paid.number}: ${paid.gross.toFixed(2)} approved, ${paid.recovered.toFixed(2)} of what was owed back taken out of it, ${paid.amount.toFixed(2)} paid.`,
-    };
+    // Once paid, nothing of theirs is left approved and the form that paid is gone from the
+    // page. The page is loaded again naming the payment, and says what was paid.
+    return { location: `/commissions/earned?person=${encodeURIComponent(userId)}&paid=${paid.id}` };
   } catch (error) {
     return refusal("pay commission", error);
   }

@@ -1,6 +1,6 @@
 import Decimal from "decimal.js";
 import { describe, expect, it } from "vitest";
-import { earnedAfterReturn, owedBack, payable, paymentOf, releasedFor, standingLabel, totalsOf, waiting } from "./rules";
+import { earnedAfterReturn, owedBack, paidLine, payable, paymentOf, releasedFor, standingLabel, totalsOf, waiting } from "./rules";
 
 const d = (value: string | number) => new Decimal(value);
 const at = (earned: string, released: string, paid: string, approved = false) => ({ earned: d(earned), released: d(released), paid: d(paid), approved });
@@ -56,6 +56,8 @@ describe("a payment", () => {
   it("is everything approved, less what is owed back as far as it goes", () => {
     const show = (p: ReturnType<typeof paymentOf>) => `${p.gross.toFixed(0)} - ${p.recovered.toFixed(0)} = ${p.amount.toFixed(0)}, ${p.carried.toFixed(0)} carried`;
     expect(show(paymentOf(d("200"), d("0")))).toBe("200 - 0 = 200, 0 carried");
+    expect(paidLine({ number: "CP-2627-00001", gross: d("100"), recovered: d("0"), amount: d("100") })).toBe("CP-2627-00001: 100.00 paid.");
+    expect(paidLine({ number: "CP-2627-00002", gross: d("100"), recovered: d("20"), amount: d("80") })).toBe("CP-2627-00002: 100.00 approved, 20.00 of what was owed back taken out of it, 80.00 paid.");
     // COM-021: 400 approved, 200 owed back.
     expect(show(paymentOf(d("400"), d("200")))).toBe("400 - 200 = 200, 0 carried");
     // COM-037 as the founder decided it: 300 approved against 500 owed leaves 200 for the next payment.

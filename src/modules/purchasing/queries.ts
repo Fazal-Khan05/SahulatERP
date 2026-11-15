@@ -289,25 +289,36 @@ export async function listReceipts(ctx: TenantContext): Promise<{ rows: ReceiptR
 
 export type Choice = { id: string; label: string };
 
+/** An item an order can name: its code and name, and the units it can be ordered in, its own first. */
+export type ItemChoice = { id: string; code: string; name: string; units: { id: string; code: string; factor: string }[] };
+
 /** The suppliers, warehouses and items an order can name: those in use, and the ones this member sees. */
-export async function getOrderChoices(ctx: TenantContext): Promise<{ suppliers: Choice[]; warehouses: Choice[]; items: (Choice & { unitCode: string })[] }> {
+export async function getOrderChoices(ctx: TenantContext): Promise<{ suppliers: Choice[]; warehouses: Choice[]; items: ItemChoice[] }> {
   requireOrderAccess(ctx);
   return withTenant(ctx.userId, ctx.tenantId, async (tx) => {
-    const [supplierRows, warehouseRows, itemRows] = await Promise.all([
+    const [supplierRows, warehouseRows, itemRows, unitRows] = await Promise.all([
       tx.select({ id: suppliers.id, name: suppliers.name, code: suppliers.code }).from(suppliers).where(and(eq(suppliers.tenantId, ctx.tenantId), isNull(suppliers.archivedAt))).orderBy(asc(sql`lower(${suppliers.name})`)).limit(1000),
       tx.select({ id: warehouses.id, name: warehouses.name }).from(warehouses).where(eq(warehouses.tenantId, ctx.tenantId)).orderBy(asc(warehouses.createdAt)),
       tx
-        .select({ id: items.id, code: items.code, name: items.name, unitCode: units.code })
+        .select({ id: items.id, code: items.code, name: items.name, unitId: items.baseUnitId, unitCode: units.code })
         .from(items)
         .innerJoin(units, and(eq(units.tenantId, items.tenantId), eq(units.id, items.baseUnitId)))
         .where(and(eq(items.tenantId, ctx.tenantId), isNull(items.archivedAt)))
         .orderBy(asc(sql`lower(${items.code})`))
         .limit(2000),
+      tx
+        .select({ itemId: itemUnits.itemId, unitId: itemUnits.unitId, unitCode: units.code, factor: itemUnits.factor })
+        .from(itemUnits)
+        .innerJoin(units, and(eq(units.tenantId, itemUnits.tenantId), eq(units.id, itemUnits.unitId)))
+        .where(eq(itemUnits.tenantId, ctx.tenantId))
+        .orderBy(asc(sql`lower(${units.code})`)),
     ]);
+    const larger = new Map<string, { id: string; code: string; factor: string }[]>();
+    for (const row of unitRows) larger.set(row.itemId, [...(larger.get(row.itemId) ?? []), { id: row.unitId, code: row.unitCode, factor: new Decimal(row.factor).toFixed() }]);
     return {
       suppliers: supplierRows.map((row) => ({ id: row.id, label: row.code ? `${row.name} (${row.code})` : row.name })),
       warehouses: warehouseRows.map((row) => ({ id: row.id, label: row.name })),
-      items: itemRows.map((row) => ({ id: row.id, label: `${row.code} ${row.name}`, unitCode: row.unitCode })),
+      items: itemRows.map((row) => ({ id: row.id, code: row.code, name: row.name, units: [{ id: row.unitId, code: row.unitCode, factor: "1" }, ...(larger.get(row.id) ?? []).filter((unit) => unit.id !== row.unitId)] })),
     };
   });
 }

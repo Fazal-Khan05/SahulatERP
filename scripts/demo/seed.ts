@@ -4,6 +4,8 @@ import { createClient } from "@supabase/supabase-js";
 import Decimal from "decimal.js";
 import { closeDb } from "@/db";
 import { todayIso } from "@/lib/format";
+import { formatAmount } from "@/lib/money";
+import { approveCommission, payCommission } from "@/modules/commission-ledger/commands";
 import { savePlan, setManager } from "@/modules/commissions/commands";
 import { postCreditNote, saveCreditNoteDraft, startCreditNote } from "@/modules/credit-notes/commands";
 import { setBaseCurrency } from "@/modules/currencies/commands";
@@ -282,20 +284,6 @@ export async function seedDemo(): Promise<string[]> {
     }
     said.push(`${documents} sales documents: quotations, orders, delivery notes and ${invoices.length} invoices, some split 60/40 between Ali and Sana.`);
 
-    // ── A return: five brake shoes come back from this month's first invoice, one damaged ────────
-    const returned = invoices.find((i) => i.month === 1)!;
-    const billed = (await getSalesDocument(owner, returned.id))!;
-    const shoes = billed.lines.find((line) => line.itemCode === "BR-101")!;
-    const { id: creditNote } = await startCreditNote(owner, returned.id);
-    await saveCreditNoteDraft(owner, creditNote, {
-      date: billed.date < yesterday ? shift(billed.date, 1) : billed.date,
-      notes: "Five brake shoes sent back: wrong size. One was damaged in transit.",
-      reference: "DN-17/26",
-      lines: [{ sourceLineId: shoes.id, quantity: "5", damaged: "1" }],
-    });
-    const { number: creditNumber } = await postCreditNote(owner, creditNote);
-    said.push(`A return: credit note ${creditNumber} for five brake shoes, one written off as damaged.`);
-
     // ── Money in: cash, bank and cheques ────────────────────────────────────────────────────────
     const [{ id: cash }] = await sql<{ id: string }[]>`select id from public.accounts where tenant_id = ${tenantId} and code = '1111'`;
     const [{ id: banks }] = await sql<{ id: string }[]>`select id from public.accounts where tenant_id = ${tenantId} and code = '1120'`;
@@ -321,6 +309,15 @@ export async function seedDemo(): Promise<string[]> {
     // Last month's first invoices paid in full, by cash and by bank; one paid half.
     await receive(day(0, 20), last[0], "cash", last[0].total);
     await receive(day(0, 24), last[1], "bank", last[1].total);
+
+    // ── Commission: Ali's October commission, approved and paid on the first of this month ──────
+    // What the October money released (Step 38): approved by the owner and paid from cash. The
+    // money that comes in this month releases more, still to approve.
+    const releasedToAli = await sql<{ id: string }[]>`select id from public.commission_accruals where tenant_id = ${tenantId} and user_id = ${people.ALI.id} and released > paid`;
+    await approveCommission(owner, releasedToAli.map((row) => row.id));
+    const paid = await payCommission(owner, people.ALI.id, { date: day(1, 1), accountId: cash, note: "October commission" });
+    said.push(`Commission: Ali's October commission approved and paid, ${paid.number}, ${formatAmount(paid.amount)}.`);
+
     await receive(day(1, 3), last[2], "bank", halfOf(last[2].total));
     // A cheque deposited and cleared.
     const cleared = await receive(day(1, 2), last[3], "cheque", last[3].total, { number: "00451872", bank: "HBL" });
@@ -333,6 +330,22 @@ export async function seedDemo(): Promise<string[]> {
     // A cheque still in hand, not yet deposited.
     await receive(day(1, 10), last[5], "cheque", last[5].total, { number: "00117345", bank: "Bank Alfalah" });
     said.push("Receipts: cash, bank transfer, a cheque cleared, a cheque bounced and a cheque still in hand.");
+
+    // ── A return: five brake shoes come back from last month's first invoice, one damaged ────────
+    // That invoice was paid in full in October and Ali has been paid his commission on it, so
+    // the return takes back part of what he was paid: it comes out of his next payment.
+    const returned = last[0];
+    const billed = (await getSalesDocument(owner, returned.id))!;
+    const shoes = billed.lines.find((line) => line.itemCode === "BR-101")!;
+    const { id: creditNote } = await startCreditNote(owner, returned.id);
+    await saveCreditNoteDraft(owner, creditNote, {
+      date: day(1, 6),
+      notes: "Five brake shoes sent back: wrong size. One was damaged in transit.",
+      reference: "DN-17/26",
+      lines: [{ sourceLineId: shoes.id, quantity: "5", damaged: "1" }],
+    });
+    const { number: creditNumber } = await postCreditNote(owner, creditNote);
+    said.push(`A return: credit note ${creditNumber} for five brake shoes on ${returned.number}, one written off as damaged; part of Ali's paid commission is taken back.`);
 
     // ── Recovery: a follow-up and a promise ─────────────────────────────────────────────────────
     const chased = last[4].customer;

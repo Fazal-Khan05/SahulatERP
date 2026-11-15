@@ -59,6 +59,24 @@ export async function EarnedScreen({ searchParams }: { searchParams: Promise<{ p
         title={everyone ? "Commission earned" : team ? "My commission and my team's" : "My commission"}
         sub="Commission is earned when an invoice is posted, released as the customer pays (a cheque when it clears), and taken back when goods are returned or a cheque bounces."
       />
+      {/* Step 39: the statements, for a period, with their print and PDF. */}
+      <p className="-mt-2 mb-4 flex flex-wrap gap-4 text-sm">
+        {own && !everyone ? (
+          <Link href={`/commissions/statements/${session.userId}`} className="font-medium text-primary underline-offset-4 hover:underline">
+            My statement
+          </Link>
+        ) : null}
+        {team ? (
+          <Link href="/commissions/statements" className="font-medium text-primary underline-offset-4 hover:underline">
+            {everyone ? "Statements" : "My team's statements"}
+          </Link>
+        ) : null}
+        {person && person !== session.userId ? (
+          <Link href={`/commissions/statements/${person}`} className="font-medium text-primary underline-offset-4 hover:underline">
+            {chosen ? `${chosen.name}'s statement` : "This person's statement"}
+          </Link>
+        ) : null}
+      </p>
       <div className="flex max-w-6xl flex-col gap-5">
         {team ? (
           <Card title={everyone ? "The sales team" : "My team and I"}>

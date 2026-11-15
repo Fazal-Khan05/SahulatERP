@@ -10,8 +10,8 @@ import {
   ATTENDANCE_COLUMNS,
   ATTENDANCE_MAX_ROWS,
   COMPONENT_LABELS,
+  daysEmployed,
   STATUTORY_LABELS,
-  daysIn,
   isMonth,
   readAttendanceRows,
   readEmployee,
@@ -63,7 +63,20 @@ export async function saveEmployee(ctx: TenantContext, id: unknown, raw: RawEmpl
       }
       if (input.userId !== null && !isUuid(input.userId)) throw new UserError("Choose a login of someone in this company, or none.");
       // What the audit log keeps: who the employee is, never their CNIC.
-      const describe = { code: input.code, name: input.name, province: input.province, payBasis: input.payBasis, joinedOn: input.joinedOn, leftOn: input.leftOn, eobi: input.eobi, socialSecurity: input.socialSecurity, cnic: input.cnic === null ? "none" : "given" };
+      const describe = {
+        code: input.code,
+        name: input.name,
+        designation: input.designation,
+        province: input.province,
+        branchId: input.branchId,
+        payBasis: input.payBasis,
+        joinedOn: input.joinedOn,
+        leftOn: input.leftOn,
+        eobi: input.eobi,
+        socialSecurity: input.socialSecurity,
+        userId: input.userId,
+        cnic: input.cnic === null ? "none" : "given",
+      };
       if (id === null || id === undefined || id === "") {
         const [row] = await tx
           .insert(employees)
@@ -85,7 +98,20 @@ export async function saveEmployee(ctx: TenantContext, id: unknown, raw: RawEmpl
         action: "employee.update",
         entity: "employee",
         entityId: id,
-        before: { code: stored.code, name: stored.name, province: stored.province, payBasis: stored.payBasis, joinedOn: stored.joinedOn, leftOn: stored.leftOn, eobi: stored.eobi, socialSecurity: stored.socialSecurity, cnic: stored.cnic === null ? "none" : "given" },
+        before: {
+          code: stored.code,
+          name: stored.name,
+          designation: stored.designation,
+          province: stored.province,
+          branchId: stored.branchId,
+          payBasis: stored.payBasis,
+          joinedOn: stored.joinedOn,
+          leftOn: stored.leftOn,
+          eobi: stored.eobi,
+          socialSecurity: stored.socialSecurity,
+          userId: stored.userId,
+          cnic: stored.cnic === null ? "none" : "given",
+        },
         after: describe,
       });
       return { id };
@@ -145,8 +171,10 @@ export async function importAttendance(ctx: TenantContext, month: unknown, file:
   if (!isMonth(month)) throw new UserError("Choose the month the file is for.");
   const table = readCsvTable(file.text, ATTENDANCE_COLUMNS, "code", ATTENDANCE_MAX_ROWS);
   if (!table.ok) throw new UserError(table.reason);
+  // Both figures are asked for: a column left out would read as nil days for everyone.
+  const columns = new Set(Object.keys(table.rows[0].raw));
+  if (!columns.has("daysWorked") || !columns.has("unpaidDays")) throw new UserError('The file needs three columns: "Code", "Days worked" and "Unpaid days".');
   const { lines, problems } = readAttendanceRows(table.rows, month);
-  const last = `${month.slice(0, 8)}${String(daysIn(month)).padStart(2, "0")}`;
   return withTenant(ctx.userId, ctx.tenantId, async (tx): Promise<AttendanceOutcome> => {
     const staff = await tx
       .select({ id: employees.id, code: employees.code, payBasis: employees.payBasis, joinedOn: employees.joinedOn, leftOn: employees.leftOn })
@@ -160,14 +188,23 @@ export async function importAttendance(ctx: TenantContext, month: unknown, file:
       const found: string[] = [];
       if (!employee) found.push("No employee has this code.");
       else {
-        if (employee.joinedOn > last || (employee.leftOn !== null && employee.leftOn < month)) found.push("This employee was not employed in this month.");
+        const employed = daysEmployed(month, employee.joinedOn, employee.leftOn);
+        if (employed === 0) found.push("This employee was not employed in this month.");
+        else if (line.daysWorked.plus(line.unpaidDays).gt(employed)) found.push(`This employee was employed for ${employed} days of this month; the days come to more.`);
         if (employee.payBasis === "daily" && line.unpaidDays.gt(0)) found.push("A daily employee is paid for the days worked; leave unpaid days empty.");
-        if (employee.payBasis === "monthly" && line.daysWorked.gt(0) && line.daysWorked.plus(line.unpaidDays).gt(daysIn(month))) found.push("Days worked and unpaid days come to more than the month has.");
+        if (employee.payBasis === "daily" && !line.daysWorkedGiven) found.push("Enter the days a daily employee worked, even if none.");
       }
       if (found.length > 0) all.push({ row: line.row, name: line.code, problems: found });
       else ready.push({ id: employee!.id, line });
     }
     if (all.length > 0) return { problems: all.sort((a, b) => a.row - b.row) };
+    // What the file replaces, for the audit log's "before".
+    const replaced = await tx
+      .select({ employeeId: employeeAttendance.employeeId, daysWorked: employeeAttendance.daysWorked, unpaidDays: employeeAttendance.unpaidDays })
+      .from(employeeAttendance)
+      .where(and(eq(employeeAttendance.tenantId, ctx.tenantId), eq(employeeAttendance.month, month)));
+    const codeOf = new Map(staff.map((e) => [e.id, e.code]));
+    const inFile = new Set(ready.map((r) => r.id));
     for (const { id, line } of ready) {
       await tx.execute(sql`
         insert into public.employee_attendance (tenant_id, employee_id, month, days_worked, unpaid_days, created_by, updated_by)
@@ -177,7 +214,8 @@ export async function importAttendance(ctx: TenantContext, month: unknown, file:
     await audit(tx, ctx, {
       action: "attendance.import",
       entity: "employee_attendance",
-      after: { month, rows: ready.length, file: file.name.replace(/[\u0000-\u001f]/g, "").slice(0, 120) },
+      before: { month, days: replaced.filter((r) => inFile.has(r.employeeId)).map((r) => ({ code: codeOf.get(r.employeeId), worked: r.daysWorked, unpaid: r.unpaidDays })) },
+      after: { month, file: file.name.replace(/[\u0000-\u001f]/g, "").slice(0, 120), days: ready.map(({ line }) => ({ code: line.code, worked: line.daysWorked.toFixed(1), unpaid: line.unpaidDays.toFixed(1) })) },
     });
     return { imported: ready.length };
   });

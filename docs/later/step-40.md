@@ -26,9 +26,11 @@ payslips and their journals are Step 41's.
   utilities, other allowance, fixed deduction, or a daily wage. A raise is a new row from its day;
   nil ends a part; saving the same part on the same day corrects it. The employee's page shows pay
   today, the history, and the **income tax a month on that pay** from the table in force.
-- **Attendance** (`/payroll/attendance`): a month at a time; a CSV file with Code, Days worked
-  and Unpaid days, all or nothing (every bad row listed, nothing kept), whole or half days. A
-  month imported again replaces what was there for the employees in the file.
+- **Attendance** (`/payroll/attendance`): a month at a time; a CSV file with the columns Code,
+  Days worked and Unpaid days, all or nothing (every bad row listed, nothing kept), whole or half
+  days, never more than the days the person was employed that month; a daily employee's days
+  worked are always given. A month imported again replaces what was there for the employees in
+  the file, and the audit log keeps what it replaced.
 - **Statutory rates** (`/payroll/rates`): the salary tax tables of Tax Years 2026 and 2027 and the
   dated figures below, each with where it comes from. The owner, an accountant or the payroll
   administrator adds a figure from a date (a change in the law is a new row, never an edit).
@@ -78,13 +80,30 @@ wage ceilings.
    company, rather than worked out from the number of staff (EOBI covers a company of five or
    more) or from wage ceilings that were not found in a primary source.
 5. **The CNIC is kept, but never written into the audit log**; the log says only whether one was
-   given. Salaries are in the audit log, which only the owner and the auditor read.
+   given. **Salaries are written into the audit log** (each pay change, before and after), because
+   every command records what it changed; only the owner and the auditor read the log, but an
+   auditor limited to some branches reads every branch's pay changes there. The other way is to
+   keep amounts out of the log and record only that pay changed. Your call.
 6. **Social security is 6% of the province's minimum wage** for every province with a statute
    read; Step 41 works it out per registered employee.
 7. **A month's tax shown on the employee's page is the year's tax divided by twelve**, as if pay
    were the same all year. Step 41's payroll run adjusts for months that differ (s.149).
 8. **The "Signs in as" choice lists the company's members only to the owner** (the members list
    is the owner's and the auditor's to read); a payroll administrator sees only themselves there.
+
+## Review
+
+An independent review (2026-11-15) found no salary leak to another role or another company, and
+these, fixed before the migration reached any shared database: a payroll administrator saving an
+employee could silently remove the link to their login (only the owner can list the company's
+logins); audit rows missed the designation, branch and login, and an attendance import did not
+record the days it replaced; an attendance file without a "Days worked" column, or with a daily
+employee's days left blank, read as nil days; days were not checked against the days someone was
+employed that month; the setting a new company's statutory tables are written under could open
+the guard on employees and pay; and the employee page named the 10% medical share in its words
+instead of reading it from the table. The trigger that gives a new company its tables sits on the
+shared `tenants` table (a trigger of track C's own, as the commission trigger sits on track A's
+tables); the coordinator may prefer it as a joint change.
 
 ## For a tax adviser
 

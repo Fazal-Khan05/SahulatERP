@@ -302,7 +302,8 @@ DECLARE
 BEGIN
   -- Migrations, and the statutory tables a new company starts with (written as the company is
   -- made, before anyone works in it), are not anyone's edit.
-  IF session_user = 'postgres' OR current_setting('app.payroll_seed', true) = NEW.tenant_id::text THEN
+  IF session_user = 'postgres'
+     OR (TG_TABLE_NAME IN ('salary_tax_slabs', 'statutory_rates') AND current_setting('app.payroll_seed', true) = NEW.tenant_id::text) THEN
     RETURN NEW;
   END IF;
   IF NEW.tenant_id IS DISTINCT FROM app.tenant_id() THEN
@@ -325,7 +326,8 @@ BEGIN
       RAISE EXCEPTION 'an employee is linked only to a member of the company' USING ERRCODE = 'SE321';
     END IF;
   ELSIF TG_TABLE_NAME = 'employee_pay' THEN
-    SELECT e.pay_basis INTO v_basis FROM public.employees e WHERE e.tenant_id = NEW.tenant_id AND e.id = NEW.employee_id;
+    -- Held while the pay is written, so how the employee is paid cannot change underneath it.
+    SELECT e.pay_basis INTO v_basis FROM public.employees e WHERE e.tenant_id = NEW.tenant_id AND e.id = NEW.employee_id FOR SHARE;
     IF (v_basis = 'daily') <> (NEW.component = 'daily_wage') THEN
       RAISE EXCEPTION 'a daily employee is paid a daily wage, and a monthly employee basic pay and allowances' USING ERRCODE = 'SE322';
     END IF;

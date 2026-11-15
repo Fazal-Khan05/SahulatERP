@@ -115,6 +115,14 @@ describe.skipIf(!hasDb)("payroll: employees, attendance and the statutory tables
     await expect(setPay(as.payroll_administrator, id, { component: "basic", amount: "40000", effectiveFrom: "2026-07-01" })).rejects.toThrow("A daily employee is paid a daily wage.");
     // Past the app, the database refuses it too; and how someone is paid does not change once they have pay.
     expect(await codeOf(as.payroll_administrator, sql`insert into public.employee_pay (tenant_id, employee_id, component, amount, effective_from, created_by, updated_by) values (${tenantA}, ${id}, 'basic', 40000, '2026-07-01', ${userIds.payroll_administrator}, ${userIds.payroll_administrator})`)).toBe("SE322");
+    // The setting a new company's tables are written under does not open the guard on anything else.
+    expect(
+      await codeOf(
+        as.payroll_administrator,
+        sql`insert into public.employee_pay (tenant_id, employee_id, component, amount, effective_from, created_by, updated_by)
+            select ${tenantA}, ${id}, 'basic', 40000, '2026-07-02', ${userIds.payroll_administrator}, ${userIds.payroll_administrator} from (select set_config('app.payroll_seed', ${tenantA}::text, true)) as s(x)`,
+      ),
+    ).toBe("SE322");
     await expect(saveEmployee(as.payroll_administrator, id, employee({ code: "D-001", name: "Rashid Khan", payBasis: "monthly", province: "sindh", branchId: lahore }))).rejects.toThrow("How this employee is paid cannot change");
     expect((await getEmployee(as.auditor, picker, TODAY))!.payNow.get("daily_wage")?.toFixed()).toBe("1600");
     const rows = await listEmployees(as.accountant, { on: TODAY });
@@ -142,14 +150,24 @@ describe.skipIf(!hasDb)("payroll: employees, attendance and the statutory tables
 
     expect(await importAttendance(as.payroll_administrator, NOV, file("code,days worked,unpaid days\ne-001,,2\nD-001,24.5,\n"))).toEqual({ imported: 2 });
     expect((await listAttendance(as.auditor, NOV)).map((r) => `${r.code} ${r.daysWorked?.toFixed()} ${r.unpaidDays?.toFixed()}`)).toEqual(["D-001 24.5 0", "E-001 0 2"]);
-    // Imported again, the file's rows replace what was there.
-    expect(await importAttendance(as.payroll_administrator, NOV, file("Code,Unpaid days\nE-001,1.5\n"))).toEqual({ imported: 1 });
+    // Imported again, the file's rows replace what was there, and the audit log keeps what they replaced.
+    expect(await importAttendance(as.payroll_administrator, NOV, file("Code,Days worked,Unpaid days\nE-001,,1.5\n"))).toEqual({ imported: 1 });
     expect((await listAttendance(as.owner, NOV)).map((r) => `${r.code} ${r.unpaidDays?.toFixed()}`)).toEqual(["D-001 0", "E-001 1.5"]);
+    const [replaced] = await admin<{ before: { days: { code: string; unpaid: string }[] } }[]>`select before from public.audit_log where tenant_id = ${tenantA} and action = 'attendance.import' order by at desc limit 1`;
+    expect(replaced.before.days.map((d) => `${d.code} ${Number(d.unpaid)}`)).toEqual(["E-001 2"]);
+    // A file without both figures is refused whole, and a daily employee's days are always given.
+    await expect(importAttendance(as.owner, NOV, file("Code,Unpaid days\nE-001,1\n"))).rejects.toThrow('The file needs three columns: "Code", "Days worked" and "Unpaid days".');
+    const blank = await importAttendance(as.owner, NOV, file("Code,Days worked,Unpaid days\nD-001,,\n"));
+    expect("problems" in blank && blank.problems[0].problems).toEqual(["Enter the days a daily employee worked, even if none."]);
+    // Someone who joined on the 20th was employed for 11 days of November.
+    await saveEmployee(as.owner, null, employee({ code: "E-003", name: "Late Joiner", joinedOn: "2026-11-20" }));
+    const over = await importAttendance(as.owner, NOV, file("Code,Days worked,Unpaid days\nE-003,,12\n"));
+    expect("problems" in over && over.problems[0].problems).toEqual(["This employee was employed for 11 days of this month; the days come to more."]);
     // Someone who had not joined, or had left, was not employed that month.
     await saveEmployee(as.owner, null, employee({ code: "E-002", name: "New Joiner", joinedOn: "2026-12-01" }));
-    const late = await importAttendance(as.owner, NOV, file("Code,Unpaid days\nE-002,0\n"));
+    const late = await importAttendance(as.owner, NOV, file("Code,Days worked,Unpaid days\nE-002,,0\n"));
     expect("problems" in late && late.problems[0].problems).toEqual(["This employee was not employed in this month."]);
-    await expect(importAttendance(as.owner, "2026-11-15", file("Code\nE-001\n"))).rejects.toThrow("Choose the month the file is for.");
+    await expect(importAttendance(as.owner, "2026-11-15", file("Code,Days worked,Unpaid days\nE-001,,\n"))).rejects.toThrow("Choose the month the file is for.");
     await expect(importAttendance(as.owner, NOV, file("Name,Days\nx,1\n"))).rejects.toThrow('The column "Name" is not one this import knows.');
   });
 
@@ -159,7 +177,7 @@ describe.skipIf(!hasDb)("payroll: employees, attendance and the statutory tables
     const seen = await withTenant(userIds.salesperson, tenantA, (tx) => tx.execute<{ n: number }>(sql`select (select count(*)::int from public.employees) + (select count(*)::int from public.employee_pay) + (select count(*)::int from public.employee_attendance) as n`));
     expect(seen[0].n).toBe(0);
     for (const role of ["accountant", "auditor"] as const) {
-      expect((await listEmployees(as[role], { on: TODAY })).length, role).toBe(3);
+      expect((await listEmployees(as[role], { on: TODAY })).length, role).toBe(4);
       await expect(saveEmployee(as[role], manager, employee({ code: "E-001", name: "Imran Qureshi" }))).rejects.toThrow("Only the owner or the payroll administrator");
       await expect(setPay(as[role], manager, { component: "basic", amount: "1", effectiveFrom: TODAY })).rejects.toThrow("Only the owner or the payroll administrator");
       expect(await codeOf(as[role], sql`update public.employee_pay set amount = 1 where employee_id = ${manager}`), role).toBeUndefined();
@@ -174,6 +192,10 @@ describe.skipIf(!hasDb)("payroll: employees, attendance and the statutory tables
     await expect(saveEmployee(as.owner, manager, employee({ code: "E-001", name: "Imran Qureshi", userId: randomUUID() }))).rejects.toThrow("Choose a login of someone in this company");
     await saveEmployee(as.owner, manager, employee({ code: "E-001", name: "Imran Qureshi", userId: userIds.salesperson }));
     expect((await getEmployee(as.owner, manager, TODAY))!.userEmail).toBe(as.salesperson.email);
+    // The payroll administrator cannot list the company's logins, and keeps the link as it is when saving.
+    expect((await getEmployee(as.payroll_administrator, manager, TODAY))!.userEmail).toBeNull();
+    await saveEmployee(as.payroll_administrator, manager, employee({ code: "E-001", name: "Imran Qureshi", designation: "Regional manager", userId: userIds.salesperson }));
+    expect((await getEmployee(as.owner, manager, TODAY))!.userId).toBe(userIds.salesperson);
     // The CNIC is never written into the audit log.
     await saveEmployee(as.owner, manager, employee({ code: "E-001", name: "Imran Qureshi", cnic: "42101-1234567-1", userId: userIds.salesperson }));
     const logged = await admin<{ text: string }[]>`select coalesce(before::text, '') || after::text as text from public.audit_log where tenant_id = ${tenantA} and entity = 'employee'`;

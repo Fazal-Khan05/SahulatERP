@@ -194,6 +194,8 @@ async function EmployeeFields({ session, employee }: { session: Session; employe
         <Label htmlFor="userId">Signs in as</Label>
         <select id="userId" name="userId" defaultValue={employee?.userId ?? ""} className={SELECT}>
           <option value="">Does not sign in</option>
+          {/* Only the owner reads the company's members: a link someone else cannot list is kept as it is. */}
+          {employee?.userId && !members.some((member) => member.userId === employee.userId) ? <option value={employee.userId}>{employee.userEmail ?? "A login of this company (kept as it is)"}</option> : null}
           {members.map((member) => (
             <option key={member.userId} value={member.userId}>
               {member.email}
@@ -276,7 +278,7 @@ export async function EmployeeScreen({ params }: { params: Promise<{ id: string 
             preview.ok ? (
               <p className="mt-3 text-sm" data-testid="employee-tax">
                 Income tax on this pay: {formatAmount(preview.monthly)} a month ({formatAmount(preview.annualTax)} on {formatAmount(preview.annualIncome)} a year
-                {preview.medicalExempt && employee.payNow.has("medical") ? ", the medical allowance exempt up to 10% of basic pay" : ""}), from the table in force since {formatIsoDate(preview.tableFrom)}.
+                {preview.medicalExempt && employee.payNow.has("medical") ? `, the medical allowance exempt up to ${preview.medicalExempt.toFixed()}% of basic pay` : ""}), from the table in force since {formatIsoDate(preview.tableFrom)}.
                 {deductions ? ` The fixed deduction of ${formatAmount(deductions)} comes off the pay, not off what is taxed.` : ""}
               </p>
             ) : (
@@ -381,7 +383,7 @@ export async function EmployeeScreen({ params }: { params: Promise<{ id: string 
               <dt className="text-muted-foreground">Social security</dt>
               <dd>{employee.socialSecurity ? "Registered" : "Not registered"}</dd>
               <dt className="text-muted-foreground">Signs in as</dt>
-              <dd>{employee.userEmail ?? "Does not sign in"}</dd>
+              <dd>{employee.userEmail ?? (employee.userId ? "A login of this company" : "Does not sign in")}</dd>
             </dl>
           </Card>
         )}

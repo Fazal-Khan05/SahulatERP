@@ -174,6 +174,15 @@ export function payForMonth(basis: PayBasis, monthlyOrDaily: Decimal, month: str
   return paisa(monthlyOrDaily.minus(perDay.times(days.unpaid)));
 }
 
+/** How many days of a month someone was employed, from the day they joined to the day they left. */
+export function daysEmployed(month: string, joinedOn: string, leftOn: string | null): number {
+  const last = `${month.slice(0, 8)}${String(daysIn(month)).padStart(2, "0")}`;
+  const from = joinedOn > month ? joinedOn : month;
+  const to = leftOn !== null && leftOn < last ? leftOn : last;
+  if (to < from) return 0;
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) + 1;
+}
+
 // ── The statutory tables ────────────────────────────────────────────────────────────────────────
 
 /**
@@ -348,7 +357,7 @@ export const ATTENDANCE_COLUMNS = [
 export type AttendanceKey = (typeof ATTENDANCE_COLUMNS)[number]["key"];
 export const ATTENDANCE_MAX_ROWS = 2000;
 
-export type AttendanceLine = { row: number; code: string; daysWorked: Decimal; unpaidDays: Decimal };
+export type AttendanceLine = { row: number; code: string; daysWorked: Decimal; unpaidDays: Decimal; daysWorkedGiven: boolean };
 export type AttendanceProblem = { row: number; name: string; problems: string[] };
 
 /** The rows of an attendance file for a month, each cleaned, or every row with what is wrong in it. */
@@ -369,7 +378,7 @@ export function readAttendanceRows(rows: readonly { row: number; raw: Partial<Re
     if (!unpaid.ok) found.push(`Unpaid days: ${unpaid.reason}`);
     if (worked.ok && unpaid.ok && worked.days.plus(unpaid.days).gt(daysIn(month))) found.push(`Days worked and unpaid days come to more than the month's ${daysIn(month)} days.`);
     if (found.length > 0 || !worked.ok || !unpaid.ok) problems.push({ row, name: code === "" ? "(no code)" : code, problems: found });
-    else lines.push({ row, code, daysWorked: worked.days, unpaidDays: unpaid.days });
+    else lines.push({ row, code, daysWorked: worked.days, unpaidDays: unpaid.days, daysWorkedGiven: text(raw.daysWorked) !== "" });
   }
   return { lines, problems };
 }

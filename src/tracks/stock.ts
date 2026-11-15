@@ -27,6 +27,9 @@ export const permissions = {
   "purchase_order.manage": ["owner", "accountant"],
   "goods_receipt.read": ["owner", "accountant", "auditor", "warehouse_manager"],
   "goods_receipt.manage": ["owner", "accountant", "warehouse_manager"],
+  // Step 25. A supplier's bill carries what was bought, what it cost and what tax was withheld.
+  "supplier_bill.read": ["owner", "accountant", "auditor"],
+  "supplier_bill.manage": ["owner", "accountant"],
 } as const satisfies TrackPermissions;
 
 /**

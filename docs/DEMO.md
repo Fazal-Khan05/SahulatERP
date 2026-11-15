@@ -2,10 +2,14 @@
 
 For showing SahulatERP to an importer who works out commission by hand today.
 
-## Opening it on this Mac
+## Opening it
 
-The demo runs from the Finisher's working copy on this Mac, against the test database (dev2),
-not the live site: commission (Steps 38 and 39) is not on the live site yet.
+**On the live site** (<https://sahulaterp.vercel.app>), once Steps 38 and 39 are applied to its
+database and the demo company has been seeded there with `npm run demo:seed`. The logins and
+their passwords are in `.env.demo-accounts.local` in the working copy the seed was run from.
+Open that file to read them; never paste them anywhere.
+
+**On this Mac**, against the test database (dev2), from the Finisher's working copy:
 
 1. Open Terminal and run this one command. Leave the window open while you show the demo.
 
@@ -14,13 +18,17 @@ not the live site: commission (Steps 38 and 39) is not on the live site yet.
    ```
 
 2. When it says **Ready**, open <http://localhost:3001> in the browser.
-3. The logins and their passwords are in
+3. The logins are in
    `/Users/fazalkhan/Desktop/ERP/.claude/worktrees/magical-blackwell-79cd67/.env.demo-accounts.local`.
-   Open that file to read them; never paste them anywhere.
 4. To stop it afterwards, press Ctrl+C in that Terminal window.
 
 The build is already made. If the command says it cannot find a build, run `npm run build` in
 the same folder first (two minutes), then the command again.
+
+The numbers below (SI-2627-00004, CP-2627-00001 and the amounts) are those of a demo company
+seeded on 15 November 2026. Seeded in the middle of another month they should come out the same,
+with "last month" and "this month" moved; seeded in the first days of a month, this month's
+dates are squeezed up to yesterday and the figures can differ, so check them before the meeting.
 
 ## The company
 
@@ -30,8 +38,8 @@ the same folder first (two minutes), then the command again.
 - **Log in as the owner** (`DEMO_OWNER_EMAIL`) for the walk. The sales manager
   (`DEMO_MANAGER_…`, Imran) and the salespeople (`DEMO_ALI_…`, `DEMO_SANA_…`) show what a
   member of the team sees, if they ask.
-- It is made by `npm run demo:seed` and removed by `npm run demo:reset`, in the working copy
-  above. The seed writes the four logins into the file above.
+- It is made by `npm run demo:seed` and removed by `npm run demo:reset`. The seed writes the
+  four logins into `.env.demo-accounts.local` in the working copy it was run from.
 
 ## The walk (about ten minutes)
 

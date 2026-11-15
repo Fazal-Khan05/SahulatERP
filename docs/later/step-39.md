@@ -5,9 +5,8 @@ Track C (commissions), the Finisher's. Built on Step 38's ledger (the Builder's,
 this branch) and Step 23's print parts. Migration `0028_commission_statements` (hand-written:
 three read functions, no tables).
 
-**Not on main yet, on purpose**: Step 38 waits for the founder, and Step 39 must not reach main
-before it. This branch carries both; it was built and tested on the Finisher's own databases
-(dev2 and the local one), where both migrations are applied.
+Built and tested on the Finisher's own databases (dev2 and the local one) before Step 38 reached
+main; merged after it (main at cef5385, Step 38's pull request 23), with main taken in first.
 
 ## Decided by the founder (2026-11-15, through the coordinator)
 

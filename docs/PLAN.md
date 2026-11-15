@@ -172,7 +172,7 @@ Fifty-two steps in nine phases. Phases finish in order; steps inside a phase mos
 | --- | --- | --- | --- |
 | 37 | Commission plans and rules (flat, category, class, per-unit, tiered with targets), non-overlapping dates, sales hierarchy with cycle check. Port rules from `reference/` | Old unit tests pass against the new `rules.ts` | Done 2026-11-15 |
 | 38 | Accrual on invoice, release on collection (partial), reversal on bounce/return, approval, payment, recovery from later pay; immutable movements | Port the old workflow tests; every movement sums to the accrual | Done 2026-11-15 |
-| 39 | Commission statements per salesperson (print/PDF), approval screen, manager override percentage | Statement equals movements for the period | |
+| 39 | Commission statements per salesperson (print/PDF), approval screen, manager override percentage | Statement equals movements for the period | Done 2026-11-15 |
 | 40 | Employees, pay components, attendance (CSV), statutory rate tables seeded (TY2027 slabs, EOBI on minimum wage by province, social security) with effective dates | Tax on a Rs 150,000/month salary matches the slab calculation by hand | |
 | 41 | Payroll runs draft → reviewed → approved → paid, cancel; commission settlement without double expensing; payslips PDF and email | Approving a run after a commission changed is refused | |
 | 42 | Salary bank-transfer file (per-bank layout, starts with one bank), s.149 annual statement export, loans/advances with instalments, final settlement | Bank file validates against the bank's sample | |

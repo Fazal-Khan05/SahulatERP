@@ -119,30 +119,68 @@ three tracks agree on):
     as two separate InitPlans, each run once, when first needed. `app.tenant_id()` and
     `app.tenant_role()` both read the transaction setting `app.tenant_id`, which the app's
     database role can rewrite at any time with `set_config`.
-  - **How it was reproduced** (on a local database, as `app_runtime`, with the identity set as
-    `withTenant()` sets it for a user who is a salesperson in tenant A and the owner of their
-    own tenant B; the transaction starts with `app.tenant_id` = A). A plain
-    `select count(*) from supplier_bills` gives 0, as it should. This gives A's bills:
+  - **How it was reproduced** (on a local database, as the role `app_runtime`; by the reviewer,
+    and again by the Builder on 2026-11-15 with the statements below as written). The user is a
+    salesperson in tenant A and the owner of a tenant B of their own. The transaction is opened
+    as `withTenant()` opens it, for their real identity in A:
+
+    ```sql
+    begin;
+    select set_config('app.user_id', '<the user>', true), set_config('app.tenant_id', '<tenant A>', true);
+    ```
+
+    A plain `select count(*) from supplier_bills` and `select count(*) from accounts` each give
+    0, as they should. **The only setting changed is `app.tenant_id`**, from A to B, with
+    `set_config('app.tenant_id', '<tenant B>', true)` called from inside the statement itself, in
+    a materialised CTE, so that it happens after the scan has started. `app.user_id` is never
+    touched: B is a company the user really owns.
+
+    On `supplier_bills` (default planner settings; returned A's three bills, `INV-1` posted
+    2,400.00, `INV-2` draft 600.00 and an empty draft, each with `tenant_id` = A):
 
     ```sql
     with flip as materialized (
       select g,
-             case when g = 2 then set_config('app.tenant_id', :'B', true) end as c,
+             case when g = 2 then set_config('app.tenant_id', '<tenant B>', true) end as c,
              case when g = 1 then date '2999-01-01' else date '1900-01-01' end as d
       from generate_series(1, 2) g)
-    select f.g, b.supplier_invoice_no, b.status, b.total
+    select f.g, b.supplier_invoice_no, b.status, b.total, b.tenant_id
     from flip f
     cross join lateral (
       select * from supplier_bills sb where sb.bill_date >= f.d order by sb.bill_date offset 0) b;
     ```
 
-    As the reviewer read it (the result was observed; the mechanism is its explanation): the
-    first pass of the lateral scan runs the tenant InitPlan while the setting is still A;
-    the materialised CTE's second row then switches the setting to B; the role InitPlan is run
-    only when a row first reaches that test, by which time the setting is B, where the caller
-    is the owner. The policy's test becomes "tenant is A and role is owner". The same statement
-    shape returned 67 rows of `accounts` (migration 0011) to the same salesperson, so it is the
-    shared idiom and not this step's tables.
+    On `accounts` (migration 0011; returned all 67 accounts of A, codes 1000 to 5830). The
+    table is small, so the planner is first told to use the index, which any session may do:
+
+    ```sql
+    set local enable_seqscan = off;
+    set local enable_bitmapscan = off;
+    with flip as materialized (
+      select g,
+             case when g = 2 then set_config('app.tenant_id', '<tenant B>', true) end as c,
+             case when g = 1 then 'zzzz' else '' end as lo
+      from generate_series(1, 2) g)
+    select count(*) as rows_read, count(*) filter (where a.tenant_id = '<tenant A>') as of_tenant_a,
+           min(a.code), max(a.code)
+    from flip f
+    cross join lateral (
+      select * from accounts x where x.code >= f.lo order by x.code offset 0) a;
+    ```
+
+    Without the two `set local` lines the same statement on `accounts` returned nothing: with a
+    sequential scan the first pass finds no row and asks neither question, so both are answered
+    for B. It works when the tenant test is part of an index condition (asked when the scan
+    starts, in the first pass, while the setting is A) and the role test is a filter (asked
+    when the first row reaches it, in the second pass, after the setting has become B).
+    `supplier_bills` has an index on (tenant, bill date), so it needs no planner setting.
+
+    As the reviewer read it (the result was observed; the mechanism is its explanation, and
+    fits the two runs above): the first pass of the lateral scan runs the tenant InitPlan while
+    the setting is still A; the materialised CTE's second row then switches the setting to B;
+    the role InitPlan is run only when a row first reaches that test, by which time the setting
+    is B, where the caller is the owner. The policy's test becomes "tenant is A and role is
+    owner". It is the shared idiom and not this step's tables.
   - **What held.** The same trick used to delete a main-branch draft as a north-branch
     accountant (also an owner elsewhere) deleted nothing: the `ENABLE ALWAYS` `BEFORE` triggers
     call `app.tenant_id()` again as each row is written and refuse a mismatch. So it is a

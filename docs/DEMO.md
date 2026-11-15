@@ -39,7 +39,7 @@ the same folder first (two minutes), then the command again.
    Say: "One list of what needs you today, instead of checking five registers."
 
 2. **Sales → an invoice** (1½ minutes). Open *Sales*, then *Sales invoices*, and open
-   **{{SPLIT_INVOICE}}**. Show:
+   **SI-2627-00004**. Show:
    - the customer, the lines and the total, and **In the books**: the receivable, the sale,
      the cost of the goods that left stock, and the commission, posted the moment the invoice
      was posted;
@@ -68,7 +68,7 @@ the same folder first (two minutes), then the command again.
       Sana with a monthly target (from the sale that reaches 1.5 lakh, 1.5×); Imran, the
       manager, earning 0.5% of what his team sells. *Who reports to whom*: Ali and Sana under
       Imran. Say: "This is the sheet you keep by hand. Here it is set once."
-   2. **An invoice's commission.** Back on **{{SPLIT_INVOICE}}**, split 60/40 between Ali and
+   2. **An invoice's commission.** Back on **SI-2627-00004**, split 60/40 between Ali and
       Sana: the card **Commission on this invoice** shows what each earned on their share, and
       Imran's 0.5% on each as their manager, and how much the customer's money has released.
       Say: "Worked out on every invoice, the moment it is posted."
@@ -76,16 +76,20 @@ the same folder first (two minutes), then the command again.
       earned, what is still waiting for the customers to pay, what their payments have
       released, what has been paid and what is owed back. Commission is released as the
       customer pays, a cheque only when it clears; a bounced cheque releases nothing.
-   4. **A statement.** Click **Ali**, then **{{ALI}}'s statement**, and choose **Last month**:
-      earned on each sale, released as each customer paid. Then **This month**: his October
-      commission paid on the 1st (**{{PAYMENT}}**), then five brake shoes came back from a sale
-      he had already been paid on (**{{CREDIT_NOTE}}**): that part of his commission is taken
-      back, and comes off his next payment. **Print** or **Download PDF** to hand it to him.
+   4. **A statement.** Click **demo-ali** in the table, then **demo-ali…'s statement** above
+      it, and choose **Last month**: 12,308.40 earned on his October sales, 1,976.00 released
+      when Faisal Motors paid in cash. Then **This month**: that 1,976.00 paid on the 1st
+      (**CP-2627-00001**); more released as November's money came in; then five brake shoes
+      came back from a sale he had already been paid on (**CN-2627-00001**), so 45.00 of his
+      commission is taken back, and comes off his next payment. 3,501.40 is owed to him at the
+      end. **Print** or **Download PDF** to hand it to him.
       Say: "Every salesperson gets this each month, and it always agrees with the books."
    5. **A payment.** Back on *Commission earned*, Ali: tick what this month's money has
-      released, **Approve**, then **Pay commission**: what he owes back from the return comes
-      off first, and the rest is paid from cash, with its journal. (This really pays it in the
-      demo company; to show it again, the demo is made afresh.)
+      released, **Approve the ticked for payment**, then **Pay commission**: the 45.00 he owes
+      back from the return comes off first, and 3,501.40 is paid from cash, with its journal.
+      The payment appears under **Payments** at the bottom as CP-2627-00002. (The "paid"
+      message above the button does not show yet; the Builder is fixing it. This really pays
+      it in the demo company; to show it again, the demo is made afresh.)
 
 6. **Close** (1 minute). Back to *Needs attention*. Ask what they spend most time on each
    month; most will say commission and chasing payments, which is where to go deeper.

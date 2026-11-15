@@ -17,7 +17,7 @@ import { cancelOrderAction, discardOrderAction, discardReceiptAction, saveOrderA
 import { OrderForm } from "./order-form";
 import { ReceiptForm } from "./receipt-form";
 
-function Pill({ label, strong, testId }: { label: string; strong: boolean; testId?: string }) {
+export function Pill({ label, strong, testId }: { label: string; strong: boolean; testId?: string }) {
   const tone = strong ? "bg-accent text-accent-foreground" : "bg-muted text-muted-foreground";
   return (
     <span data-testid={testId} className={`rounded-full px-2 py-0.5 text-xs font-semibold ${tone}`}>
@@ -26,7 +26,7 @@ function Pill({ label, strong, testId }: { label: string; strong: boolean; testI
   );
 }
 
-function Refused({ title, children }: { title: string; children: React.ReactNode }) {
+export function Refused({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <>
       <PageHead title={title} />
@@ -38,11 +38,13 @@ function Refused({ title, children }: { title: string; children: React.ReactNode
 const SECTIONS: readonly { href: string; label: string; permission: Permission }[] = [
   { href: "/purchases", label: "Purchase orders", permission: "purchase_order.read" },
   { href: "/purchases/receive", label: "Receive goods", permission: "goods_receipt.read" },
+  { href: "/purchases/bills", label: "Supplier bills", permission: "supplier_bill.read" },
   { href: "/purchases/grni", label: "Goods received, not yet billed", permission: "purchase_order.read" },
+  { href: "/purchases/withholding", label: "Withholding tax", permission: "supplier_bill.read" },
 ];
 
 /** The buying screens this role may open, as a row of links above each of them. */
-function Sections({ session, current }: { session: TenantSession; current: string }) {
+export function Sections({ session, current }: { session: TenantSession; current: string }) {
   const open = SECTIONS.filter((section) => can(session.role, section.permission));
   if (open.length < 2) return null;
   return (
@@ -62,7 +64,7 @@ function Sections({ session, current }: { session: TenantSession; current: strin
   );
 }
 
-function Back({ href, label }: { href: string; label: string }) {
+export function Back({ href, label }: { href: string; label: string }) {
   return (
     <p className="mb-2 text-sm">
       <Link href={href} className="text-muted-foreground underline-offset-4 hover:underline">

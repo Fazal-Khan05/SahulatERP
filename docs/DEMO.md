@@ -87,9 +87,9 @@ the same folder first (two minutes), then the command again.
    5. **A payment.** Back on *Commission earned*, Ali: tick what this month's money has
       released, **Approve the ticked for payment**, then **Pay commission**: the 45.00 he owes
       back from the return comes off first, and 3,501.40 is paid from cash, with its journal.
-      The payment appears under **Payments** at the bottom as CP-2627-00002. (The "paid"
-      message above the button does not show yet; the Builder is fixing it. This really pays
-      it in the demo company; to show it again, the demo is made afresh.)
+      The card then says what was paid, and the payment appears under **Payments** at the
+      bottom as CP-2627-00002. (This really pays it in the demo company; to show it again, the
+      demo is made afresh.)
 
 6. **Close** (1 minute). Back to *Needs attention*. Ask what they spend most time on each
    month; most will say commission and chasing payments, which is where to go deeper.

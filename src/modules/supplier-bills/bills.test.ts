@@ -50,7 +50,7 @@ let registered = "";
 let helmet = "";
 let grip = "";
 let standard = "";
-let freight = "";
+let repairs = "";
 let invoiceNo = 0;
 
 /** The database's code for what a statement run as this member was refused with, or undefined when it went through. */
@@ -121,7 +121,7 @@ describe.skipIf(!hasDb)("supplier bills", { timeout: 600_000 }, () => {
     company = (await createParty(as.owner, "supplier", { name: "Karachi Motors (Pvt) Ltd", supplierType: "company" })).id;
     registered = (await createParty(as.owner, "supplier", { name: "Sialkot Sports Ltd", supplierType: "company", registrationType: "registered", ntn: "7654321", strn: "3277876123456", atlStatus: "active" })).id;
     [{ id: standard }] = await admin<{ id: string }[]>`select id from public.tax_categories where tenant_id = ${tenantA} and kind = 'standard' order by created_at limit 1`;
-    [{ id: freight }] = await admin<{ id: string }[]>`select id from public.accounts where tenant_id = ${tenantA} and code = '5260'`;
+    [{ id: repairs }] = await admin<{ id: string }[]>`select id from public.accounts where tenant_id = ${tenantA} and code = '5270'`;
   }, 240_000);
 
   afterAll(async () => {
@@ -270,11 +270,11 @@ describe.skipIf(!hasDb)("supplier bills", { timeout: 600_000 }, () => {
   });
 
   it("bills a service with the province's tax on it: the tax is charged, withheld whole, and income tax is withheld on the gross", async () => {
-    // Freight of 50,000 from an AOP not on the list, in Punjab: 16% provincial tax (8,000), and 28% income tax of the 58,000.
-    const service = await posted(bill(plain, { incomeTaxCode: "income_tax.services.other", provincialTaxCode: "provincial_sales_tax.punjab", expenses: [{ accountId: freight, description: "Freight, Lahore to Multan", amount: "30000" }, { accountId: freight, description: "Loading", amount: "20000" }] }));
+    // Repairs of 50,000 by an AOP not on the list, in Punjab: 16% provincial tax (8,000), and 28% income tax of the 58,000.
+    const service = await posted(bill(plain, { incomeTaxCode: "income_tax.services.other", provincialTaxCode: "provincial_sales_tax.punjab", expenses: [{ accountId: repairs, description: "Repairs to the shop front", amount: "30000" }, { accountId: repairs, description: "Painting", amount: "20000" }] }));
     expect(await journalLines(service.id)).toEqual([
-      "5260 Freight and cartage outward: 34800 / 0",
-      "5260 Freight and cartage outward: 23200 / 0",
+      "5270 Repairs and maintenance: 34800 / 0",
+      "5270 Repairs and maintenance: 23200 / 0",
       "2210 Income tax withheld payable: 0 / 16240",
       "2230 Provincial sales tax withheld payable: 0 / 8000",
       "2110 Trade payables: 0 / 33760",
@@ -317,7 +317,7 @@ describe.skipIf(!hasDb)("supplier bills", { timeout: 600_000 }, () => {
     expect(await codeOf(as.owner, sql`delete from public.supplier_bills where id = ${done.id}`)).toBeUndefined();
     expect(await rowsOf(as.owner, sql`select 1 from public.supplier_bills where id = ${done.id}`)).toBe(1);
     expect(await codeOf(as.owner, sql`update public.supplier_bill_lines set received_value = 1 where bill_id = ${draft.id}`)).toBe("42501");
-    expect(await codeOf(as.owner, sql`insert into public.supplier_bill_lines (tenant_id, bill_id, line_no, kind, account_id, description, amount, created_by) values (${tenantA}, ${done.id}, 9, 'expense', ${freight}, 'x', 5, ${me})`)).toBe("SE226");
+    expect(await codeOf(as.owner, sql`insert into public.supplier_bill_lines (tenant_id, bill_id, line_no, kind, account_id, description, amount, created_by) values (${tenantA}, ${done.id}, 9, 'expense', ${repairs}, 'x', 5, ${me})`)).toBe("SE226");
     expect(await codeOf(as.owner, sql`insert into public.supplier_bill_lines (tenant_id, bill_id, line_no, kind, receipt_line_id, item_id, description, quantity, unit_price, amount, received_value, created_by) values (${tenantA}, ${draft.id}, 9, 'goods', ${helmets}, ${helmet}, 'x', 1, 1, 1, 1, ${me})`)).toBe("SE226");
     // Goods of another supplier, or more than arrived, are not a line of this bill.
     const [theirs] = await received(company, [{ itemId: helmet, quantity: "1", unitCost: "600" }]);

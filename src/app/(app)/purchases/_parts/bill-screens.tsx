@@ -213,8 +213,10 @@ function Figures({ rows, total }: { rows: [string, string][]; total: [string, st
   );
 }
 
+const WITHHELD_WORDS = { income_tax: "Income tax withheld", sales_tax: "Sales tax withheld", provincial_sales_tax: "Provincial sales tax withheld" } as const;
+
 const withheldRows = (entries: readonly Pick<Withheld, "kind" | "label" | "base" | "rate" | "amount">[]): [string, string][] =>
-  entries.map((entry) => [`${WITHHOLDING_KIND_LABELS[entry.kind]} withheld: ${entry.label}, ${formatPercent(entry.rate)} of ${formatAmount(entry.base)}`, `− ${formatAmount(entry.amount)}`]);
+  entries.map((entry) => [`${WITHHELD_WORDS[entry.kind]}: ${entry.label}, ${formatPercent(entry.rate)} of ${formatAmount(entry.base)}`, `− ${formatAmount(entry.amount)}`]);
 
 export async function BillScreen({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ refused?: string | string[]; saved?: string | string[] }> }) {
   const session = await requireTenant();

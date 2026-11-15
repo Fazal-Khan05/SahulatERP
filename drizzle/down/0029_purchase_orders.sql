@@ -1,4 +1,4 @@
--- Reverses drizzle/0028_purchase_orders.sql. Never run automatically. Run it by hand, as postgres, only
+-- Reverses drizzle/0029_purchase_orders.sql. Never run automatically. Run it by hand, as postgres, only
 -- after showing it to the founder and getting a yes. It refuses to run once any goods have
 -- been received: their stock moves and journals cannot be removed, and without this migration
 -- nothing would say where they came from. It DELETES every purchase order, drafts and
@@ -30,7 +30,7 @@ DROP TABLE public.goods_receipt_lines, public.goods_receipts, public.purchase_or
 DROP FUNCTION app.check_purchase_document_line();
 DROP FUNCTION app.check_purchase_document();
 
--- The row drizzle-kit wrote for 0028_purchase_orders (its "when" in drizzle/meta/_journal.json).
-DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1794734267752;
+-- The row drizzle-kit wrote for 0029_purchase_orders (its "when" in drizzle/meta/_journal.json).
+DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1794734813787;
 
 COMMIT;

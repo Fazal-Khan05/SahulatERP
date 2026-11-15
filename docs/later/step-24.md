@@ -1,6 +1,6 @@
 # Step 24: purchase orders and goods received
 
-Built in track B (stock and buying) by the Builder. Migration `0028_purchase_orders`.
+Built in track B (stock and buying) by the Builder. Migration `0029_purchase_orders`.
 
 ## What was built
 

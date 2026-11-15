@@ -103,14 +103,62 @@ Found by the review but not this step's to change (told to the coordinator, for 
 three tracks agree on):
 
 - **Every table's access rule can be read past by someone running their own SQL who belongs to
-  two companies.** A rule asks "which company?" and "which role?" as two separate questions. A
-  member who is, say, a salesperson in company A and the owner of a company B of their own can
-  change the company setting part-way through one statement, so the first question is answered
-  for A and the second for B, and they read A's rows that only an owner, an accountant or an
-  auditor should see. Shown on supplier bills and on the chart of accounts, so it is every
-  table's. Reading only: every write is checked again by a trigger and refused. The app never
-  lets anyone run their own SQL, so this matters only if another hole lets them. The fix is one
-  function that answers both questions together.
+  two companies.** In plain words: a rule asks "which company?" and "which role?" as two
+  separate questions. A member who is, say, a salesperson in company A and the owner of a
+  company B of their own (anyone can create a company) can change the company setting part-way
+  through one statement, so the first question is answered for A and the second for B, and
+  they read A's rows that only an owner, an accountant or an auditor should see. Reading only:
+  every write is checked again by a trigger and refused. The app never lets anyone run their
+  own SQL, so this matters only if another hole lets them.
+
+  The detail, for whoever writes the joint migration:
+
+  - **Which policies.** Every policy written in the shared idiom
+    `tenant_id = (SELECT app.tenant_id()) AND (SELECT app.tenant_role()) IN (...)`, which is
+    every table's since `drizzle/0000_tenancy.sql`. Postgres plans the two scalar sub-selects
+    as two separate InitPlans, each run once, when first needed. `app.tenant_id()` and
+    `app.tenant_role()` both read the transaction setting `app.tenant_id`, which the app's
+    database role can rewrite at any time with `set_config`.
+  - **How it was reproduced** (on a local database, as `app_runtime`, with the identity set as
+    `withTenant()` sets it for a user who is a salesperson in tenant A and the owner of their
+    own tenant B; the transaction starts with `app.tenant_id` = A). A plain
+    `select count(*) from supplier_bills` gives 0, as it should. This gives A's bills:
+
+    ```sql
+    with flip as materialized (
+      select g,
+             case when g = 2 then set_config('app.tenant_id', :'B', true) end as c,
+             case when g = 1 then date '2999-01-01' else date '1900-01-01' end as d
+      from generate_series(1, 2) g)
+    select f.g, b.supplier_invoice_no, b.status, b.total
+    from flip f
+    cross join lateral (
+      select * from supplier_bills sb where sb.bill_date >= f.d order by sb.bill_date offset 0) b;
+    ```
+
+    The first pass of the lateral scan runs the tenant InitPlan while the setting is still A;
+    the materialised CTE's second row then switches the setting to B; the role InitPlan is run
+    only when a row first reaches that test, by which time the setting is B, where the caller
+    is the owner. The policy's test becomes "tenant is A and role is owner". The same statement
+    shape returned 67 rows of `accounts` (migration 0011) to the same salesperson, so it is the
+    shared idiom and not this step's tables.
+  - **What held.** The same trick used to delete a main-branch draft as a north-branch
+    accountant (also an owner elsewhere) deleted nothing: the `ENABLE ALWAYS` `BEFORE` triggers
+    call `app.tenant_id()` again as each row is written and refuse a mismatch. So it is a
+    reading gap, not a writing one. Functions that return rows (`SECURITY DEFINER`, such as
+    `app.orders_to_receive()`) read the identity once into variables and are not affected.
+  - **Suggested fix**, one shared migration: a single function, for example `app.identity()`,
+    returning tenant, role and branches together as one composite, read once by each policy
+    (`(SELECT app.identity())` as one InitPlan, its fields compared). One sub-plan cannot be
+    answered in two halves, so changing the setting gives either all of A or all of B. Rewriting
+    every policy touches every track's tables, which is why it is not this step's to do.
+    Alternatively, or as well: refuse a change of `app.tenant_id` once it has been set in a
+    transaction (the setting could be read through a function that remembers the first value).
+  - **The test to pin it**: in `src/modules/tenant/policies.test.ts`, a user who is a
+    salesperson in one test company and the owner of another runs the statement above against a
+    table only an owner reads (`accounts` will do) and must get no rows; and the same for a
+    branch-limited member with `app.tenant_branch_ids()`. It should fail today and pass after
+    the fix.
 
 ## For a tax adviser
 

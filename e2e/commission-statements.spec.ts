@@ -111,7 +111,10 @@ test("a salesperson's statement shows the sale and what the customer's payment r
   await expect(visible(page, "commission-statement-summary")).toContainText("Waiting for customers to pay");
   // They cannot open anyone else's, nor approve.
   await expect(page.getByRole("link", { name: "Approve and pay" })).toHaveCount(0);
-  expect((await page.request.get(`/commissions/statements/${other.id}`)).status()).toBe(404);
+  // A page answers while it streams, so a refused statement shows "not found" rather than a 404 code; the PDF is a 404.
+  await page.goto(`/commissions/statements/${other.id}`);
+  await expect(page.getByText("This page could not be found.")).toBeVisible();
+  await expect(lines(page)).toHaveCount(0);
   expect((await page.request.get(`/print/commission-statement/${manager.id}/pdf`)).status()).toBe(404);
 });
 
@@ -129,7 +132,9 @@ test("a manager sees their own statement and their team's", async ({ page }) => 
   await listed(page).filter({ hasText: seller.email }).getByRole("link").click();
   await expect(page.getByRole("heading", { name: `Commission statement: ${seller.email}` })).toBeVisible();
   await expect(visible(page, "commission-statement-earned")).toHaveText("200.00");
-  expect((await page.request.get(`/commissions/statements/${other.id}`)).status()).toBe(404);
+  await page.goto(`/commissions/statements/${other.id}`);
+  await expect(page.getByText("This page could not be found.")).toBeVisible();
+  expect((await page.request.get(`/print/commission-statement/${other.id}/pdf`)).status()).toBe(404);
 });
 
 test("the owner sees everyone's, prints a statement and downloads its PDF", async ({ page }) => {

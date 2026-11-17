@@ -87,6 +87,34 @@ change.
    A cancelled payment's number is not reused.
 10. **A payment belongs to one branch** and settles that branch's bills.
 
+## The independent review (2026-11-15)
+
+A reviewer who had not seen the work attacked the migration as a signed-in member running any
+SQL as the app's database role, on a database of its own, with real sessions racing each other.
+**It found nothing, of any severity.** After every sequence it tried, no bill was settled past
+what was owed on it, no payment settled more than its amount, and every journal balanced. What
+it tried and what held:
+
+- **Overpaying a bill or getting more out of a payment than its amount**: the same bill twice,
+  a draft's supplier, branch, amount or date changed after what it settles was written, a bill
+  of another supplier, branch or company, a draft bill, amounts that are negative, nil, not a
+  number or too fine, and lists handed to the advance function with all of those.
+- **Two payments for the same bill at the same moment**: one waits for the other and is then
+  refused. Paying, setting an advance against a bill and cancelling all hold the supplier, as
+  posting a bill does, and do not deadlock with it.
+- **The journals**: the app's role cannot reverse a payment's, an advance's or a challan's
+  journal, nor post one of its own under those names. A cancellation reversed every journal the
+  payment had caused and put payables, advances and the bank back exactly.
+- **Challans**: an amount withheld paid twice, another company's, of another kind of tax, or
+  withheld after the challan's date; someone who works in only some branches; money out of an
+  account that is not cash or bank.
+- **Writing past the functions**: a payment's status, number or journal, the day and journal of
+  an advance set against a bill, any challan row, and the audit rows of all four acts.
+- **The reverse file** takes everything away again, and refuses once anything is posted.
+
+It judged the accounting right for each entry, and noted that the question of when tax is
+withheld on an advance is the one already listed below.
+
 ## For a tax adviser
 
 No accountant or tax adviser has checked any of this. The second, independent working of the

@@ -1,5 +1,6 @@
 import { expect } from "@playwright/test";
 import { adminSql, type AdminSql } from "../tests/support/admin-db";
+import { enterAs } from "../tests/support/identity";
 import { createUser, hasE2EEnv, type TestUser } from "./support/admin";
 import { createCompany, signIn, test } from "./support/ui";
 
@@ -39,7 +40,7 @@ test("an owner reads the books: trial balance, balance sheet, profit and loss, a
   const accounts = Object.fromEntries((await sql<{ id: string; code: string }[]>`select id, code from public.accounts where tenant_id = ${tenantId}`).map((a) => [a.code, a.id]));
   const post = (debit: string, credit: string, amount: string, number: string, memo: string) =>
     sql.begin(async (tx) => {
-      await tx`select set_config('app.user_id', ${owner.id}, true), set_config('app.tenant_id', ${tenantId}, true)`;
+      await enterAs(tx, owner.id, tenantId);
       // Sent as text and read as JSON by the database: the driver would otherwise wrap it in quotes again.
       const lines = JSON.stringify([{ account_id: accounts[debit], debit: amount }, { account_id: accounts[credit], credit: amount }]);
       const [document] = await tx`select gen_random_uuid() as id`;

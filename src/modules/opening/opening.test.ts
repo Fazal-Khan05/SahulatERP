@@ -10,6 +10,7 @@ import type { AccountNode } from "@/modules/ledger/rules";
 import { openFiscalYear } from "@/modules/numbering/commands";
 import type { TenantContext } from "@/modules/tenant/rules";
 import { adminSql, deleteTenants, hasAdminDb, type AdminSql } from "../../../tests/support/admin-db";
+import { enterSql } from "../../../tests/support/identity";
 import { postBacked } from "../../../tests/support/journal";
 import { addOpenDocument, discardOpening, importOpeningLines, postOpening, removeOpeningLine, reverseOpening, setAccountBalance, setOpeningDate, startOpening } from "./commands";
 import { ageOpening, getOpening } from "./queries";
@@ -354,7 +355,7 @@ describe.skipIf(!hasDb)("opening balances", () => {
       await codeOf(() =>
         withTenant(ownerB, tenantB, (tx) =>
           tx.execute(sql`insert into public.opening_balances (tenant_id, opening_entry_id, kind, account_id, debit, created_by)
-            select ${tenantB}, ${draftId}::uuid, 'account', v.account, case when v.n = 2 and set_config('app.tenant_id', '', true) = '' then 1 else 1 end, ${ownerB}
+            select ${tenantB}, ${draftId}::uuid, 'account', v.account, case when v.n = 2 and ${enterSql(ownerB, null)} = '' then 1 else 1 end, ${ownerB}
             from (values (${of("5230")}::uuid, 1), (${of("5240")}::uuid, 2)) as v(account, n)`),
         ),
       ),

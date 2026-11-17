@@ -1,5 +1,6 @@
 import { expect } from "@playwright/test";
 import { adminSql, type AdminSql } from "../tests/support/admin-db";
+import { enterAs } from "../tests/support/identity";
 import { createUser, hasE2EEnv, type TestUser } from "./support/admin";
 import { signIn, test } from "./support/ui";
 
@@ -54,8 +55,8 @@ test("an owner opens the fiscal year, locks a month and unlocks it", async ({ pa
   await page.getByRole("button", { name: "Lock July 2026" }).click();
   await expect(year.getByRole("row").nth(1)).toContainText("Locked");
   const take = (date: string) => sql.begin(async (tx) => {
-    // The function decides whose company it is from these two settings, as the app sets them.
-    await tx`select set_config('app.user_id', ${owner.id}, true), set_config('app.tenant_id', ${tenantId}, true)`;
+    // The function decides whose company it is from who the transaction says it is, as the app says it.
+    await enterAs(tx, owner.id, tenantId);
     return (await tx<{ number: string }[]>`select app.next_document_number('SI', ${date}::date) as number`)[0].number;
   });
   await expect(take("2026-07-15")).rejects.toThrow(/locked/);

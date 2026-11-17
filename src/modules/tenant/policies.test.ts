@@ -1,8 +1,11 @@
-import { randomUUID } from "node:crypto";
+import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
+import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { audit, closeDb, withTenant } from "@/db";
+import { identityMessage } from "@/db/identity-proof";
 import { adminSql, deleteTenants, hasAdminDb, type AdminSql } from "../../../tests/support/admin-db";
+import { enterAs } from "../../../tests/support/identity";
 import { getLogo, loadWorkspace } from "./queries";
 import { auditLog, branches, invitations, memberships, modulesEnabled, settings, tenants } from "./schema";
 
@@ -225,6 +228,113 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
       where n.nspname = 'app' and not exists (select 1 from unnest(coalesce(p.proconfig, '{}')) c where c = 'search_path=pg_catalog, pg_temp')
       order by 1`;
     expect(unsafe.map((f) => `${f.fn}: ${f.has}`)).toEqual([]);
+  });
+
+  // drizzle/0030_identity_proof.sql. The app used to tell the database who was signed in by
+  // writing two settings, which any session of the app's role can write. The database now wants
+  // a signature made with a secret it shares with the web app. The key is put in here inside one
+  // transaction that is rolled back, so no other test and no other session ever sees it; that
+  // transaction is the migration connection's, and the functions answer the same whoever asks.
+  it("takes nobody's word for who is signed in once a key is installed", async () => {
+    const secret = randomBytes(32);
+    const padded = Buffer.concat([secret, Buffer.alloc(32)]);
+    const inner = Buffer.from(padded.map((b) => b ^ 0x36));
+    const outer = Buffer.from(padded.map((b) => b ^ 0x5c));
+    const sign = (user: string, tenant: string | null, expires: number, key: Buffer = secret) =>
+      createHmac("sha256", key).update(identityMessage(user, tenant, expires)).digest("hex");
+    const soon = Math.floor(Date.now() / 1000) + 300;
+    const undone = new Error("undo");
+    const seen: Record<string, unknown> = {};
+
+    await admin
+      .begin(async (tx) => {
+        await tx`delete from app.identity_keys`;
+        await tx`insert into app.identity_keys (slot, inner_key, outer_key) values (1, ${inner}, ${outer})`;
+        const who = async () => ({ ...(await tx`select app.current_user_id() as "user", app.tenant_id() as tenant, app.tenant_role() as role, (select count(*)::int from app.member_tenant_ids()) as companies`)[0] });
+        const enter = (user: string, tenant: string | null, expires: number, signature: string) =>
+          tx.savepoint((sp) => sp`select app.enter(${user}::uuid, ${tenant}::uuid, ${expires}::bigint, ${signature}::text)`).then(
+            () => undefined,
+            (error: { code?: string }) => error.code,
+          );
+
+        // The two settings mean nothing now.
+        await tx`select set_config('app.user_id', ${ownerA}, true), set_config('app.tenant_id', ${tenantA}, true)`;
+        seen.settings = await who();
+        // No proof, somebody else's proof, a proof for another company, one made with another
+        // secret, one that is out of date and one that claims to be good for an hour.
+        seen.refused = [
+          await enter(ownerA, tenantA, 0, ""),
+          await enter(ownerA, tenantA, soon, sign(ownerB, tenantB, soon)),
+          await enter(ownerA, tenantA, soon, sign(ownerA, tenantB, soon)),
+          await enter(ownerA, tenantA, soon, sign(ownerA, tenantA, soon, randomBytes(32))),
+          await enter(ownerA, tenantA, soon - 400, sign(ownerA, tenantA, soon - 400)),
+          await enter(ownerA, tenantA, soon + 3600, sign(ownerA, tenantA, soon + 3600)),
+          await enter(ownerA, tenantA, soon, sign(ownerA, tenantA, soon).toUpperCase()),
+        ];
+        seen.afterRefusals = await who();
+        // The real thing is believed, and a signed move to no company or to a company the user
+        // is not in gives what it should.
+        seen.entered = await enter(ownerA, tenantA, soon, sign(ownerA, tenantA, soon));
+        seen.owner = await who();
+        await enter(ownerA, null, soon, sign(ownerA, null, soon));
+        seen.nowhere = await who();
+        await enter(ownerA, tenantB, soon, sign(ownerA, tenantB, soon));
+        seen.elsewhere = await who();
+        throw undone;
+      })
+      .catch((error) => {
+        if (error !== undone) throw error;
+      });
+
+    const nobody = { user: null, tenant: null, role: null, companies: 0 };
+    expect(seen.settings).toEqual(nobody);
+    expect(seen.refused).toEqual([DENIED, DENIED, DENIED, DENIED, DENIED, DENIED, DENIED]);
+    expect(seen.afterRefusals).toEqual(nobody);
+    expect(seen.entered).toBeUndefined();
+    expect(seen.owner).toEqual({ user: ownerA, tenant: tenantA, role: "owner", companies: 1 });
+    expect(seen.nowhere).toEqual({ user: ownerA, tenant: null, role: null, companies: 1 });
+    expect(seen.elsewhere).toEqual({ user: ownerA, tenant: null, role: null, companies: 1 });
+    // The key never left that transaction.
+    expect(await admin`select 1 from app.identity_keys where inner_key = ${inner}`).toHaveLength(0);
+
+    // The app's roles reach neither the secret nor the record of who each transaction is, and
+    // cannot ask the function behind the five that answer.
+    const attempt = (statement: string) => codeOf(() => withTenant(ownerA, tenantA, (tx) => tx.execute(sql.raw(statement))));
+    expect(await attempt("select 1 from app.identity_keys")).toBe(DENIED);
+    expect(await attempt("select 1 from app.identity_sessions")).toBe(DENIED);
+    expect(await attempt("update app.identity_sessions set user_id = user_id")).toBe(DENIED);
+    expect(await attempt("delete from app.identity_keys")).toBe(DENIED);
+    expect(await attempt("select * from app.identity_now()")).toBe(DENIED);
+    const [reach] = await admin`
+      select bool_or(has_table_privilege(r, 'app.identity_keys', 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER')
+                  or has_table_privilege(r, 'app.identity_sessions', 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER')
+                  or has_function_privilege(r, 'app.identity_now()', 'EXECUTE')) as any,
+             bool_or(has_function_privilege(r, 'app.enter(uuid, uuid, bigint, text)', 'EXECUTE')) filter (where r <> 'app_runtime') as others_enter
+      from unnest(array['app_runtime', 'anon', 'authenticated', 'public']) r`;
+    expect({ ...reach }).toEqual({ any: false, others_enter: false });
+  });
+
+  it("believes who a transaction is only until that transaction ends", async () => {
+    // One connection, so the second transaction is the same database session as the first.
+    const direct = postgres(process.env.DATABASE_URL!, { max: 1 });
+    try {
+      const first = await direct.begin(async (tx) => {
+        await enterAs(tx, ownerA, tenantA);
+        return (await tx`select app.current_user_id() as "user", app.tenant_role() as role`)[0];
+      });
+      expect({ ...first }).toEqual({ user: ownerA, role: "owner" });
+      const second = await direct.begin(async (tx) => (await tx`select app.current_user_id() as "user", app.tenant_id() as tenant, (select count(*)::int from public.branches) as branches`)[0]);
+      expect({ ...second }).toEqual({ user: null, tenant: null, branches: 0 });
+      // A transaction that is rolled back leaves nothing behind either.
+      await direct.begin(async (tx) => {
+        await enterAs(tx, ownerB, tenantB);
+        throw new Error("undo");
+      }).catch(() => undefined);
+      const third = await direct.begin(async (tx) => (await tx`select app.current_user_id() as "user"`)[0]);
+      expect(third.user).toBeNull();
+    } finally {
+      await direct.end();
+    }
   });
 
   it("lets an owner add a branch and writes the audit row in the same transaction", async () => {

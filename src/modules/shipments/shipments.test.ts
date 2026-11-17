@@ -502,6 +502,35 @@ describe.skipIf(!hasDb)("shipments and landed cost", { timeout: 600_000 }, () =>
     expect(await codeOf(otherOwner, sql`select app.allocate_shipment(${id}::uuid, ${SPREAD}::date)`)).toBe("SE255");
   });
 
+  it("never lets a line into a bill that was removed and written again while the line waited (Step 25's guard, put right in this migration)", async () => {
+    // Found by the reviewer of Step 27. One session removes a draft bill and writes it again
+    // under the same id, with a line, and posts it; while that is still open, another writes a
+    // line of a million into it. The second waits for the first, then finds nothing where the
+    // draft was. It must be refused: the bill it would land in is posted.
+    const me = userIds.accountant;
+    for (let round = 0; round < 2; round += 1) {
+      const id = randomUUID();
+      const header = sql`insert into public.supplier_bills (id, tenant_id, bill_date, supplier_id, branch_id, supplier_invoice_no, amount, total, created_by, updated_by) values (${id}, ${tenantA}, ${BILLED}, ${agent}, ${mainBranch}, ${`SWAP-${round}`}, 1, 1, ${me}, ${me})`;
+      const line = (no: number, amount: number) => sql`insert into public.supplier_bill_lines (tenant_id, bill_id, line_no, kind, account_id, description, amount, created_by) values (${tenantA}, ${id}, ${no}, 'expense', ${fees}, 'Advice', ${amount}, ${me})`;
+      await withTenant(me, tenantA, (tx) => tx.execute(header));
+      let posted!: () => void;
+      const waiting = new Promise<void>((resolve) => (posted = resolve));
+      const swap = withTenant(me, tenantA, async (tx) => {
+        await tx.execute(sql`delete from public.supplier_bills where id = ${id}`);
+        await tx.execute(header);
+        await tx.execute(line(1, 1));
+        await tx.execute(sql`select app.post_supplier_bill(${id}::uuid)`);
+        posted();
+        await tx.execute(sql`select pg_sleep(1)`);
+      });
+      await waiting;
+      expect(await codeOf(as.owner, line(2, 1000000)), `round ${round}`).toBe("23503");
+      await swap;
+      const [bill] = await admin<{ status: string; lines: number }[]>`select b.status, (select count(*)::int from public.supplier_bill_lines l where l.bill_id = b.id) as lines from public.supplier_bills b where b.id = ${id}`;
+      expect(bill, `round ${round}`).toEqual({ status: "posted", lines: 1 });
+    }
+  });
+
   it("IMP-061: spreads a shipment's charges once when it is asked twice at the same moment", async () => {
     for (let round = 0; round < 4; round += 1) {
       const id = await shipped([await sevenAndThree()]);

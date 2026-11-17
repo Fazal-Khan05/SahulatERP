@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ActionForm } from "@/components/action-form";
@@ -132,17 +133,21 @@ export async function AccountsScreen() {
                     </td>
                     <td className="py-2 pr-4">{[row.bankName, row.accountNumber].filter(Boolean).join(", ")}</td>
                     <td className="py-2 pr-4 text-right whitespace-nowrap tabular-nums" data-testid={`holds-${row.code}`}>
-                      {formatAmount(row.balance)}
+                      {row.balance === null ? "Not shown" : formatAmount(row.balance)}
                     </td>
                     <td className="py-2 text-right">
-                      {manager && !row.archived && row.balance.isZero() ? <ActionForm action={archiveAccountAction.bind(null, row.id, row.updatedAt)} submitLabel="Archive" compact /> : null}
+                      {manager && !row.archived && row.balance !== null && row.balance.isZero() ? <ActionForm action={archiveAccountAction.bind(null, row.id, row.updatedAt)} submitLabel="Archive" compact /> : null}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
-          <p className="mt-3 text-xs text-muted-foreground">An account is archived only when it holds nothing: move what it holds out first.</p>
+          <p className="mt-3 text-xs text-muted-foreground">
+            {session.branchIds === null
+              ? "An account is archived only when it holds nothing: move what it holds out first."
+              : "What each account holds is shown to those who work in every branch: you do not see every posting to it."}
+          </p>
         </Card>
         {manager ? (
           <Card title="Add an account">
@@ -189,7 +194,8 @@ export async function TransfersScreen() {
   const session = await requireTenant();
   const why = closed(session);
   if (why) return <Shut title="Transfers" why={why} />;
-  const manager = can(session.role, "cash_bank.manage");
+  // Money is moved between the company's accounts by someone who works in every branch.
+  const manager = can(session.role, "cash_bank.manage") && session.branchIds === null;
   const [rows, accounts] = await Promise.all([listTransfers(session), listCashBankAccounts(session)]);
   const usable = accounts.filter((a) => !a.archived);
   return (
@@ -200,6 +206,8 @@ export async function TransfersScreen() {
         {manager ? (
           <Card title="Move money">
             <ActionForm action={transferAction} submitLabel="Record transfer">
+              {/* One key for this transfer, however many times it is sent: it is recorded once. */}
+              <input type="hidden" name="clientKey" value={randomUUID()} />
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="fromId">From</Label>
@@ -379,6 +387,8 @@ export async function NewExpenseScreen() {
       <PageHead title="New expense" sub="Recorded and in the books at once. The province's tax on services is added to the lines and withheld whole; income tax is withheld at the supplier's rate." />
       <Card className="max-w-5xl">
         <ActionForm action={expenseAction} submitLabel="Record expense">
+          {/* One key for this expense, however many times it is sent: it is recorded once. */}
+          <input type="hidden" name="clientKey" value={randomUUID()} />
           <div className="grid gap-4 sm:grid-cols-[10rem_minmax(0,1fr)_minmax(0,1fr)]">
             <Field label="Date" name="date" type="date" defaultValue={today} required />
             <div className="flex flex-col gap-1.5">

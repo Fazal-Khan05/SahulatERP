@@ -55,7 +55,7 @@ const journal = async (number: string) =>
       join public.journal_lines l on l.journal_id = j.id join public.accounts a on a.id = l.account_id
       where j.tenant_id = ${tenantA} and j.document_number = ${number} order by l.line_no`
   ).map((r) => r.line);
-const balanceOf = async (account: string) => (await listCashBankAccounts(as.owner)).find((a) => a.id === account)!.balance.toFixed(2);
+const balanceOf = async (account: string) => (await listCashBankAccounts(as.owner)).find((a) => a.id === account)!.balance!.toFixed(2);
 const account = async (code: string) => (await admin<{ id: string }[]>`select id from public.accounts where tenant_id = ${tenantA} and code = ${code}`)[0].id;
 
 describe.skipIf(!hasDb)("cash and bank: accounts, transfers and expenses", () => {
@@ -92,7 +92,7 @@ describe.skipIf(!hasDb)("cash and bank: accounts, transfers and expenses", () =>
     bank = (await addCashBankAccount(as.accountant, { kind: "bank", name: "HBL current account", bankName: "Habib Bank Limited", accountNumber: "PK36HABB0000001123456702" })).id;
     petty = (await addCashBankAccount(as.owner, { kind: "cash", name: "Petty cash" })).id;
     const listed = await listCashBankAccounts(as.auditor);
-    expect(listed.map((a) => `${a.kind} ${a.name} ${a.bankName ?? ""} ${a.balance.toFixed(2)}`)).toEqual(["bank HBL current account Habib Bank Limited 0.00", "cash Cash in hand  0.00", "cash Petty cash  0.00"]);
+    expect(listed.map((a) => `${a.kind} ${a.name} ${a.bankName ?? ""} ${a.balance!.toFixed(2)}`)).toEqual(["bank HBL current account Habib Bank Limited 0.00", "cash Cash in hand  0.00", "cash Petty cash  0.00"]);
     await saveBankDetails(as.owner, bank, { bankName: "HBL", accountNumber: "PK36HABB0000001123456702" });
     expect((await listCashBankAccounts(as.owner)).find((a) => a.id === bank)?.bankName).toBe("HBL");
     await expect(saveBankDetails(as.owner, cash, { bankName: "HBL" })).rejects.toThrow("Bank details belong to a bank account");
@@ -154,6 +154,31 @@ describe.skipIf(!hasDb)("cash and bank: accounts, transfers and expenses", () =>
     expect(await balanceOf(petty)).toBe("13800.00");
   });
 
+  it("records an expense or a transfer sent twice once", async () => {
+    const clientKey = randomUUID();
+    const sale = { date: DAY, accountId: bank, payee: "Courier", lines: [{ accountId: repairs, description: "Parcel", amount: "450" }], clientKey };
+    const first = await recordExpense(as.owner, sale);
+    const again = await recordExpense(as.owner, sale);
+    expect(again).toEqual(first);
+    expect((await admin<{ n: number }[]>`select count(*)::int as n from public.expenses where tenant_id = ${tenantA} and payee = 'Courier'`)[0].n).toBe(1);
+    const moved = { fromId: bank, toId: cash, date: DAY, amount: "10", clientKey: randomUUID() };
+    expect(await recordTransfer(as.owner, moved)).toEqual(await recordTransfer(as.owner, moved));
+    const [cashOut] = await admin<{ id: string }[]>`select id from public.cash_transfers where tenant_id = ${tenantA} and id = ${moved.clientKey}`;
+    await cancelTransfer(as.owner, cashOut.id, { date: DAY, reason: "A test of sending twice" });
+    const [courier] = await admin<{ id: string }[]>`select id from public.expenses where tenant_id = ${tenantA} and payee = 'Courier'`;
+    await cancelExpense(as.owner, courier.id, { date: DAY, reason: "A test of sending twice" });
+  });
+
+  it("lets no one but the database write its audit rows", async () => {
+    const [one] = await admin<{ id: string }[]>`select id from public.expenses where tenant_id = ${tenantA} limit 1`;
+    for (const action of ["expense.record", "expense.cancel", "cash_transfer.record", "cash_transfer.cancel"]) {
+      expect(
+        await codeOf(as.owner, sql`insert into public.audit_log (tenant_id, actor_user_id, actor_role, action, entity, entity_id, after) values (${tenantA}, ${userIds.owner}, 'owner', ${action}, 'expense', ${one.id}, '{}'::jsonb)`),
+        action,
+      ).toBe("42501");
+    }
+  });
+
   it("refuses what will not do, in plain words", async () => {
     const line = [{ accountId: repairs, description: "Repairs", amount: "100" }];
     await expect(recordExpense(as.owner, { date: DAY, accountId: bank, lines: line })).rejects.toThrow("Choose the supplier, or name who was paid.");
@@ -188,15 +213,18 @@ describe.skipIf(!hasDb)("cash and bank: accounts, transfers and expenses", () =>
     await recordTransfer(as.owner, { fromId: petty, toId: bank, date: DAY, amount: "13800" });
     await archiveCashBankAccount(as.owner, petty);
     expect((await listCashBankAccounts(as.owner)).find((a) => a.id === petty)?.archived).toBe(true);
+    // Cancelling a transfer would put money back into it while archived: it is restored first.
+    const [first] = await admin<{ id: string }[]>`select id from public.cash_transfers where tenant_id = ${tenantA} and number = 'TR-2627-00001'`;
+    await expect(cancelTransfer(as.owner, first.id, { date: DAY, reason: "Wrong account" })).rejects.toThrow("An account it would post to is archived. Restore the account first");
     await expect(recordTransfer(as.owner, { fromId: bank, toId: petty, date: DAY, amount: "1" })).rejects.toThrow("Choose two different cash or bank accounts");
   });
 
   it("is kept by the owner and an accountant, read by the auditor, and hidden from everyone else", async () => {
     for (const role of ["auditor", "salesperson", "recovery_officer"] as const) {
       await expect(recordTransfer(as[role], { fromId: bank, toId: cash, date: DAY, amount: "1" }), role).rejects.toThrow("Only the owner or an accountant");
-      expect(await codeOf(as[role], sql`select app.record_cash_transfer(${bank}::uuid, ${cash}::uuid, ${DAY}::date, 1, null, null)`), role).toBe("42501");
+      expect(await codeOf(as[role], sql`select app.record_cash_transfer(gen_random_uuid(), ${bank}::uuid, ${cash}::uuid, ${DAY}::date, 1, null, null)`), role).toBe("42501");
     }
-    expect((await listExpenses(as.auditor)).length).toBe(3);
+    expect((await listExpenses(as.auditor)).length).toBe(4);
     await expect(listExpenses(as.salesperson)).rejects.toThrow("Your role does not include cash and bank.");
     const seen = await withTenant(userIds.salesperson, tenantA, (tx) => tx.execute<{ n: number }>(sql`select (select count(*)::int from public.expenses) + (select count(*)::int from public.cash_transfers) as n`));
     expect(seen[0].n).toBe(0);
@@ -204,6 +232,10 @@ describe.skipIf(!hasDb)("cash and bank: accounts, transfers and expenses", () =>
     await expect(recordExpense(lahoreAccountant, { date: DAY, accountId: cash, payee: "Plumber", lines: [{ accountId: repairs, description: "Tap", amount: "800" }] })).rejects.toThrow("Choose one of your branches.");
     await recordExpense(lahoreAccountant, { date: DAY, accountId: cash, payee: "Plumber", branchId: lahoreBranch, lines: [{ accountId: repairs, description: "Tap", amount: "800" }] });
     expect((await listExpenses(lahoreAccountant)).map((e) => e.paidTo)).toEqual(["Plumber"]);
+    // They do not see every posting to the company's accounts, so they see no balance, and archive none.
+    expect((await listCashBankAccounts(lahoreAccountant)).every((a) => a.balance === null)).toBe(true);
+    await expect(archiveCashBankAccount(lahoreAccountant, cash)).rejects.toThrow("archived by someone who works in every branch");
+    expect(await listTransfers(lahoreAccountant)).toEqual([]);
     await expect(recordTransfer(lahoreAccountant, { fromId: bank, toId: cash, date: DAY, amount: "1" })).rejects.toThrow("Your role cannot do that.");
   });
 

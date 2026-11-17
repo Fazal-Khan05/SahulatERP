@@ -25,7 +25,11 @@ describe("what an expense comes to", () => {
     expect(f.provincial.toFixed(2)).toBe("45.00");
     expect(f.shares.map((x) => x.toFixed(2))).toEqual(["15.00", "15.00", "15.00"]);
     const odd = figureExpense([d(33.33), d(33.33), d(33.34)], d(16), null, false)!;
-    // docs/examples/step-34.md, case D: 16.00 shared 5.33, 5.33 and what is left, 5.34.
+    // Shared by largest part cut off: never below nil, even where the last line is tiny.
+    const tiny = figureExpense([d(100.03), d(100.03), d(100.03), d(0.01)], d(16), null, false)!;
+    expect(tiny.shares.every((x) => x.gte(0))).toBe(true);
+    expect(tiny.shares.reduce((sum, x) => sum.plus(x), d(0)).toFixed(2)).toBe(tiny.provincial.toFixed(2));
+    // docs/examples/step-34.md, case D: 16.00 shared 5.33, 5.33 and 5.34 (the largest part cut off).
     expect(odd.shares.map((x) => x.toFixed(2))).toEqual(["5.33", "5.33", "5.34"]);
   });
 

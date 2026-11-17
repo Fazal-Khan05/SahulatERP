@@ -1,5 +1,6 @@
 import "server-only";
 import { and, eq, sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { audit, isUuid, withTenant } from "@/db";
 import { UserError, pgCode } from "@/lib/errors";
 import { todayIso } from "@/lib/format";
@@ -27,6 +28,8 @@ function refusal(error: unknown, date: string | null): unknown {
   const closed = date ? periodRefusal(code, date) : null;
   if (closed) return new UserError(closed);
   if (code === "SE331") return new UserError("Choose two different cash or bank accounts of the company that are in use.");
+  if (code === "SE332") return new UserError("That will not do: enter an amount in rupees and paisa above nothing, and say why when cancelling.");
+  if (code === "SE341") return new UserError("An account it would post to is archived. Restore the account first, under Settings, Chart of accounts.");
   if (code === "SE333") return new UserError("That date will not do: it has not come yet, or it is before the document's own date.");
   if (code === "SE334") return new UserError("That is not in this company.");
   if (code === "SE335") return new UserError("It has already been cancelled.");
@@ -95,6 +98,8 @@ export async function saveBankDetails(ctx: TenantContext, accountId: unknown, ra
 /** Archives a cash or bank account, only when everything ever posted to it adds up to nil. */
 export async function archiveCashBankAccount(ctx: TenantContext, accountId: unknown, loadedAt?: unknown): Promise<void> {
   requireManager(ctx);
+  // What an account holds is the whole company's: only someone who works in every branch sees it whole.
+  if (ctx.branchIds !== null) throw new UserError("A cash or bank account is archived by someone who works in every branch.");
   if (!isUuid(accountId)) throw new UserError("That account is not in this company.");
   const balance = await withTenant(ctx.userId, ctx.tenantId, async (tx) => {
     const [row] = await tx.execute<{ balance: string | null; kind: string | null }>(sql`
@@ -112,15 +117,17 @@ export async function archiveCashBankAccount(ctx: TenantContext, accountId: unkn
 }
 
 /** Moves money from one cash or bank account to another. Returns its number. */
-export async function recordTransfer(ctx: TenantContext, raw: RawTransfer): Promise<{ number: string }> {
+export async function recordTransfer(ctx: TenantContext, raw: RawTransfer & { clientKey?: unknown }): Promise<{ number: string }> {
   requireManager(ctx);
   const read = readTransfer(raw, todayIso(new Date()));
   if (!read.ok) throw new UserError(read.reason);
   const t = read.transfer;
+  // Sent twice from the same form, it is recorded once.
+  const key = isUuid(raw.clientKey) ? raw.clientKey : randomUUID();
   try {
     return await withTenant(ctx.userId, ctx.tenantId, async (tx) => {
       const [row] = await tx.execute<{ number: string }>(sql`
-        select app.record_cash_transfer(${t.fromId}::uuid, ${t.toId}::uuid, ${t.date}::date, ${t.amount.toFixed(2)}::numeric, ${t.reference}, ${t.memo}) as number`);
+        select app.record_cash_transfer(${key}::uuid, ${t.fromId}::uuid, ${t.toId}::uuid, ${t.date}::date, ${t.amount.toFixed(2)}::numeric, ${t.reference}, ${t.memo}) as number`);
       return { number: row.number };
     });
   } catch (error) {
@@ -141,19 +148,20 @@ export async function cancelTransfer(ctx: TenantContext, id: unknown, raw: RawCa
 }
 
 /** Records money spent out of a cash or bank account, with any tax withheld. Returns its id and number. */
-export async function recordExpense(ctx: TenantContext, raw: RawExpense): Promise<{ id: string; number: string }> {
+export async function recordExpense(ctx: TenantContext, raw: RawExpense & { clientKey?: unknown }): Promise<{ id: string; number: string }> {
   requireManager(ctx);
   const read = readExpense(raw, todayIso(new Date()));
   if (!read.ok) throw new UserError(read.reason);
   const e = read.expense;
+  // Sent twice from the same form, it is recorded once: the key is the expense's own id.
+  const key = isUuid(raw.clientKey) ? raw.clientKey : randomUUID();
   const lines = JSON.stringify(e.lines.map((line) => ({ account: line.accountId, description: line.description, amount: line.amount.toFixed(2) })));
   try {
     return await withTenant(ctx.userId, ctx.tenantId, async (tx) => {
       const [row] = await tx.execute<{ number: string }>(sql`
-        select app.record_expense(${e.date}::date, ${e.accountId}::uuid, ${e.supplierId}::uuid, ${e.payee}, ${e.branchId}::uuid, ${e.reference}, ${e.memo},
+        select app.record_expense(${key}::uuid, ${e.date}::date, ${e.accountId}::uuid, ${e.supplierId}::uuid, ${e.payee}, ${e.branchId}::uuid, ${e.reference}, ${e.memo},
           ${lines}::jsonb, ${e.incomeTaxCode}, ${e.provincialTaxCode}) as number`);
-      const [found] = await tx.execute<{ id: string }>(sql`select id from public.expenses where tenant_id = ${ctx.tenantId} and number = ${row.number}`);
-      return { id: found.id, number: row.number };
+      return { id: key, number: row.number };
     });
   } catch (error) {
     // A row id or account id the form could not have sent.

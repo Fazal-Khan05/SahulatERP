@@ -38,10 +38,28 @@ archiving), renumbered at merge. Not applied to the shared database: his yes doe
 6. **A transfer or an expense entered by mistake is cancelled**, on a day chosen, by posting it
    again the other way round; it is never changed. The tax withheld goes back with it.
 7. **Transfers take their own number, TR-.** Expenses use the EX- series the product already had.
-8. **Refunds are not in this step.** Earlier notes left three to "Step 34": refunding a customer's
+8. **An accountant limited to some branches may pay an expense out of any of the company's cash
+   or bank accounts**, tagged with their branch, but sees no account's balance (they do not see
+   every posting to it) and moves no money between accounts. The other way would be accounts that
+   belong to a branch; say if you want that.
+9. **Refunds are not in this step.** Earlier notes left three to "Step 34": refunding a customer's
    advance (Step 32), a credit note's credit (Step 21) and a walk-in buyer's return (Step 22). The
    plan's line for this step does not name them, and each is a payment out against a customer's
    balance, which belongs with the receipts. They are listed below for a step of their own.
+
+## Review
+
+An independent review (2026-11-17) found the accounting right and these, fixed before the step went
+anywhere: the four audit actions were not protected (the reserving function had the wrong name);
+the archive guard stopped track A's receipts test, which archives an account as postgres; a
+cancellation could put money back into an archived account (it is now refused until the account is
+restored, and a posting holds its account so it cannot be archived meanwhile); members limited to
+some branches saw partial balances (now none) and every company transfer (now none); the last
+line's share of the province's tax could go below nil (shares are now rounded down and the paisa
+left over handed out by largest part cut off); an expense or transfer sent twice was recorded
+twice (the form now sends one key, and the second is the first). Not fixed here, being shared
+code: the chart of accounts screen says only "That did not work" when it is refused archiving a
+cash or bank account that holds money; the Cash and bank screen says it in words.
 
 ## For other steps
 

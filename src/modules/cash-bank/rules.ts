@@ -162,7 +162,7 @@ export type ExpenseFigures = {
   incomeTax: Decimal;
   withheld: Decimal;
   paid: Decimal;
-  /** Each line's share of the province's tax, in proportion, the last line taking what is left. */
+  /** Each line's share of the province's tax: rounded down to paisa, the paisa left over going one each to the lines with the largest part cut off. */
   shares: Decimal[];
 };
 
@@ -184,12 +184,26 @@ export function figureExpense(amounts: readonly Decimal[], provincialRate: Decim
     tax = paisa(base.times(rate).div(100));
   }
   const withheld = provincial.plus(tax);
-  const shares: Decimal[] = [];
-  let shared = new Decimal(0);
-  amounts.forEach((a, index) => {
-    const share = index === amounts.length - 1 ? provincial.minus(shared) : amount.isZero() ? new Decimal(0) : paisa(provincial.times(a).div(amount));
-    shared = shared.plus(share);
-    shares.push(share);
-  });
-  return { amount, provincial, total, incomeTax: tax, withheld, paid: total.minus(withheld), shares };
+  return { amount, provincial, total, incomeTax: tax, withheld, paid: total.minus(withheld), shares: shareOut(provincial, amounts) };
 }
+
+/**
+ * The province's tax shared over the lines in proportion: each share rounded down to paisa, and
+ * the paisa left over given one each to the lines with the largest part cut off, the first of
+ * equals first. No share is ever below nil, and they always add up to the tax.
+ */
+export function shareOut(tax: Decimal, amounts: readonly Decimal[]): Decimal[] {
+  const amount = amounts.reduce((sum, a) => sum.plus(a), new Decimal(0));
+  if (tax.isZero() || amount.isZero()) return amounts.map(() => new Decimal(0));
+  const exact = amounts.map((a) => tax.times(a).times(100).div(amount));
+  const cents = exact.map((e) => e.floor());
+  let spare = tax.times(100).round().minus(cents.reduce((sum, c) => sum.plus(c), new Decimal(0))).toNumber();
+  const order = exact.map((e, index) => ({ index, cut: e.minus(e.floor()) })).sort((a, b) => b.cut.comparedTo(a.cut) || a.index - b.index);
+  for (const { index } of order) {
+    if (spare <= 0) break;
+    cents[index] = cents[index].plus(1);
+    spare -= 1;
+  }
+  return cents.map((c) => c.div(100));
+}
+

@@ -65,6 +65,7 @@ export async function transferAction(_: FormState, formData: FormData): Promise<
       amount: formData.get("amount"),
       reference: formData.get("reference"),
       memo: formData.get("memo"),
+      clientKey: formData.get("clientKey"),
     }));
   } catch (error) {
     return refusal("record transfer", error);
@@ -102,6 +103,7 @@ export async function expenseAction(_: FormState, formData: FormData): Promise<F
       incomeTaxCode: formData.get("incomeTaxCode"),
       provincialTaxCode: formData.get("provincialTaxCode"),
       lines: accounts.map((accountId, index) => ({ accountId, description: descriptions[index], amount: amounts[index] })),
+      clientKey: formData.get("clientKey"),
     }));
   } catch (error) {
     return refusal("record expense", error);

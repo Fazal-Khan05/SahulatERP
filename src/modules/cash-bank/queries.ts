@@ -12,7 +12,14 @@ export function requireCashBank(ctx: TenantContext): void {
 
 const exact = (value: string | null) => new Decimal(value ?? "0");
 
-export type CashBankAccount = { id: string; code: string; name: string; kind: "cash" | "bank"; balance: Decimal; archived: boolean; bankName: string | null; accountNumber: string | null; updatedAt: string };
+export type CashBankAccount = {
+  id: string;
+  code: string;
+  name: string;
+  kind: "cash" | "bank";
+  /** What it holds; null for a member limited to some branches, who does not see every posting to it. */
+  balance: Decimal | null;
+  archived: boolean; bankName: string | null; accountNumber: string | null; updatedAt: string };
 
 /** The company's cash and bank accounts, those in use first, each with what it holds: everything ever posted to it. */
 export async function listCashBankAccounts(ctx: TenantContext): Promise<CashBankAccount[]> {
@@ -27,7 +34,8 @@ export async function listCashBankAccounts(ctx: TenantContext): Promise<CashBank
       where a.tenant_id = ${ctx.tenantId} and a.control_type in ('cash', 'bank') and not a.is_group
       order by a.archived_at is not null, a.control_type, a.code`),
   );
-  return rows.map((r) => ({ id: r.id, code: r.code, name: r.name, kind: r.kind, balance: exact(r.balance), archived: r.archived, bankName: r.bank_name, accountNumber: r.account_number, updatedAt: r.updated_at }));
+  const whole = ctx.branchIds === null;
+  return rows.map((r) => ({ id: r.id, code: r.code, name: r.name, kind: r.kind, balance: whole ? exact(r.balance) : null, archived: r.archived, bankName: r.bank_name, accountNumber: r.account_number, updatedAt: r.updated_at }));
 }
 
 export type TransferRow = { id: string; number: string; date: string; from: string; to: string; amount: Decimal; status: "posted" | "cancelled"; reference: string | null; memo: string | null };

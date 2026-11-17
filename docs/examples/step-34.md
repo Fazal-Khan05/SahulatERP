@@ -15,7 +15,8 @@ its suppliers (Purchases, settings):
 - The province's sales tax on services is charged on the lines at the province's rate (Punjab 16%,
   Sindh 15%; the withholding tables' line of that province on the expense's date), **added to the
   cost and withheld whole**, as Step 25 does for a service bill. Each line takes its share in
-  proportion, rounded to paisa, the last line taking what is left.
+  proportion, rounded down to paisa; the paisa left over go one each to the lines with the
+  largest part cut off (the first of equals first), so no share is ever below nil.
 - Income tax under s.153(1)(b), "any other service", is withheld on the gross (the lines and the
   province's tax) at 14% for a supplier on the Active Taxpayers List, 28% for one not on it, as
   recorded for the supplier on the day.
@@ -53,7 +54,8 @@ it is **16,240.00**; **24,240.00** is withheld; **33,760.00** leaves the bank.
 **15.00** each; **45.00** is withheld and **300.00** paid.
 
 **D.** Lines of 33.33, 33.33 and 33.34, Punjab: the tax is **16.00**; the shares are **5.33**,
-**5.33** and **5.34** (the last takes what is left).
+**5.33** and **5.34** (5.3328, 5.3328 and 5.3344 rounded down come to 15.99; the paisa left goes
+to the third, which had the most cut off).
 
 **E.** 15,000.00 moved from HBL to Petty cash: debit 1112 Petty cash 15,000.00, credit 1121 HBL
 15,000.00.

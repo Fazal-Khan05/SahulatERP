@@ -16,6 +16,7 @@ import { salesDocumentLinks } from "./schema";
 import { setTaxRate } from "@/modules/tax/commands";
 import type { TenantContext } from "@/modules/tenant/rules";
 import { adminSql, deleteTenants, hasAdminDb, type AdminSql } from "../../../tests/support/admin-db";
+import { enterSql } from "../../../tests/support/identity";
 import { NeedsReason, cancelSalesDocument, discardSalesDraft, orderFromQuotation, releaseSalesHold, saveSalesDraft, submitSalesDocument } from "./commands";
 import { getCustomerCredit, getLineDefaults, getSalesDocument, listOrdersOnHold, listSalesDocuments, listSalesPeople, searchItems } from "./queries";
 import type { RawDocument } from "./rules";
@@ -419,7 +420,7 @@ describe.skipIf(!hasDb)("quotations and sales orders", () => {
       codeOf(() =>
         getConnection().db.transaction(
           async (tx) => {
-            await tx.execute(sql`select set_config('app.user_id', ${userIds.salesperson}, true), set_config('app.tenant_id', ${tenantA}, true)`);
+            await tx.execute(sql`select ${enterSql(userIds.salesperson, tenantA)}`);
             await run(tx);
           },
           { isolationLevel: "repeatable read" },
@@ -474,7 +475,7 @@ describe.skipIf(!hasDb)("quotations and sales orders", () => {
       withTenant(userIds.accountant, tenantA, async (tx) => {
         await tx.execute(sql`update public.customers set updated_by = ${userIds.accountant} where id = ${khan}`);
         await tx.execute(sql`update public.customers c set updated_by = ${userIds.accountant},
-          credit_limit = case when c.id = ${khan} then 900000000 + length(set_config('app.tenant_id', ${tenantB}, true)) else c.credit_limit end
+          credit_limit = case when c.id = ${khan} then 900000000 + length(${enterSql(userIds.accountant, tenantB)}) else c.credit_limit end
           where c.id in (${city}, ${khan})`);
       }),
     );
@@ -488,8 +489,8 @@ describe.skipIf(!hasDb)("quotations and sales orders", () => {
         await tx.execute(sql`set local enable_hashjoin = off`);
         await tx.execute(sql`set local enable_mergejoin = off`);
         await tx.execute(sql`set local enable_material = off`);
-        await tx.execute(sql`update public.sales_documents d set updated_by = ${seller2}, salesperson_id = ${seller2}::uuid, notes = 'mine' || left(set_config('app.tenant_id', ${tenantA}, true), 0)
-          from (select * from (values (1, '00000000-0000-4000-8000-000000000000'::uuid, ''), (2, ${theirs.id}::uuid, set_config('app.tenant_id', ${tenantB}, true))) v(o, id, x) offset 0) v
+        await tx.execute(sql`update public.sales_documents d set updated_by = ${seller2}, salesperson_id = ${seller2}::uuid, notes = 'mine' || left(${enterSql(seller2, tenantA)}, 0)
+          from (select * from (values (1, '00000000-0000-4000-8000-000000000000'::uuid, ''), (2, ${theirs.id}::uuid, ${enterSql(seller2, tenantB)})) v(o, id, x) offset 0) v
           where d.tenant_id = ${tenantA} and d.id = v.id`);
       }),
     );

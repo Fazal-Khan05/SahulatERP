@@ -21,6 +21,15 @@ export const TRACK_NAMES = ["A", "B", "C", "joint"];
 export const SAFE_PATH_FROM = 23;
 const EMPTY_PATH = /search_path\s*(?:=|TO)\s*''/i;
 
+/**
+ * The migration that made the database ask for proof of who is signed in. It is found by its
+ * name, because its number changes if it is renumbered. After it, no migration reads or writes
+ * the two settings the app used to state that with: a function that still believed them would
+ * believe anyone. Ask app.current_user_id(), app.tenant_id() and the rest instead.
+ */
+export const IDENTITY_PROOF = /^\d{4}_identity_proof$/;
+const IDENTITY_SETTING = /\b(?:current_setting|set_config)\s*\(\s*'app\.(?:user_id|tenant_id)'/i;
+
 /** The four that only ask (drizzle/0019_journal_documents.sql). A track adds a function of its own instead. */
 export const NEVER_REWRITTEN = ["app.check_journal_backed", "app.seed_accounts", "app.next_document_number", "app.check_audit_row", "app.audit_action_reserved"];
 
@@ -146,6 +155,7 @@ export function checkMigrations({ journal, sql, down, snapshots, aside = false }
   // ── from the first tracked migration on: whose it is, and what it may write out again ───────
   /** @type {Map<string, { tag: string, idx: number, track: string | null }>} */
   const lastWriter = new Map();
+  const proofAt = journal.find((entry) => IDENTITY_PROOF.test(entry.tag))?.idx;
   for (const entry of journal) {
     const text = sql[entry.tag];
     if (text === undefined) continue;
@@ -154,6 +164,9 @@ export function checkMigrations({ journal, sql, down, snapshots, aside = false }
     const track = tracked ? (trackOf(text) ?? "joint") : null;
     if (tracked && !TRACK_NAMES.includes(track)) {
       problems.push(`${entry.tag}: its opening comment names a track that does not exist ("${track}"). Use "-- track: A", "-- track: B" or "-- track: C", or leave the line out when the work is not split.`);
+    }
+    if (proofAt !== undefined && entry.idx > proofAt && IDENTITY_SETTING.test(code(text))) {
+      problems.push(`${entry.tag}: reads or writes the setting app.user_id or app.tenant_id. Since ${journal[proofAt].tag} the database asks for proof of who is signed in and those settings mean nothing: ask app.current_user_id(), app.tenant_id(), app.tenant_role() or app.tenant_branch_ids() instead.`);
     }
     if (entry.idx >= SAFE_PATH_FROM && EMPTY_PATH.test(code(text))) {
       problems.push(`${entry.tag}: gives a function an empty search path (SET search_path = ''). Write SET search_path = pg_catalog, pg_temp instead; drizzle/0023_safe_search_path.sql says why.`);

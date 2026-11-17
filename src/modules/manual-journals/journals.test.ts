@@ -9,6 +9,7 @@ import { openFiscalYear, setPeriodLocked } from "@/modules/numbering/commands";
 import { listFiscalPeriods, listNumberSeries } from "@/modules/numbering/queries";
 import type { TenantContext } from "@/modules/tenant/rules";
 import { adminSql, deleteTenants, hasAdminDb, type AdminSql } from "../../../tests/support/admin-db";
+import { enterSql } from "../../../tests/support/identity";
 import { discardDraft, postManualJournal, reverseManualJournal, saveDraft } from "./commands";
 import { getManualJournal, listManualJournals } from "./queries";
 import { manualJournalLines, manualJournals } from "./schema";
@@ -263,12 +264,12 @@ describe.skipIf(!hasDb)("manual journals", () => {
     const trick = (statement: ReturnType<typeof sql>) => codeOf(() => withTenant(userIds.owner, tenantA, (tx) => tx.execute(statement)));
     expect(
       await trick(sql`update public.manual_journals
-        set memo = case when id = ${second.id} and set_config('app.tenant_id', '', true) = '' then 'Slipped' else 'Slipped' end, updated_by = ${userIds.owner}
+        set memo = case when id = ${second.id} and ${enterSql(userIds.owner, null)} = '' then 'Slipped' else 'Slipped' end, updated_by = ${userIds.owner}
         where tenant_id = ${tenantA} and id in (${draft.id}, ${second.id})`),
     ).toBe(DENIED);
     expect(
       await trick(sql`insert into public.manual_journal_lines (tenant_id, manual_journal_id, line_no, account_id, debit, created_by)
-        select ${tenantA}, v.journal, 9, ${account("5230")}, case when v.n = 2 and set_config('app.tenant_id', '', true) = '' then 1 else 1 end, ${userIds.owner}
+        select ${tenantA}, v.journal, 9, ${account("5230")}, case when v.n = 2 and ${enterSql(userIds.owner, null)} = '' then 1 else 1 end, ${userIds.owner}
         from (values (${draft.id}::uuid, 1), (${posted.id}::uuid, 2)) as v(journal, n)`),
     ).toBe(DENIED);
     expect((await getManualJournal(as.owner, posted.id))?.lines).toHaveLength(2);

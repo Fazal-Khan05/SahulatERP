@@ -101,7 +101,7 @@ export async function loadWorkspace(userId: string, preferredTenantId: string | 
     if (!membership) return { memberships: all, active: null };
 
     if (membership.tenantId !== preferred) {
-      await enterTenant(tx, membership.tenantId);
+      await enterTenant(tx, userId, membership.tenantId);
       [saved, switches] = await Promise.all([
         selectBranding(tx, membership.tenantId),
         selectSwitches(tx, membership.tenantId),

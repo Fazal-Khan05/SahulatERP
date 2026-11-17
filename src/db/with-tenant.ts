@@ -19,7 +19,18 @@ export function isUuid(value: unknown): value is string {
  */
 async function enter(tx: Tx, userId: string, tenantId: string | null): Promise<void> {
   const proof = identityProof(userId, tenantId);
-  await tx.execute(sql`select app.enter(${userId}::uuid, ${tenantId}::uuid, ${proof.expires}::bigint, ${proof.signature}::text)`);
+  try {
+    await tx.execute(sql`select app.enter(${userId}::uuid, ${tenantId}::uuid, ${proof.expires}::bigint, ${proof.signature}::text)`);
+  } catch (error) {
+    // Drizzle's error carries the statement's parameters in its message, and this statement's
+    // include a signature that is good for a few minutes. It must not reach a log. What is
+    // thrown instead says what the database said, and no more.
+    // (The driver's own error, when there is one, is the cause; its message is the database's.)
+    const cause = (error as { cause?: { code?: string; message?: string } }).cause;
+    const refused = new Error(`The database did not accept who is signed in${cause?.message ? `: ${cause.message}` : "."}`) as Error & { code?: string };
+    refused.code = cause?.code ?? (error as { code?: string }).code;
+    throw refused;
+  }
 }
 
 /**

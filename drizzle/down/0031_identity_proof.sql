@@ -57,7 +57,9 @@ CREATE OR REPLACE FUNCTION app.member_tenant_ids() RETURNS SETOF uuid
 
 DROP FUNCTION app.identity_now();
 DROP FUNCTION app.enter(uuid, uuid, bigint, text);
+DROP FUNCTION app.identity_proof_wanted();
 DROP TABLE app.identity_sessions;
+DROP SEQUENCE app.identity_proof_flag;
 DROP TABLE app.identity_keys;
 
 -- The row drizzle-kit wrote for 0031_identity_proof (its "when" in drizzle/meta/_journal.json).

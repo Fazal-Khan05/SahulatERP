@@ -38,9 +38,23 @@
 -- deployed, and lets a development database run without a secret. Installing the key is the
 -- moment the proof becomes required; from then on the two settings mean nothing.
 --
+-- "Is a key installed?" is answered from a flag that is not part of any transaction's picture
+-- of the database (a sequence), as well as from the keys themselves. A transaction that was
+-- already open when the key went in sees no key in its own picture; without the flag it would
+-- go on being believed for as long as it stayed open, and could lend its picture to others
+-- (found by this migration's reviewer, 2026-11-17). With the flag it sees that a proof is
+-- wanted, finds no key to check one against, and is refused.
+--
 -- The signature is passed as a bind parameter, never written into the statement: a session can
 -- see the text of other sessions' statements of the same role (pg_stat_activity), but not their
 -- parameters.
+--
+-- Known and accepted (docs/later/preparation.md has each with what to do about it):
+--   * Whoever can read every table of the database can read the key: the owner, Supabase's own
+--     administration roles, and the read-only user the Supabase tools connect as. The key is of
+--     use only together with a way to run SQL as the app's role.
+--   * Every transaction of the app now writes one small row, so the app cannot read in a
+--     read-only transaction or from a read-only copy of the database.
 
 -- The secret, as the two padded halves HMAC needs (the key XOR 0x36 and XOR 0x5c, 64 bytes
 -- each), so that the check needs only the built-in sha256 and no extension. Two slots, so a
@@ -54,7 +68,23 @@ CREATE TABLE app.identity_keys (
 --> statement-breakpoint
 ALTER TABLE app.identity_keys ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
-REVOKE ALL ON TABLE app.identity_keys FROM PUBLIC, app_runtime, anon, authenticated;
+REVOKE ALL ON TABLE app.identity_keys FROM PUBLIC, app_runtime, anon, authenticated, service_role;
+--> statement-breakpoint
+
+-- 1 while no key is installed, 2 from the moment one is (npm run db:identity sets it). A
+-- sequence, because its value is the same for every transaction however long ago it began.
+CREATE SEQUENCE app.identity_proof_flag AS smallint MINVALUE 1 MAXVALUE 2 START 1 NO CYCLE;
+--> statement-breakpoint
+REVOKE ALL ON SEQUENCE app.identity_proof_flag FROM PUBLIC, app_runtime, anon, authenticated, service_role;
+--> statement-breakpoint
+
+-- Does this database want the proof? Yes once the flag is up, and yes if a key can be seen.
+-- For app.enter and app.identity_now() only.
+CREATE FUNCTION app.identity_proof_wanted() RETURNS boolean
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+  AS $$ SELECT (SELECT f.last_value FROM app.identity_proof_flag f) > 1 OR EXISTS (SELECT 1 FROM app.identity_keys) $$;
+--> statement-breakpoint
+REVOKE ALL ON FUNCTION app.identity_proof_wanted() FROM PUBLIC;
 --> statement-breakpoint
 
 -- Who each open transaction is. One row for each database connection, written over at the
@@ -69,7 +99,7 @@ CREATE UNLOGGED TABLE app.identity_sessions (
 --> statement-breakpoint
 ALTER TABLE app.identity_sessions ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
-REVOKE ALL ON TABLE app.identity_sessions FROM PUBLIC, app_runtime, anon, authenticated;
+REVOKE ALL ON TABLE app.identity_sessions FROM PUBLIC, app_runtime, anon, authenticated, service_role;
 --> statement-breakpoint
 
 -- Says who this transaction is, and moves it to another company when called again. Returns the
@@ -86,7 +116,7 @@ BEGIN
   IF p_user IS NULL THEN
     RAISE EXCEPTION 'who is signed in is needed' USING ERRCODE = 'invalid_parameter_value';
   END IF;
-  IF EXISTS (SELECT 1 FROM app.identity_keys) THEN
+  IF app.identity_proof_wanted() THEN
     IF p_expires IS NULL OR p_signature IS NULL OR p_signature !~ '^[0-9a-f]{64}$' THEN
       RAISE EXCEPTION 'the proof of who is signed in is missing' USING ERRCODE = 'insufficient_privilege';
     END IF;
@@ -121,6 +151,10 @@ GRANT EXECUTE ON FUNCTION app.enter(uuid, uuid, bigint, text) TO app_runtime;
 -- Who this transaction is: the row app.enter wrote for it. Without one, and only while no key
 -- is installed, the two settings, as before this migration. Always one row; both columns null
 -- for nobody. For the five functions below only: nobody else may call it.
+--
+-- The settings are looked at only when they are to be believed, and only if they have the
+-- shape of an id: a session that left rubbish in one must not break the transactions that
+-- follow it on the same connection.
 CREATE FUNCTION app.identity_now() RETURNS TABLE (user_id uuid, tenant_id uuid)
   LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
   AS $$
@@ -129,9 +163,10 @@ CREATE FUNCTION app.identity_now() RETURNS TABLE (user_id uuid, tenant_id uuid)
     FROM (SELECT 1) one
     LEFT JOIN app.identity_sessions s ON s.pid = pg_backend_pid() AND s.xid = pg_current_xact_id_if_assigned()
     LEFT JOIN LATERAL (
-      SELECT nullif(current_setting('app.user_id', true), '')::uuid AS user_id,
-             nullif(current_setting('app.tenant_id', true), '')::uuid AS tenant_id
-      WHERE s.pid IS NULL AND NOT EXISTS (SELECT 1 FROM app.identity_keys)
+      SELECT CASE WHEN v.user_id ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' THEN v.user_id::uuid END AS user_id,
+             CASE WHEN v.tenant_id ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' THEN v.tenant_id::uuid END AS tenant_id
+      FROM (SELECT current_setting('app.user_id', true) AS user_id, current_setting('app.tenant_id', true) AS tenant_id) v
+      WHERE s.pid IS NULL AND NOT app.identity_proof_wanted()
     ) f ON true
   $$;
 --> statement-breakpoint
@@ -191,16 +226,18 @@ CREATE OR REPLACE FUNCTION app.member_tenant_ids() RETURNS SETOF uuid
   $$;
 --> statement-breakpoint
 
--- The app's roles must have no way to the secret or to the record of who each transaction is,
--- and no way to ask app.identity_now() themselves.
+-- The app's roles and the Data API's roles must have no way to the secret, to the flag or to
+-- the record of who each transaction is, and no way to ask the two inner functions themselves.
 DO $check$
 DECLARE
   r text;
 BEGIN
-  FOREACH r IN ARRAY ARRAY['app_runtime', 'anon', 'authenticated'] LOOP
+  FOREACH r IN ARRAY ARRAY['app_runtime', 'anon', 'authenticated', 'service_role'] LOOP
     IF pg_catalog.has_table_privilege(r, 'app.identity_keys', 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE')
        OR pg_catalog.has_table_privilege(r, 'app.identity_sessions', 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE')
-       OR pg_catalog.has_function_privilege(r, 'app.identity_now()', 'EXECUTE') THEN
+       OR pg_catalog.has_sequence_privilege(r, 'app.identity_proof_flag', 'USAGE, SELECT, UPDATE')
+       OR pg_catalog.has_function_privilege(r, 'app.identity_now()', 'EXECUTE')
+       OR pg_catalog.has_function_privilege(r, 'app.identity_proof_wanted()', 'EXECUTE') THEN
       RAISE EXCEPTION '% can reach the proof of who is signed in', r;
     END IF;
   END LOOP;

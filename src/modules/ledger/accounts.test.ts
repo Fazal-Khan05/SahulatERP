@@ -282,6 +282,15 @@ describe.skipIf(!hasDb)("the chart of accounts", () => {
         (tx) => tx`app.enter(${seller}::uuid, ${tenantC}::uuid, ${proof.expires}::bigint, ${proof.signature}::text)`,
       );
       expect(proven).toEqual({ plain: 0, tricked: 0 });
+      // The same statement by someone who may read the chart reads all of it: nothing above
+      // came back empty because the statement itself reads nothing.
+      const ownerMove = identityProof(userIds.owner, tenantA);
+      const allowed = await read(
+        (tx) => enterAs(tx, userIds.owner, tenantA),
+        (tx) => tx`app.enter(${userIds.owner}::uuid, ${tenantA}::uuid, ${ownerMove.expires}::bigint, ${ownerMove.signature}::text)`,
+      );
+      expect(allowed.plain).toBeGreaterThan(50);
+      expect(allowed.tricked).toBe(allowed.plain);
       // The old way, by the two settings. With a key installed they mean nothing. Without one
       // (a development database) they are still believed, and this is the hole as it was: it
       // shows that the statement above is a real attempt and not one that would read nothing anyway.

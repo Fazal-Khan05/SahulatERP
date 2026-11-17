@@ -3,6 +3,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { identityMessage, identityProof } from "./identity-proof";
+import { enterTenant, type Tx } from "./with-tenant";
 
 // The proof of who is signed in, as the web app makes it. What the database does with it is in
 // src/modules/tenant/policies.test.ts and src/modules/ledger/accounts.test.ts.
@@ -49,6 +50,32 @@ describe("the proof of who is signed in", () => {
       process.env.IDENTITY_SIGNING_SECRET = bad;
       expect(() => identityProof(USER, TENANT), bad).toThrow("IDENTITY_SIGNING_SECRET must be 64 lower-case hexadecimal characters");
     }
+  });
+
+  it("keeps the signature out of the error when the database refuses it", async () => {
+    process.env.IDENTITY_SIGNING_SECRET = SECRET;
+    // Drizzle's error for a failed statement, as it comes: the parameters are in its message.
+    let sent: unknown[] = [];
+    const tx = {
+      execute: async (statement: { queryChunks: unknown[] }) => {
+        sent = statement.queryChunks.filter((chunk) => typeof chunk === "string" || typeof chunk === "number");
+        throw Object.assign(new Error(`Failed query: select app.enter($1::uuid, $2::uuid, $3::bigint, $4::text)\nparams: ${sent.join(",")}`), {
+          cause: Object.assign(new Error("the proof of who is signed in is out of date"), { code: "42501" }),
+        });
+      },
+    } as unknown as Tx;
+    const error = await enterTenant(tx, USER, TENANT).then(
+      () => null,
+      (e: Error & { code?: string }) => e,
+    );
+    const signature = sent.find((value) => typeof value === "string" && /^[0-9a-f]{64}$/.test(value)) as string;
+    expect(signature).toMatch(/^[0-9a-f]{64}$/);
+    expect(error?.message).toBe("The database did not accept who is signed in: the proof of who is signed in is out of date");
+    expect(error?.code).toBe("42501");
+    expect(JSON.stringify({ message: error?.message, stack: error?.stack, cause: (error as { cause?: unknown } | null)?.cause ?? null })).not.toContain(signature);
+    // An error with no cause to quote says nothing of the statement either.
+    const bare = { execute: async () => { throw new Error(`Failed query\nparams: ${signature}`); } } as unknown as Tx;
+    expect(await enterTenant(bare, USER, TENANT).then(() => null, (e: Error) => e.message)).toBe("The database did not accept who is signed in.");
   });
 
   it("is the only way the code says who a transaction is", () => {

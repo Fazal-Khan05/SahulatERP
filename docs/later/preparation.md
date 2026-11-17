@@ -7,11 +7,40 @@
   it was and the fix as it was planned; it was built that way, with three differences: the
   signature covers the user, the company and an expiry time but not the transaction's id (the
   app would need one more round trip to learn it; the signature is passed as a parameter, which
-  other sessions cannot read, so there is nothing to replay); the record is a row for each
+  other sessions cannot read, and is kept out of the app's own error messages, so a session of
+  the app's role has nothing to replay); the record is a row for each
   database connection in `app.identity_sessions`; and the check needs no extension (the key is
   stored as the two halves HMAC hashes with). It also closes the Step 25 reviewer's finding
   (one statement answered for two companies, `docs/later/step-25.md`), because the functions
   that answer are STABLE and see the record only as it was when the statement began.
+
+  It was reviewed by an independent reviewer on 2026-11-17, who tried it as a member with SQL of
+  their own on a database with a key installed and could not act as another user, nor have one
+  statement answered for two companies (materialised CTEs, cursors, DO blocks, savepoints). What
+  the review did find was put right before the migration went anywhere: a transaction open since
+  before the key was installed went on being believed (now a flag every transaction sees at
+  once, `app.identity_proof_flag`); rubbish left in the old settings broke the connection's
+  later transactions; `service_role` was not shut out by name; and the app's error for a
+  refused proof carried the signature in its text.
+
+  Known and accepted, from the same review:
+  - **Whoever can read every table can read the key**: `postgres`, Supabase's own roles, and
+    `supabase_read_only_user`, which the Supabase tools connect as (the shared project was
+    checked on 2026-11-17). The key is of use only together with a way to run SQL as the app's
+    role. Never select from `app.identity_keys` through the Supabase tools or in a chat: the two
+    halves in it are as good as the secret. A backup of the database carries it too.
+  - **The app cannot read in a read-only transaction**, because saying who it is writes a row.
+    So no read-only copy of the database for reports, and if Supabase turns a full database
+    read-only the app shows nothing instead of reading. Weigh with Step 51.
+  - **Speed.** A lookup of who is asking took about 17 millionths of a second on the reviewer's
+    machine. While some other session holds an old picture of the database (a backup, a long
+    report), the row of each connection cannot be tidied and lookups slow down: about 19 times
+    after 20,000 transactions on one connection, back to normal when the picture is let go.
+    Every transaction, a page that only reads included, now uses up a transaction number. If
+    this ever shows, keep one row for each transaction instead of one for each connection, and
+    give the app's role a limit on idle transactions (the item on time limits, below).
+  - **`npm run check` catches the plain cases only**: a migration or a file that writes the
+    settings by name. It reads text; it is a reminder, not a guarantee.
 
   What is left, for Step 47:
   - **A database with no key installed still takes the app's word**, by the two settings or by

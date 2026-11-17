@@ -60,9 +60,11 @@ if (action === "generate") {
 } else if (action === "status") {
   const { sql, name } = database();
   const keys = await sql`select slot, inner_key, outer_key, created_at from app.identity_keys order by slot`;
+  const [{ flag }] = await sql`select last_value::int as flag from app.identity_proof_flag`;
   await sql.end();
   const secret = secretFromEnv();
   console.log(`Database: ${name}`);
+  if ((flag > 1) !== (keys.length > 0)) console.log(`WARNING: the flag says a proof is ${flag > 1 ? "wanted" : "not wanted"}, but ${keys.length} key(s) are installed. Run install (or remove) again to put the two in step.`);
   console.log(keys.length === 0 ? "No key installed: this database takes the app's word for who is signed in." : `Key installed (slot ${keys.map((k) => k.slot).join(" and ")}): this database wants the proof.`);
   if (!secret) {
     console.log(`${NAME} is not set here${keys.length ? ": an app started with these settings would be shown nothing." : "."}`);
@@ -84,6 +86,7 @@ if (action === "generate") {
   }
   const keys = await sql`select slot, inner_key, outer_key from app.identity_keys order by slot`;
   if (keys.some((k) => Buffer.compare(k.inner_key, mine.inner) === 0 && Buffer.compare(k.outer_key, mine.outer) === 0)) {
+    await sql`select setval('app.identity_proof_flag', 2)`;
     console.log(`Database ${name}: this key is already installed. Nothing changed.`);
   } else {
     const slot = [1, 2].find((n) => !keys.some((k) => k.slot === n));
@@ -92,6 +95,8 @@ if (action === "generate") {
       fail(`Database ${name}: both slots hold other keys. Remove the old one first ("npm run db:identity -- remove <slot> --yes").`);
     }
     await sql`insert into app.identity_keys (slot, inner_key, outer_key) values (${slot}, ${mine.inner}, ${mine.outer})`;
+    // The flag every transaction sees at once, also one that was open before the key went in.
+    await sql`select setval('app.identity_proof_flag', 2)`;
     console.log(`Database ${name}: key installed in slot ${slot}. From now on this database wants the proof of who is signed in.`);
   }
   await sql.end();
@@ -101,6 +106,7 @@ if (action === "generate") {
   const { sql, name } = database();
   const gone = await sql`delete from app.identity_keys where slot = ${slot} returning slot`;
   const [{ left }] = await sql`select count(*)::int as left from app.identity_keys`;
+  if (left === 0) await sql`select setval('app.identity_proof_flag', 1)`;
   await sql.end();
   console.log(gone.length === 0 ? `Database ${name}: slot ${slot} was empty.` : `Database ${name}: key removed from slot ${slot}. ${left === 0 ? "No key is left: this database takes the app's word again." : "One key is still installed."}`);
 } else {

@@ -305,12 +305,17 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
     expect(await attempt("update app.identity_sessions set user_id = user_id")).toBe(DENIED);
     expect(await attempt("delete from app.identity_keys")).toBe(DENIED);
     expect(await attempt("select * from app.identity_now()")).toBe(DENIED);
+    expect(await attempt("select app.identity_proof_wanted()")).toBe(DENIED);
+    expect(await attempt("select setval('app.identity_proof_flag', 1)")).toBe(DENIED);
+    expect(await attempt("select last_value from app.identity_proof_flag")).toBe(DENIED);
     const [reach] = await admin`
       select bool_or(has_table_privilege(r, 'app.identity_keys', 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER')
                   or has_table_privilege(r, 'app.identity_sessions', 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER')
+                  or has_sequence_privilege(r, 'app.identity_proof_flag', 'USAGE, SELECT, UPDATE')
+                  or has_function_privilege(r, 'app.identity_proof_wanted()', 'EXECUTE')
                   or has_function_privilege(r, 'app.identity_now()', 'EXECUTE')) as any,
              bool_or(has_function_privilege(r, 'app.enter(uuid, uuid, bigint, text)', 'EXECUTE')) filter (where r <> 'app_runtime') as others_enter
-      from unnest(array['app_runtime', 'anon', 'authenticated', 'public']) r`;
+      from unnest(array['app_runtime', 'anon', 'authenticated', 'service_role', 'public']) r`;
     expect({ ...reach }).toEqual({ any: false, others_enter: false });
   });
 
@@ -335,6 +340,68 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
     } finally {
       await direct.end();
     }
+  });
+
+  it("is not put off by rubbish a session left in the old settings", async () => {
+    // A setting made for the whole session stays on a pooled connection for whoever comes next.
+    const direct = postgres(process.env.DATABASE_URL!, { max: 1 });
+    try {
+      await direct`select set_config('app.user_id', 'not an id', false), set_config('app.tenant_id', 'x', false)`;
+      const proven = await direct.begin(async (tx) => {
+        await enterAs(tx, ownerA, tenantA);
+        return (await tx`select app.current_user_id() as "user", app.tenant_role() as role`)[0];
+      });
+      expect({ ...proven }).toEqual({ user: ownerA, role: "owner" });
+      const unproven = await direct.begin(async (tx) => (await tx`select app.current_user_id() as "user", app.tenant_id() as tenant, (select count(*)::int from public.branches) as branches`)[0]);
+      expect({ ...unproven }).toEqual({ user: null, tenant: null, branches: 0 });
+    } finally {
+      await direct.end();
+    }
+  });
+
+  // Found by the reviewer of drizzle/0031_identity_proof.sql: a transaction that was open before
+  // the key went in sees no key in its own picture of the database, and would have gone on being
+  // believed. This installs and removes a key for real, so it runs on a local database only: on
+  // a hosted one it would shut the app out for a moment, and for good if it stopped half-way.
+  const local = hasDb && new URL(process.env.MIGRATION_DATABASE_URL!).hostname === "127.0.0.1";
+  it.skipIf(!local)("stops believing a transaction that was open before the key was installed", async () => {
+    const [{ keyed }] = await admin<{ keyed: boolean }[]>`select app.identity_proof_wanted() as keyed`;
+    if (keyed) return; // This database already wants the proof: there is no "before" to test.
+    const secret = randomBytes(32);
+    const padded = Buffer.concat([secret, Buffer.alloc(32)]);
+    const old = postgres(process.env.DATABASE_URL!, { max: 1 });
+    const borrower = postgres(process.env.DATABASE_URL!, { max: 1 });
+    const who = (tx: postgres.TransactionSql) => tx`select app.current_user_id() as "user", app.tenant_role() as role, (select count(*)::int from public.branches) as branches`.then((rows) => ({ ...rows[0] }));
+    const seen: Record<string, unknown> = {};
+    try {
+      await old.begin("isolation level repeatable read", async (tx) => {
+        // Believed, as any transaction is while no key is installed; and its picture is lent out.
+        await tx`select set_config('app.user_id', ${ownerA}, true), set_config('app.tenant_id', ${tenantA}, true)`;
+        seen.before = await who(tx);
+        const [{ snapshot }] = await tx<{ snapshot: string }[]>`select pg_export_snapshot() as snapshot`;
+        await admin`insert into app.identity_keys (slot, inner_key, outer_key) values (2, ${Buffer.from(padded.map((b) => b ^ 0x36))}, ${Buffer.from(padded.map((b) => b ^ 0x5c))})`;
+        await admin`select setval('app.identity_proof_flag', 2)`;
+        // The same transaction, after the key: by the settings, and by an unsigned app.enter.
+        seen.after = await who(tx);
+        seen.unsigned = await tx.savepoint((sp) => sp`select app.enter(${ownerA}::uuid, ${tenantA}::uuid, 0, '')`).then(() => undefined, (error: { code?: string }) => error.code);
+        // Another session that borrows the old picture.
+        seen.borrowed = await borrower.begin("isolation level repeatable read", async (other) => {
+          await other.unsafe(`set transaction snapshot '${snapshot.replace(/[^0-9A-Fa-f-]/g, "")}'`);
+          await other`select set_config('app.user_id', ${ownerA}, true), set_config('app.tenant_id', ${tenantA}, true)`;
+          return who(other);
+        });
+      });
+    } finally {
+      await admin`delete from app.identity_keys where slot = 2`;
+      await admin`select setval('app.identity_proof_flag', 1)`;
+      await old.end();
+      await borrower.end();
+    }
+    const nobody = { user: null, role: null, branches: 0 };
+    expect(seen.before).toMatchObject({ user: ownerA, role: "owner" });
+    expect(seen.after).toEqual(nobody);
+    expect(seen.unsigned).toBe(DENIED);
+    expect(seen.borrowed).toEqual(nobody);
   });
 
   it("lets an owner add a branch and writes the audit row in the same transaction", async () => {

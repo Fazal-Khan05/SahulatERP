@@ -81,9 +81,59 @@ Nobody was asked these. Each is the option I would recommend; say if any should 
 11. **Only goods are returned here.** A supplier's credit note for a service or an expense, or
     a price reduction with no goods going back, is not built yet.
 
-## The independent review
+## The independent review (2026-11-17)
 
-To be written when the review is back.
+A reviewer who had not seen the work attacked the migration as a signed-in member running any
+SQL as the app's database role, on a database of its own, with real sessions racing each other
+and two runs of several hundred mixed operations. After every sequence it checked that every
+journal balanced, the stock account was what the stock is worth, Goods received not invoiced
+was what is waiting for a bill, what is owed to each supplier was its bills less payments and
+returns, and nothing was returned, billed or settled past what there was.
+
+**It found one serious hole, which is not in this step alone.** Put right here; the rest is
+with the coordinator:
+
+- **A line could be slipped into a posted document.** Every document's lines are guarded by a
+  check that first looks the document up and holds it. If one session removes a draft and
+  writes it again under the same id, and posts it, while another session's new line is waiting,
+  the waiting line's check finds nothing where the draft was and used to let the line through
+  unchecked ("a line of no document is left for the foreign key to refuse"); the line then
+  landed in the posted document. With this, the reviewer added a line of other goods to a
+  posted return; and, **through the same gap in Steps 25 and 26, which are already on main**, a
+  line of Rs 1,000,000 to a posted Rs 1 bill, whose "return" then gave a credit that settled
+  real bills, and an allocation to a posted payment. It needs an owner or an accountant running
+  their own SQL in two sessions at once; it cannot be done from the screens.
+  **Fixed in this migration**: a line is never written into a return its check has not seen and
+  held; it is refused there instead. A test now runs the race and expects the refusal. The
+  same change is needed in the guards of earlier steps (track B's: stock documents, purchase
+  orders and goods received, bills, payments; and other tracks' receipts and sales documents):
+  reported to the coordinator on 2026-11-17, who decides how they are fixed.
+
+Three smaller things, all put right:
+
+- A return's credit could be set against one bill twice in one go by typing the bill's id two
+  ways. The amounts were still held to what was owed and what was left, so no money moved
+  wrongly. The same in Step 26's advances. Both now compare the ids themselves.
+- A credit could be set against a bill on a day in a locked period. Refused now.
+- Posting a return while another session deletes one of its lines can end with the database
+  stopping one of the two ("try again"). Nothing is left half done. Left as it is.
+
+What it tried that held: sending back more than was received, than is unbilled, than a bill
+billed; the same goods on two returns or twice on one; quantities that are negative, nil, not
+a number or too fine; lines of another note, supplier, branch or company, of a draft bill or
+an expense line; a return against a bill and a billed return against a payment at the same
+moment, both ways round; the same credit twice; a credit past what is left or owed, to another
+supplier's bill; writing a return's status, number, journal or figures, its lines' figures,
+what a credit was set against, the audit rows, the journals and stock moves, past the
+functions; every role and branch that should not read; rounding (a line sent back and billed
+in odd parts clears to exactly nothing). The change to posting a bill is exactly the two marked
+lines. The reverse file puts everything back, byte for byte, and refuses once a return is
+posted.
+
+It judged every entry consistent, and repeated one doubt in stronger words: for a bill that
+is **not yet paid**, leaving the tax withheld on goods that then all go back is wrong in
+substance (the company would owe the tax office tax on a purchase it never paid for). It is
+the fifth point below.
 
 ## For a tax adviser
 

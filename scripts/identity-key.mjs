@@ -3,7 +3,7 @@
 // npm run db:identity -- install
 // npm run db:identity -- remove <slot> --yes
 //
-// The secret behind the proof of who is signed in (drizzle/0030_identity_proof.sql). The web app
+// The secret behind the proof of who is signed in (drizzle/0031_identity_proof.sql). The web app
 // signs with IDENTITY_SIGNING_SECRET; the database checks with the same secret, kept in
 // app.identity_keys where the app's role cannot read it. Until a key is installed in a database,
 // that database takes the app's word, as it did before.

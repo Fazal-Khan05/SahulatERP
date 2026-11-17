@@ -2,7 +2,32 @@
 
 ## Later
 
-- **Who is signed in is taken on trust inside the database (for Step 47).** Tried on a local
+- **Who is signed in is now proven to the database** (`drizzle/0031_identity_proof.sql`, built on
+  2026-11-17 at the founder's word, ahead of Step 47). The item below describes the weakness as
+  it was and the fix as it was planned; it was built that way, with three differences: the
+  signature covers the user, the company and an expiry time but not the transaction's id (the
+  app would need one more round trip to learn it; the signature is passed as a parameter, which
+  other sessions cannot read, so there is nothing to replay); the record is a row for each
+  database connection in `app.identity_sessions`; and the check needs no extension (the key is
+  stored as the two halves HMAC hashes with). It also closes the Step 25 reviewer's finding
+  (one statement answered for two companies, `docs/later/step-25.md`), because the functions
+  that answer are STABLE and see the record only as it was when the statement began.
+
+  What is left, for Step 47:
+  - **A database with no key installed still takes the app's word**, by the two settings or by
+    an unsigned `app.enter`. That is what let the migration go in before the new app was
+    deployed, and lets a development database run without a secret. Once every database the
+    tests use has a key (`npm run db:identity`), take the fallback out of `app.identity_now()`
+    and refuse an unsigned `app.enter` outright.
+  - **Going live** (Step 51): the deployed app needs `IDENTITY_SIGNING_SECRET` and the database
+    the same key installed, in that order; `npm run db:identity -- status` says whether they
+    match. A deployment without the secret is shown nothing.
+  - **A stolen copy of the web app's settings** holds the signing secret as well as the database
+    password, as before. Closing that means the database checking the member's own sign-in token.
+  - **Changing the key**: install the new one in the second slot, give the app the new secret,
+    redeploy, then remove the old slot.
+
+- **Who is signed in was taken on trust inside the database (as it was until 2026-11-17).** Tried on a local
   database on 2026-11-13: a session connected as `app_runtime` ran
   `set_config('app.user_id', <the owner's id>, true)` and from then on read and wrote as the
   owner.

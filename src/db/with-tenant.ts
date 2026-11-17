@@ -13,7 +13,7 @@ export function isUuid(value: unknown): value is string {
 
 /**
  * Tells the database who this transaction is and which company it is in, with the proof that
- * app.enter() checks (drizzle/0030_identity_proof.sql). The values go as parameters, never into
+ * app.enter() checks (drizzle/0031_identity_proof.sql). The values go as parameters, never into
  * the statement's text: other sessions of the app's role can read each other's statements, and
  * the signature must not be among what they see.
  */

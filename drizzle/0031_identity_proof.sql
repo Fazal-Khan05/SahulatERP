@@ -2,7 +2,7 @@
 -- track: joint
 --
 -- Hand-written; nothing here is managed by Drizzle. Two small tables in schema app, no change to
--- any company table, no data changes. Reverse with drizzle/down/0030_identity_proof.sql.
+-- any company table, no data changes. Reverse with drizzle/down/0031_identity_proof.sql.
 --
 -- Until now the web app told the database who was signed in by writing two settings at the start
 -- of each transaction (app.user_id, app.tenant_id), and five functions read them. Any session of

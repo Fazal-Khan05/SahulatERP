@@ -230,7 +230,7 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
     expect(unsafe.map((f) => `${f.fn}: ${f.has}`)).toEqual([]);
   });
 
-  // drizzle/0030_identity_proof.sql. The app used to tell the database who was signed in by
+  // drizzle/0031_identity_proof.sql. The app used to tell the database who was signed in by
   // writing two settings, which any session of the app's role can write. The database now wants
   // a signature made with a secret it shares with the web app. The key is put in here inside one
   // transaction that is rolled back, so no other test and no other session ever sees it; that

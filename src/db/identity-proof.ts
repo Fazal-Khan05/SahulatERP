@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 
-// The proof of who is signed in that app.enter() checks (drizzle/0030_identity_proof.sql). The
+// The proof of who is signed in that app.enter() checks (drizzle/0031_identity_proof.sql). The
 // database does not take the app's word for it: it wants a signature made with a secret that
 // only the web app and the database hold, over the user, the company and a time after which the
 // proof is no longer good.

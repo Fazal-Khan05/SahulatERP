@@ -3,7 +3,7 @@ import { identityProof } from "../../src/db/identity-proof";
 
 // Test support only. How a test says who a transaction is when it does not go through
 // withTenant(): on a connection of its own, or part-way through a statement. The database wants
-// the proof app.enter() checks (drizzle/0030_identity_proof.sql); writing the old settings
+// the proof app.enter() checks (drizzle/0031_identity_proof.sql); writing the old settings
 // app.user_id and app.tenant_id by hand means nothing once a key is installed.
 
 /**

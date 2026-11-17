@@ -245,7 +245,7 @@ describe.skipIf(!hasDb)("the chart of accounts", () => {
 
   // drizzle/0019_journal_documents.sql: a later step adds its accounts with a function of its
   // own, and never writes the starting chart out again.
-  // drizzle/0030_identity_proof.sql. Every policy asks "which company?" and "which role?" as two
+  // drizzle/0031_identity_proof.sql. Every policy asks "which company?" and "which role?" as two
   // questions, each answered once, when first needed. A salesperson here who owned a company of
   // their own could change company between the two, inside one statement, and read this chart
   // with the other company's role (found by the reviewer of Step 25; docs/later/step-25.md has

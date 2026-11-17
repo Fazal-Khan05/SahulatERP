@@ -1,4 +1,4 @@
--- Reverses drizzle/0030_identity_proof.sql. Never run automatically, and there is no good reason
+-- Reverses drizzle/0031_identity_proof.sql. Never run automatically, and there is no good reason
 -- to run it: it puts back both holes that migration closed (a session of the app's role naming
 -- any user, and one statement answered for two companies). It exists because every migration
 -- has a file that reverses it. Run it by hand, as postgres, only after showing it to the founder
@@ -60,6 +60,6 @@ DROP FUNCTION app.enter(uuid, uuid, bigint, text);
 DROP TABLE app.identity_sessions;
 DROP TABLE app.identity_keys;
 
--- The row drizzle-kit wrote for 0030_identity_proof (its "when" in drizzle/meta/_journal.json).
-DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1794916379513;
+-- The row drizzle-kit wrote for 0031_identity_proof (its "when" in drizzle/meta/_journal.json).
+DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1794917214189;
 COMMIT;

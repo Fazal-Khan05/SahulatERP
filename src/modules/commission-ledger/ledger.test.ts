@@ -16,6 +16,7 @@ import { postInvoice, saveInvoiceDraft, saveSalesDraft, startInvoice, submitSale
 import { getSalesDocument } from "@/modules/sales/queries";
 import type { TenantContext } from "@/modules/tenant/rules";
 import { adminSql, deleteTenants, hasAdminDb, type AdminSql } from "../../../tests/support/admin-db";
+import { enterAs } from "../../../tests/support/identity";
 import { seedStock } from "../../../tests/support/stock";
 import { approveCommission, payCommission } from "./commands";
 import { getEarned, getInvoiceCommission, listMovements, listPayments } from "./queries";
@@ -572,7 +573,7 @@ describe.skipIf(!hasDb)("commission earned, released, taken back and paid", { ti
     await depositCheque(as.accountant, other, { accountId: bank, date: "2026-11-12" });
     const one = postgres(process.env.DATABASE_URL!, { max: 1 });
     const two = postgres(process.env.DATABASE_URL!, { max: 1 });
-    const identify = (tx: postgres.TransactionSql) => tx`select set_config('app.user_id', ${userIds.accountant}, true), set_config('app.tenant_id', ${tenantA}, true)`;
+    const identify = (tx: postgres.TransactionSql) => enterAs(tx, userIds.accountant, tenantA);
     try {
       let clearing: Promise<unknown> | undefined;
       await one.begin(async (tx) => {

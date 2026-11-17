@@ -21,6 +21,15 @@ export const permissions = {
   "stock_count.read": ["owner", "accountant", "auditor", "warehouse_manager"],
   "stock_count.manage": ["owner", "accountant", "warehouse_manager"],
   "stock_count.post": ["owner", "accountant"],
+  // Step 24. An order carries what goods cost: for the owner and whoever keeps or checks the
+  // books. The warehouse receives goods against it, in quantities only.
+  "purchase_order.read": ["owner", "accountant", "auditor"],
+  "purchase_order.manage": ["owner", "accountant"],
+  "goods_receipt.read": ["owner", "accountant", "auditor", "warehouse_manager"],
+  "goods_receipt.manage": ["owner", "accountant", "warehouse_manager"],
+  // Step 25. A supplier's bill carries what was bought, what it cost and what tax was withheld.
+  "supplier_bill.read": ["owner", "accountant", "auditor"],
+  "supplier_bill.manage": ["owner", "accountant"],
 } as const satisfies TrackPermissions;
 
 /**
@@ -28,10 +37,10 @@ export const permissions = {
  * words and the order of each role's menu are in src/modules/tenant/rules.ts and do not change.
  */
 export const links = {
-  purchases: null,
+  purchases: "/purchases",
   billsAndPayments: null,
   stock: "/stock",
-  receiveGoods: null,
+  receiveGoods: "/purchases/receive",
   transfers: "/stock/transfers",
   stockCount: "/stock/counts",
 } as const satisfies TrackLinks;
@@ -40,7 +49,10 @@ export const links = {
  * Locked accounts this track adds, by what each is for. The account itself is added in the
  * step's migration with a function app.chart_extra_<name>().
  */
-export const controls = {} as const satisfies Record<string, string>;
+export const controls = {
+  // Step 25. Where a supplier's bill differs from what its goods came into stock at.
+  purchase_price_difference: "Purchase price differences",
+} as const satisfies Record<string, string>;
 
 /**
  * Kinds of document this track numbers, by their two letters. The migration adds a function
@@ -50,6 +62,12 @@ export const documents = { SC: "Stock count" } as const satisfies Record<string,
 
 /** This track's reports, listed on the Reports page under headings of its own. */
 export const reports: readonly ReportSection[] = [
+  {
+    title: "Purchases",
+    reports: [
+      { label: "Goods received, not yet billed", href: "/purchases/grni", about: "Goods that have arrived and have no supplier bill yet, at what they cost, against the account in the books.", permission: "purchase_order.read", module: "purchasing" },
+    ],
+  },
   {
     title: "Stock",
     reports: [

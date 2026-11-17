@@ -17,6 +17,7 @@ import { getSalesDocument, listSalesDocuments } from "@/modules/sales/queries";
 import { salesDocuments } from "@/modules/sales/schema";
 import type { TenantContext } from "@/modules/tenant/rules";
 import { adminSql, deleteTenants, hasAdminDb, type AdminSql } from "../../../tests/support/admin-db";
+import { enterAs } from "../../../tests/support/identity";
 import { seedStock } from "../../../tests/support/stock";
 import { applyCredit, postCreditNote, saveCreditNoteDraft, startCreditNote } from "./commands";
 import { getCreditNoteFacts, getInvoiceReturns } from "./queries";
@@ -511,7 +512,7 @@ describe.skipIf(!hasDb)("credit notes", () => {
     try {
       const stale = await direct
         .begin("isolation level repeatable read", async (tx) => {
-          await tx`select set_config('app.user_id', ${userIds.owner}, true), set_config('app.tenant_id', ${tenantA}, true)`;
+          await enterAs(tx, userIds.owner, tenantA);
           const [reversal] = await tx`select app.reverse_journal(${entry.journal_id}::uuid, '2026-10-01'::date, 'Reversal of the opening balances') as id`;
           await tx`update public.opening_entries set status = 'reversed', reversal_journal_id = ${reversal.id}, reversed_at = now(), reversed_by = ${userIds.owner}, updated_at = now(), updated_by = ${userIds.owner} where id = ${entry.id}`;
         })

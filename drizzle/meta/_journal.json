@@ -204,6 +204,27 @@
       "when": 1794701555014,
       "tag": "0028_commission_statements",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1794734813787,
+      "tag": "0029_purchase_orders",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1794736253071,
+      "tag": "0030_supplier_bills",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1794917214189,
+      "tag": "0031_identity_proof",
+      "breakpoints": true
     }
   ]
 }

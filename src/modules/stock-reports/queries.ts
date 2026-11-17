@@ -109,6 +109,7 @@ const DOCUMENT_WORDS: Record<string, string> = {
   stock_adjustment: "Adjustment",
   stock_count: "Stock count",
   credit_note: "Credit note",
+  goods_receipt: "Goods received",
 };
 
 /** The moves of one item in a period, with the documents behind them. */
@@ -125,13 +126,14 @@ async function itemMoves(tx: Tx, ctx: TenantContext, filter: StockFilter, itemId
       where m.tenant_id = ${ctx.tenantId} and m.item_id = ${itemId}::uuid and m.move_date < ${filter.from}::date and ${branchOf(filter)} and ${warehouseOf(filter)}`),
     tx.execute<{ move_date: string; quantity: string; value: string; warehouse: string; source_type: string; number: string | null; reversal: boolean }>(sql`
       select m.move_date::text, m.quantity::text, m.value::text, w.name as warehouse, m.source_type,
-        coalesce(sd.number, st.number, sa.number, sc.number) as number, m.reverses_move_id is not null as reversal
+        coalesce(sd.number, st.number, sa.number, sc.number, gr.number) as number, m.reverses_move_id is not null as reversal
       from public.stock_moves m
       join public.warehouses w on w.tenant_id = m.tenant_id and w.id = m.warehouse_id
       left join public.sales_documents sd on m.source_type in ('delivery_note', 'sales_invoice', 'credit_note') and sd.tenant_id = m.tenant_id and sd.id = m.source_id
       left join public.stock_transfers st on m.source_type = 'stock_transfer' and st.tenant_id = m.tenant_id and st.id = m.source_id
       left join public.stock_adjustments sa on m.source_type = 'stock_adjustment' and sa.tenant_id = m.tenant_id and sa.id = m.source_id
       left join public.stock_counts sc on m.source_type = 'stock_count' and sc.tenant_id = m.tenant_id and sc.id = m.source_id
+      left join public.goods_receipts gr on m.source_type = 'goods_receipt' and gr.tenant_id = m.tenant_id and gr.id = m.source_id
       where m.tenant_id = ${ctx.tenantId} and m.item_id = ${itemId}::uuid and m.move_date between ${filter.from}::date and ${filter.to}::date
         and ${branchOf(filter)} and ${warehouseOf(filter)}
       -- A document's moves share one moment: what left goes before what came in, as a transfer does it.

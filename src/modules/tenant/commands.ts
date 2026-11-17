@@ -33,7 +33,7 @@ export async function createCompany(user: { id: string; email: string }, rawName
     const rows = await tx.execute<{ id: string }>(sql`select app.create_tenant(${name.data}, ${user.email}) as id`);
     const tenantId = rows[0].id;
     // The rest of this transaction runs inside the new company, so its first audit row is its own.
-    await enterTenant(tx, tenantId);
+    await enterTenant(tx, user.id, tenantId);
     await audit(
       tx,
       { userId: user.id, tenantId, role: "owner" },
@@ -217,7 +217,7 @@ export async function recordAuthEvent(
   return withTenant(userId, null, async (tx) => {
     const active = await selectMyMemberships(tx, userId);
     for (const membership of active) {
-      await enterTenant(tx, membership.tenantId);
+      await enterTenant(tx, userId, membership.tenantId);
       await audit(
         tx,
         { userId, tenantId: membership.tenantId, role: membership.role },

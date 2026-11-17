@@ -211,7 +211,9 @@ export function itemMovesTable(item: { code: string; name: string; unit: string 
     quantity = quantity.plus(move.quantity);
     value = value.plus(move.value);
     const coming = move.quantity.gt(0);
-    return { kind: "line", depth: 0, cells: [formatIsoDate(move.date), move.document, move.warehouse, coming ? plainQuantity(move.quantity) : null, coming ? null : plainQuantity(move.quantity.abs()), move.value, plainQuantity(quantity), value] };
+    // A move with no quantity (import charges spread over a shipment) changes only what the goods are worth.
+    const leaving = move.quantity.lt(0);
+    return { kind: "line", depth: 0, cells: [formatIsoDate(move.date), move.document, move.warehouse, coming ? plainQuantity(move.quantity) : null, leaving ? plainQuantity(move.quantity.abs()) : null, move.value, plainQuantity(quantity), value] };
   });
   return {
     title: `${STOCK_REPORTS.movement.title}: ${item.code} ${item.name}`,

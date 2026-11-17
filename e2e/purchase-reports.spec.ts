@@ -76,8 +76,8 @@ test("an owner reads what is owed to suppliers and what was withheld from them, 
   // The supplier's statement.
   await page.goto("/purchase-reports/supplier-statement");
   await expect(page.getByText("Choose a supplier to see its statement.")).toBeVisible();
-  await page.getByLabel("Supplier").selectOption({ label: "Karachi Motors (Pvt) Ltd (S-001)" });
-  await page.getByRole("button", { name: "Show" }).click();
+  await shown(page.getByLabel("Supplier", { exact: true })).selectOption({ label: "Karachi Motors (Pvt) Ltd (S-001)" });
+  await shown(page.getByRole("button", { name: "Show" })).click();
   await expect(row(page, "Supplier statement: Karachi Motors (Pvt) Ltd", "Bill PB-2627-00001")).toContainText("90,000.00");
   await expect(row(page, "Supplier statement: Karachi Motors (Pvt) Ltd", "Owed after")).toContainText("90,000.00");
 

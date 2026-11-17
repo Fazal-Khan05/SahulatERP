@@ -1,7 +1,7 @@
 "use client";
 
 import Decimal from "decimal.js";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFormAction, type FormAction } from "@/components/action-form";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -30,6 +30,14 @@ export function ChargeForm({ action, billLines, classes, bases, depositAccounts,
   const { state, ready, busy, run } = useFormAction(action);
   const [line, setLine] = useState("");
   const [kind, setKind] = useState("inventory");
+  // The two lists keep their own value, so a choice made before this code was ready is not lost;
+  // what follows from the choice is brought up to date as soon as it is.
+  const lineSelect = useRef<HTMLSelectElement>(null);
+  const kindSelect = useRef<HTMLSelectElement>(null);
+  useEffect(() => {
+    if (lineSelect.current) setLine(lineSelect.current.value);
+    if (kindSelect.current) setKind(kindSelect.current.value);
+  }, []);
   const chosen = billLines.find((row) => row.billLineId === line);
   const accounts = kind === "deposit" ? depositAccounts : kind === "expense" ? expenseAccounts : [];
   return (
@@ -42,7 +50,7 @@ export function ChargeForm({ action, billLines, classes, bases, depositAccounts,
     >
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="billLineId">Bill line</Label>
-        <select id="billLineId" name="billLineId" value={line} onChange={(event) => setLine(event.target.value)} required className={SELECT}>
+        <select id="billLineId" name="billLineId" ref={lineSelect} defaultValue="" onChange={(event) => setLine(event.target.value)} required className={SELECT}>
           <option value="">Choose a bill line charged to Goods in transit</option>
           {billLines.map((row) => (
             <option key={row.billLineId} value={row.billLineId}>
@@ -54,7 +62,7 @@ export function ChargeForm({ action, billLines, classes, bases, depositAccounts,
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="class">What kind of charge</Label>
-          <select id="class" name="class" value={kind} onChange={(event) => setKind(event.target.value)} required className={SELECT}>
+          <select id="class" name="class" ref={kindSelect} defaultValue="inventory" onChange={(event) => setKind(event.target.value)} required className={SELECT}>
             {classes.map((row) => (
               <option key={row.id} value={row.id}>
                 {row.label}

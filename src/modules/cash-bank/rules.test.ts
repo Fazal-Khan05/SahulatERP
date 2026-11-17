@@ -25,7 +25,8 @@ describe("what an expense comes to", () => {
     expect(f.provincial.toFixed(2)).toBe("45.00");
     expect(f.shares.map((x) => x.toFixed(2))).toEqual(["15.00", "15.00", "15.00"]);
     const odd = figureExpense([d(33.33), d(33.33), d(33.34)], d(16), null, false)!;
-    expect(odd.shares.reduce((s, x) => s.plus(x), d(0)).toFixed(2)).toBe(odd.provincial.toFixed(2));
+    // docs/examples/step-34.md, case D: 16.00 shared 5.33, 5.33 and what is left, 5.34.
+    expect(odd.shares.map((x) => x.toFixed(2))).toEqual(["5.33", "5.33", "5.34"]);
   });
 
   it("withholds nothing with no tax line, and refuses an income tax line worked out on sales tax", () => {

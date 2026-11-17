@@ -24,13 +24,13 @@ const SELECT = "h-8 w-full min-w-0 rounded-lg border border-input bg-card px-2 t
 const BASIS_LABELS = { monthly: "Monthly salary", daily: "Daily wage" } as const;
 
 /** Why this member cannot open the payroll screens, or null. */
-function closed(session: Session, also: "statutory_rate.manage" | null = null): string | null {
+export function closed(session: Session, also: "statutory_rate.manage" | null = null): string | null {
   if (!session.modules.payroll) return "Payroll is switched off for this company. An owner switches it on under Settings, Modules.";
   if (!can(session.role, "payroll.read") && !(also && can(session.role, also))) return "Your role does not include payroll.";
   return null;
 }
 
-function Shut({ title, why }: { title: string; why: string }) {
+export function Shut({ title, why }: { title: string; why: string }) {
   return (
     <>
       <PageHead title={title} />
@@ -39,7 +39,7 @@ function Shut({ title, why }: { title: string; why: string }) {
   );
 }
 
-function PayrollNav({ here }: { here: "employees" | "attendance" | "rates" }) {
+export function PayrollNav({ here }: { here: "employees" | "attendance" | "runs" | "payslips" | "rates" }) {
   const tab = (key: typeof here, href: string, label: string) => (
     <Link
       href={href}
@@ -53,6 +53,8 @@ function PayrollNav({ here }: { here: "employees" | "attendance" | "rates" }) {
     <nav aria-label="Payroll" className="mb-4 flex flex-wrap gap-1">
       {tab("employees", "/payroll/employees", "Employees")}
       {tab("attendance", "/payroll/attendance", "Attendance")}
+      {tab("runs", "/payroll/runs", "Payroll runs")}
+      {tab("payslips", "/payroll/payslips", "Payslips")}
       {tab("rates", "/payroll/rates", "Statutory rates")}
     </nav>
   );
@@ -70,7 +72,7 @@ export async function EmployeesScreen({ searchParams }: { searchParams: Promise<
   const rows = await listEmployees(session, { on: today, search });
   return (
     <>
-      <PageHead title="Employees" sub="Who the company pays, how, and from when. Payroll runs and payslips come next." />
+      <PageHead title="Employees" sub="Who the company pays, how, and from when." />
       <PayrollNav here="employees" />
       <Card className="max-w-5xl">
         <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -394,9 +396,9 @@ export async function EmployeeScreen({ params }: { params: Promise<{ id: string 
 
 // ── Attendance ──────────────────────────────────────────────────────────────────────────────────
 
-const monthName = (month: string) => new Date(`${month}T00:00:00Z`).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
-const thisMonth = () => `${todayIso(new Date()).slice(0, 8)}01`;
-const shiftMonth = (month: string, by: number) => {
+export const monthName = (month: string) => new Date(`${month}T00:00:00Z`).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
+export const thisMonth = () => `${todayIso(new Date()).slice(0, 8)}01`;
+export const shiftMonth = (month: string, by: number) => {
   const [year, number] = month.split("-").map(Number);
   return new Date(Date.UTC(year, number - 1 + by, 1)).toISOString().slice(0, 10);
 };

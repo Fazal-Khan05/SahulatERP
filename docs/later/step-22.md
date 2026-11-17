@@ -1,6 +1,6 @@
 # Step 22: walk-in counter sales (customer advances were Step 32's; foreign currency is for later)
 
-Track A (selling), built by the Finisher. Migration `0029_counter_sales` (two tables, one
+Track A (selling), built by the Finisher. Migration `0032_counter_sales` (two tables, one
 function, three guards; nothing in an existing table changes).
 
 ## Decided by the founder (2026-11-15)

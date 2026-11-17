@@ -74,7 +74,12 @@ export const reports: readonly ReportSection[] = [
   {
     title: "Purchases",
     reports: [
-      { label: "Goods received, not yet billed", href: "/purchases/grni", about: "Goods that have arrived and have no supplier bill yet, at what they cost, against the account in the books.", permission: "purchase_order.read", module: "purchasing" },
+      // Step 29. What is owed to suppliers and what was withheld from them, each set beside the books.
+      { label: "Aged payables", href: "/purchase-reports/aged-payables", about: "What is owed on each supplier's bills on a day, by how long it has been due, with what was paid ahead or is owed back.", permission: "supplier_bill.read", module: "purchasing" },
+      { label: "Supplier statement", href: "/purchase-reports/supplier-statement", about: "Everything in the books for one supplier in a period, with what was owed before and after.", permission: "supplier_bill.read", module: "purchasing" },
+      { label: "Withholding register", href: "/purchase-reports/withholding-register", about: "Every amount of tax withheld from suppliers in a period, with its challan, and what is still to be paid over.", permission: "supplier_bill.read", module: "purchasing" },
+      { label: "Statement of tax withheld (section 165)", href: "/purchase-reports/section-165", about: "The income tax withheld from suppliers in a quarter, payee by payee, for FBR's statement.", permission: "supplier_bill.read", module: "purchasing" },
+      { label: "Goods received, not yet billed", href: "/purchase-reports/grni", about: "Goods that have arrived and have no supplier bill yet, at what they cost, against the account in the books.", permission: "purchase_order.read", module: "purchasing" },
     ],
   },
   {

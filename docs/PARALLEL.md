@@ -153,6 +153,23 @@ menu entry that does not exist, that is a shared change.
    the other need one of the two keys `DEFERRABLE`, or their rows cannot be removed.
 10. Everything in CLAUDE.md still holds, in every track.
 
+### Who a transaction is
+
+The database wants proof of who is signed in (`drizzle/0031_identity_proof.sql`). In practice:
+
+- App code reaches the database only through `withTenant()`, as before; nothing to do.
+- A test that opens a connection of its own says who it is with
+  `await enterAs(tx, userId, tenantId)` from `tests/support/identity.ts`, and a test that moves a
+  statement into another company half-way uses `${enterSql(userId, tenantId)}` where it used
+  `set_config('app.tenant_id', …)`. Writing the settings `app.user_id` and `app.tenant_id` by
+  hand means nothing on a database with a key installed; `npm run check` refuses it in code, and
+  refuses a migration that reads or writes them.
+- A policy is still written as before (`tenant_id = (SELECT app.tenant_id()) AND (SELECT
+  app.tenant_role()) IN (…)`): the two questions can no longer be answered for two companies.
+- A guard never honours a setting the app's role can write itself. If a database function must
+  be told something only another database function may say, pass it as an argument inside the
+  database, or check `current_user`.
+
 ## Merging a step into main
 
 1. `git fetch`, `git merge origin/main`. If main has a migration you do not have and you have

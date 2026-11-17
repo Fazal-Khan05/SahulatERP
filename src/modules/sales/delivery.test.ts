@@ -12,6 +12,7 @@ import { listFiscalPeriods } from "@/modules/numbering/queries";
 import { createParty } from "@/modules/parties/commands";
 import type { TenantContext } from "@/modules/tenant/rules";
 import { adminSql, deleteTenants, hasAdminDb, type AdminSql } from "../../../tests/support/admin-db";
+import { enterSql } from "../../../tests/support/identity";
 import { seedStock } from "../../../tests/support/stock";
 import { cancelDelivery, cancelSalesDocument, discardSalesDraft, postDelivery, saveDeliveryDraft, saveSalesDraft, startDelivery, submitSalesDocument } from "./commands";
 import { getDeliveryRows, getOrderDelivery, getSalesDocument, listOrdersToDeliver, listSalesDocuments } from "./queries";
@@ -253,7 +254,7 @@ describe.skipIf(!hasDb)("delivery notes", () => {
     await expect(postDelivery(second, id)).rejects.toThrow("That document is not in this company.");
     // A transaction that reads an older picture is not let near it.
     expect(await codeOf(() => getConnection().db.transaction(async (tx) => {
-      await tx.execute(sql`select set_config('app.user_id', ${userIds.salesperson}, true), set_config('app.tenant_id', ${tenantA}, true)`);
+      await tx.execute(sql`select ${enterSql(userIds.salesperson, tenantA)}`);
       await tx.execute(sql`select * from app.post_delivery(${id}::uuid)`);
     }, { isolationLevel: "repeatable read" }))).toBe("SE056");
     // A line that is not a line of the order, or in another unit, never gets onto the note.

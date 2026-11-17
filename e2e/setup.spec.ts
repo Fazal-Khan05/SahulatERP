@@ -1,5 +1,6 @@
 import { expect } from "@playwright/test";
 import { adminSql, type AdminSql } from "../tests/support/admin-db";
+import { enterAs } from "../tests/support/identity";
 import { createUser, hasE2EEnv, type TestUser } from "./support/admin";
 import { railLabels, signIn, test } from "./support/ui";
 
@@ -119,7 +120,7 @@ test("a company registered for sales tax gives its STRN and confirms its rates",
 test("until the owner finishes, other members are told so and cannot do it for them", async ({ page }) => {
   // A third company, created but not set up, with an accountant in it.
   const fresh = await sql.begin(async (tx) => {
-    await tx`select set_config('app.user_id', ${owner.id}, true)`;
+    await enterAs(tx, owner.id, null);
     return (await tx<{ id: string }[]>`select app.create_tenant('E2E Unfinished Traders', ${owner.email}) as id`)[0];
   });
   await sql`insert into public.memberships (tenant_id, user_id, email, role, created_by) values (${fresh.id}, ${accountant.id}, ${accountant.email}, 'accountant', ${owner.id})`;

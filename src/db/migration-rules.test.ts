@@ -159,6 +159,33 @@ describe("the migrations folder", () => {
     expect(checkMigrations(folder(24, { 23: { track: "A", sql: `-- never SET search_path = ''\n${fn("pg_catalog, pg_temp")}` } }))).toEqual([]);
   });
 
+  it("refuses a migration that goes back to the settings, after the one that made the database ask for proof", () => {
+    // The pretend folder's migration 24 becomes the one that asks for proof (it is found by its name).
+    const withProof = (later: string) => {
+      const files = folder(26, { 25: { track: "B", sql: later } });
+      const old = files.journal[24].tag;
+      const named = "0024_identity_proof";
+      files.journal[24].tag = named;
+      for (const part of [files.sql, files.down]) {
+        part[named] = part[old];
+        delete part[old];
+      }
+      // The proof migration itself still reads the settings, for a database with no key installed.
+      files.sql[named] += "SELECT current_setting('app.user_id', true);\n";
+      return checkMigrations(files);
+    };
+    const fn = (body: string) => `CREATE FUNCTION app.zz_who() RETURNS text LANGUAGE sql SET search_path = pg_catalog, pg_temp AS $$ ${body} $$;\nREVOKE ALL ON FUNCTION app.zz_who() FROM PUBLIC;\n`;
+    expect(withProof(fn("SELECT app.current_user_id()::text"))).toEqual([]);
+    for (const body of ["SELECT current_setting('app.user_id', true)", "SELECT current_setting( 'app.tenant_id' )", "SELECT set_config('app.tenant_id', '', true)"]) {
+      const problems = withProof(fn(body));
+      expect(problems, body).toHaveLength(1);
+      expect(problems[0]).toContain("0025_m25: reads or writes the setting app.user_id or app.tenant_id");
+    }
+    // Said in a comment, or before that migration, it is as it was.
+    expect(withProof(`-- not current_setting('app.user_id')\n${fn("SELECT app.current_user_id()::text")}`)).toEqual([]);
+    expect(checkMigrations(folder(26, { 25: { track: "B", sql: fn("SELECT current_setting('app.user_id', true)") } }))).toEqual([]);
+  });
+
   it("refuses a folder with a migration still set aside", () => {
     expect(checkMigrations({ ...folder(21), aside: true })).toEqual(["A migration is set aside (drizzle/.aside) and has not been put back. After merging main, run: npm run db:put-back"]);
   });

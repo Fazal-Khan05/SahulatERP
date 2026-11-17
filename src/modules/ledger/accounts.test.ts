@@ -1,9 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
+import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb, withTenant } from "@/db";
 import type { TenantContext } from "@/modules/tenant/rules";
 import { adminSql, deleteTenants, hasAdminDb, type AdminSql } from "../../../tests/support/admin-db";
+import { identityProof } from "@/db/identity-proof";
+import { enterAs, enterSql } from "../../../tests/support/identity";
 import { addAccount, deleteAccount, seedAccounts, setAccountArchived, updateAccount } from "./commands";
 import { getAccount, hasAccounts, listAccounts } from "./queries";
 import { CONTROL_TYPES } from "./rules";
@@ -16,6 +19,7 @@ const hasDb = hasAdminDb() && Boolean(process.env.DATABASE_URL);
 const PREFIX = "zz-accounts-test";
 const tenantA = randomUUID();
 const tenantB = randomUUID();
+const tenantC = randomUUID();
 const roles = ["owner", "accountant", "auditor", "salesperson"] as const;
 const userIds = Object.fromEntries(roles.map((role) => [role, randomUUID()])) as Record<(typeof roles)[number], string>;
 const ownerB = randomUUID();
@@ -55,7 +59,7 @@ describe.skipIf(!hasDb)("the chart of accounts", () => {
   });
 
   afterAll(async () => {
-    await deleteTenants(admin, [tenantA, tenantB]);
+    await deleteTenants(admin, [tenantA, tenantB, tenantC]);
     await admin.end();
     await closeDb();
   });
@@ -228,7 +232,7 @@ describe.skipIf(!hasDb)("the chart of accounts", () => {
       await codeOf(() =>
         withTenant(userIds.owner, tenantA, (tx) =>
           tx.execute(sql`update public.accounts
-            set name = case when code = '5240' and set_config('app.tenant_id', '', true) = '' then name else name end, archived_at = '1990-01-01', archived_by = ${userIds.owner}
+            set name = case when code = '5240' and ${enterSql(userIds.owner, null)} = '' then name else name end, archived_at = '1990-01-01', archived_by = ${userIds.owner}
             where tenant_id = ${tenantA} and code in ('5230', '5240')`),
         ),
       ),
@@ -241,6 +245,68 @@ describe.skipIf(!hasDb)("the chart of accounts", () => {
 
   // drizzle/0019_journal_documents.sql: a later step adds its accounts with a function of its
   // own, and never writes the starting chart out again.
+  // drizzle/0031_identity_proof.sql. Every policy asks "which company?" and "which role?" as two
+  // questions, each answered once, when first needed. A salesperson here who owned a company of
+  // their own could change company between the two, inside one statement, and read this chart
+  // with the other company's role (found by the reviewer of Step 25; docs/later/step-25.md has
+  // the statement, which is the one below). Who a transaction is now comes from a row the
+  // database keeps, and one statement sees that row only as it was when the statement began.
+  it("answers a policy's two questions for one company, whatever a statement does half-way", async () => {
+    const seller = userIds.salesperson;
+    await admin`insert into public.tenants (id, name, created_by) values (${tenantC}, ${PREFIX + " C"}, ${seller})`;
+    await admin`insert into public.memberships (tenant_id, user_id, email, role, created_by) values (${tenantC}, ${seller}, 'owner-of-c@accounts.test', 'owner', ${seller})`;
+    const direct = postgres(process.env.DATABASE_URL!, { max: 1 });
+    type Tx = postgres.TransactionSql;
+    // The first pass of the scan asks for the company (it is part of the index condition); the
+    // second row of "flip" then changes company; the role is asked when a row first reaches it.
+    const read = (identify: (tx: Tx) => Promise<unknown>, change: (tx: Tx) => postgres.PendingQuery<postgres.Row[]>) =>
+      direct.begin(async (tx) => {
+        await identify(tx);
+        const plain = (await tx`select count(*)::int as n from public.accounts`)[0].n as number;
+        await tx`set local enable_seqscan = off`;
+        await tx`set local enable_bitmapscan = off`;
+        const [row] = await tx`
+          with flip as materialized (
+            select g, case when g = 2 then ${change(tx)} end as c, case when g = 1 then 'zzzz' else '' end as lo
+            from generate_series(1, 2) g)
+          select count(*)::int as n from flip f
+          cross join lateral (select * from public.accounts x where x.code >= f.lo order by x.code offset 0) a`;
+        return { plain, tricked: row.n as number };
+      });
+    try {
+      // As the app says who it is: proven, and moved half-way with a proof that is also real,
+      // because the salesperson really does own company C.
+      const proof = identityProof(seller, tenantC);
+      const proven = await read(
+        (tx) => enterAs(tx, seller, tenantA),
+        (tx) => tx`app.enter(${seller}::uuid, ${tenantC}::uuid, ${proof.expires}::bigint, ${proof.signature}::text)`,
+      );
+      expect(proven).toEqual({ plain: 0, tricked: 0 });
+      // The same statement by someone who may read the chart reads all of it: nothing above
+      // came back empty because the statement itself reads nothing.
+      const ownerMove = identityProof(userIds.owner, tenantA);
+      const allowed = await read(
+        (tx) => enterAs(tx, userIds.owner, tenantA),
+        (tx) => tx`app.enter(${userIds.owner}::uuid, ${tenantA}::uuid, ${ownerMove.expires}::bigint, ${ownerMove.signature}::text)`,
+      );
+      expect(allowed.plain).toBeGreaterThan(50);
+      expect(allowed.tricked).toBe(allowed.plain);
+      // The old way, by the two settings. With a key installed they mean nothing. Without one
+      // (a development database) they are still believed, and this is the hole as it was: it
+      // shows that the statement above is a real attempt and not one that would read nothing anyway.
+      const [{ keyed }] = await admin<{ keyed: boolean }[]>`select exists (select 1 from app.identity_keys) as keyed`;
+      const bySettings = await read(
+        (tx) => tx`select set_config('app.user_id', ${seller}, true), set_config('app.tenant_id', ${tenantA}, true)`,
+        (tx) => tx`set_config('app.tenant_id', ${tenantC}, true)`,
+      );
+      expect(bySettings.plain).toBe(0);
+      if (keyed) expect(bySettings.tricked).toBe(0);
+      else expect(bySettings.tricked).toBeGreaterThan(50);
+    } finally {
+      await direct.end();
+    }
+  });
+
   it("adds to the starting chart what a later step's own function returns", async () => {
     const tenantC = randomUUID();
     const ownerC = randomUUID();

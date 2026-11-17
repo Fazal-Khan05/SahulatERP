@@ -21,6 +21,7 @@
     "db:put-back": "node scripts/migration-aside.mjs put-back",
     "check:migrations": "node scripts/check-migrations.mjs",
     "db:runtime-password": "node --env-file-if-exists=.env.local scripts/db-runtime-password.mjs",
+    "db:identity": "node --env-file-if-exists=.env.local scripts/identity-key.mjs",
     "owner:create": "node --env-file-if-exists=.env.local scripts/owner-create.mjs",
     "invites:send": "node --env-file-if-exists=.env.local scripts/invites-send.mjs",
     "worker": "node --env-file-if-exists=.env.local scripts/worker.mjs",

@@ -294,16 +294,32 @@ CREATE POLICY statutory_rates_update ON public.statutory_rates FOR UPDATE TO app
 -- Who wrote a row and when are the database's own answers. A monthly employee's pay is basic pay,
 -- allowances and fixed deductions; a daily employee's is a daily wage; so how an employee is paid
 -- does not change once they have pay on record. A linked login is a member of the company.
+
+-- Whether a login is a member of the company the transaction is in. The guard below runs as
+-- whoever writes the row, who may not read the company's members (only the owner and the auditor
+-- do); this answers that one question and nothing more.
+CREATE FUNCTION app.payroll_is_member(p_user uuid) RETURNS boolean
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+  AS $$
+    SELECT EXISTS (SELECT 1 FROM public.memberships m WHERE m.tenant_id = app.tenant_id() AND m.user_id = p_user)
+  $$;
+--> statement-breakpoint
+REVOKE ALL ON FUNCTION app.payroll_is_member(uuid) FROM PUBLIC;
+--> statement-breakpoint
+GRANT EXECUTE ON FUNCTION app.payroll_is_member(uuid) TO app_runtime;
+--> statement-breakpoint
+-- Not SECURITY DEFINER: it runs as whoever writes the row, so current_user says who that is. The
+-- app writes as app_runtime and is checked. A row written by the database's own function (the
+-- statutory tables a new company starts with, written by app.seed_payroll_statutory, which runs
+-- as its owner) or by a migration is not anyone's edit and is let through. No setting is asked:
+-- the app's role can write any setting, but cannot be another role.
 CREATE FUNCTION app.check_payroll_row() RETURNS trigger
-  LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+  LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp
   AS $$
 DECLARE
   v_basis text;
 BEGIN
-  -- Migrations, and the statutory tables a new company starts with (written as the company is
-  -- made, before anyone works in it), are not anyone's edit.
-  IF session_user = 'postgres'
-     OR (TG_TABLE_NAME IN ('salary_tax_slabs', 'statutory_rates') AND current_setting('app.payroll_seed', true) = NEW.tenant_id::text) THEN
+  IF current_user <> 'app_runtime' THEN
     RETURN NEW;
   END IF;
   IF NEW.tenant_id IS DISTINCT FROM app.tenant_id() THEN
@@ -320,9 +336,7 @@ BEGIN
        AND EXISTS (SELECT 1 FROM public.employee_pay p WHERE p.tenant_id = NEW.tenant_id AND p.employee_id = NEW.id) THEN
       RAISE EXCEPTION 'how an employee is paid does not change once they have pay on record' USING ERRCODE = 'SE320';
     END IF;
-    IF NEW.user_id IS NOT NULL AND (TG_OP = 'INSERT' OR NEW.user_id IS DISTINCT FROM OLD.user_id) AND NOT EXISTS (
-      SELECT 1 FROM public.memberships m WHERE m.tenant_id = NEW.tenant_id AND m.user_id = NEW.user_id
-    ) THEN
+    IF NEW.user_id IS NOT NULL AND (TG_OP = 'INSERT' OR NEW.user_id IS DISTINCT FROM OLD.user_id) AND NOT app.payroll_is_member(NEW.user_id) THEN
       RAISE EXCEPTION 'an employee is linked only to a member of the company' USING ERRCODE = 'SE321';
     END IF;
   ELSIF TG_TABLE_NAME = 'employee_pay' THEN
@@ -357,7 +371,6 @@ CREATE FUNCTION app.seed_payroll_statutory(p_tenant uuid, p_user uuid) RETURNS v
   LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
   AS $$
 BEGIN
-    PERFORM set_config('app.payroll_seed', p_tenant::text, true);
     INSERT INTO public.salary_tax_slabs (tenant_id, effective_from, over, up_to, fixed, rate, legal_reference, created_by, updated_by)
     SELECT p_tenant, s.effective_from::date, s.over, s.up_to, s.fixed, s.rate, s.reference, p_user, p_user
     FROM (VALUES
@@ -398,7 +411,6 @@ BEGIN
       ('social_security_employer', 'balochistan', '2025-07-01', 6, NULL, 'Balochistan Employees'' Social Security Act 2022 (Act XXIX of 2022) s.20(1)')
     ) AS r(kind, province, effective_from, rate, amount, reference)
     ON CONFLICT DO NOTHING;
-    PERFORM set_config('app.payroll_seed', '', true);
 END $$;
 --> statement-breakpoint
 REVOKE ALL ON FUNCTION app.seed_payroll_statutory(uuid, uuid) FROM PUBLIC;

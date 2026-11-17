@@ -115,7 +115,7 @@ describe.skipIf(!hasDb)("payroll: employees, attendance and the statutory tables
     await expect(setPay(as.payroll_administrator, id, { component: "basic", amount: "40000", effectiveFrom: "2026-07-01" })).rejects.toThrow("A daily employee is paid a daily wage.");
     // Past the app, the database refuses it too; and how someone is paid does not change once they have pay.
     expect(await codeOf(as.payroll_administrator, sql`insert into public.employee_pay (tenant_id, employee_id, component, amount, effective_from, created_by, updated_by) values (${tenantA}, ${id}, 'basic', 40000, '2026-07-01', ${userIds.payroll_administrator}, ${userIds.payroll_administrator})`)).toBe("SE322");
-    // The setting a new company's tables are written under does not open the guard on anything else.
+    // A setting the app's role writes itself opens nothing: the guard asks who is writing, not a setting.
     expect(
       await codeOf(
         as.payroll_administrator,
@@ -200,6 +200,25 @@ describe.skipIf(!hasDb)("payroll: employees, attendance and the statutory tables
     await saveEmployee(as.owner, manager, employee({ code: "E-001", name: "Imran Qureshi", cnic: "42101-1234567-1", userId: userIds.salesperson }));
     const logged = await admin<{ text: string }[]>`select coalesce(before::text, '') || after::text as text from public.audit_log where tenant_id = ${tenantA} and entity = 'employee'`;
     expect(logged.some((row) => row.text.includes("4210112345671"))).toBe(false);
+  });
+
+  it("says who wrote a statutory row itself, whatever setting the app's role writes", async () => {
+    await withTenant(userIds.accountant, tenantA, async (tx) => {
+      await tx.execute(sql`select set_config('app.payroll_seed', ${tenantA}::text, true)`);
+      await tx.execute(sql`insert into public.statutory_rates (tenant_id, kind, province, effective_from, amount, legal_reference, created_by, updated_by)
+        values (${tenantA}, 'minimum_wage', 'gilgit_baltistan', '2026-07-01', 38000, 'Test notification', ${userIds.accountant}, ${userIds.accountant})`);
+    });
+    const [row] = await admin<{ created_by: string; updated_by: string }[]>`select created_by, updated_by from public.statutory_rates where tenant_id = ${tenantA} and province = 'gilgit_baltistan'`;
+    expect(row).toEqual({ created_by: userIds.accountant, updated_by: userIds.accountant });
+    // Past the app, a salesperson with the setting written is still refused by the policy.
+    expect(
+      await codeOf(
+        as.salesperson,
+        sql`insert into public.statutory_rates (tenant_id, kind, effective_from, rate, legal_reference, created_by, updated_by)
+            select ${tenantA}, 'eobi_employer', '2026-12-01', 9, 'x y', ${userIds.salesperson}, ${userIds.salesperson} from (select set_config('app.payroll_seed', ${tenantA}::text, true)) as s(x)`,
+      ),
+    ).toBe("42501");
+    await admin`delete from public.statutory_rates where tenant_id = ${tenantA} and province = 'gilgit_baltistan'`;
   });
 
   it("lets the owner, an accountant and the payroll administrator add a statutory figure from a date, with its source", async () => {

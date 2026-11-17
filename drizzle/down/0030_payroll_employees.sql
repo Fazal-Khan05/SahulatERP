@@ -13,5 +13,6 @@ DROP TABLE public.employees;
 DROP TABLE public.salary_tax_slabs;
 DROP TABLE public.statutory_rates;
 DROP FUNCTION app.check_payroll_row();
+DROP FUNCTION app.payroll_is_member(uuid);
 DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1794737467199;
 COMMIT;

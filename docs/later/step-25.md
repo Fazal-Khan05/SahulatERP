@@ -10,8 +10,8 @@ received. Migration `0030_supplier_bills`.
   switches it on under Purchases, Withholding tax.
 - **When the supplier's bill is at a different price from the order, the difference goes to an
   account of its own, Purchase price differences (5120).** The stock value is not changed.
-- **The migration may be applied to the shared development database** once it has passed its
-  independent review and the local tests (the same yes covers Steps 24, 25 and 26).
+- **The migration was applied to the shared development database** on the founder's yes, after
+  its independent review and the local tests (the same yes covers Steps 24, 25 and 26).
 - For Step 26: a foreign-currency advance to a supplier is kept at the rupees actually paid; it
   is not revalued at month end.
 
@@ -103,14 +103,101 @@ Found by the review but not this step's to change (told to the coordinator, for 
 three tracks agree on):
 
 - **Every table's access rule can be read past by someone running their own SQL who belongs to
-  two companies.** A rule asks "which company?" and "which role?" as two separate questions. A
-  member who is, say, a salesperson in company A and the owner of a company B of their own can
-  change the company setting part-way through one statement, so the first question is answered
-  for A and the second for B, and they read A's rows that only an owner, an accountant or an
-  auditor should see. Shown on supplier bills and on the chart of accounts, so it is every
-  table's. Reading only: every write is checked again by a trigger and refused. The app never
-  lets anyone run their own SQL, so this matters only if another hole lets them. The fix is one
-  function that answers both questions together.
+  two companies.** In plain words: a rule asks "which company?" and "which role?" as two
+  separate questions. A member who is, say, a salesperson in company A and the owner of a
+  company B of their own (anyone can create a company) can change the company setting part-way
+  through one statement, so the first question is answered for A and the second for B, and
+  they read A's rows that only an owner, an accountant or an auditor should see. Reading only:
+  every write is checked again by a trigger and refused. The app never lets anyone run their
+  own SQL, so this matters only if another hole lets them.
+
+  The detail, for whoever writes the joint migration:
+
+  - **Which policies.** Every policy written in the shared idiom
+    `tenant_id = (SELECT app.tenant_id()) AND (SELECT app.tenant_role()) IN (...)`, which is
+    every table's since `drizzle/0000_tenancy.sql`. Postgres plans the two scalar sub-selects
+    as two separate InitPlans, each run once, when first needed. `app.tenant_id()` and
+    `app.tenant_role()` both read the transaction setting `app.tenant_id`, which the app's
+    database role can rewrite at any time with `set_config`.
+  - **How it was reproduced** (on a local database, as the role `app_runtime`; by the reviewer,
+    and again by the Builder on 2026-11-15 with the statements below as written). The user is a
+    salesperson in tenant A and the owner of a tenant B of their own. The transaction is opened
+    as `withTenant()` opens it, for their real identity in A:
+
+    ```sql
+    begin;
+    select set_config('app.user_id', '<the user>', true), set_config('app.tenant_id', '<tenant A>', true);
+    ```
+
+    A plain `select count(*) from supplier_bills` and `select count(*) from accounts` each give
+    0, as they should. **The only setting changed is `app.tenant_id`**, from A to B, with
+    `set_config('app.tenant_id', '<tenant B>', true)` called from inside the statement itself, in
+    a materialised CTE, so that it happens after the scan has started. `app.user_id` is never
+    touched: B is a company the user really owns.
+
+    On `supplier_bills` (default planner settings; returned A's three bills, `INV-1` posted
+    2,400.00, `INV-2` draft 600.00 and an empty draft, each with `tenant_id` = A):
+
+    ```sql
+    with flip as materialized (
+      select g,
+             case when g = 2 then set_config('app.tenant_id', '<tenant B>', true) end as c,
+             case when g = 1 then date '2999-01-01' else date '1900-01-01' end as d
+      from generate_series(1, 2) g)
+    select f.g, b.supplier_invoice_no, b.status, b.total, b.tenant_id
+    from flip f
+    cross join lateral (
+      select * from supplier_bills sb where sb.bill_date >= f.d order by sb.bill_date offset 0) b;
+    ```
+
+    On `accounts` (migration 0011; returned all 67 accounts of A, codes 1000 to 5830). The
+    table is small, so the planner is first told to use the index, which any session may do:
+
+    ```sql
+    set local enable_seqscan = off;
+    set local enable_bitmapscan = off;
+    with flip as materialized (
+      select g,
+             case when g = 2 then set_config('app.tenant_id', '<tenant B>', true) end as c,
+             case when g = 1 then 'zzzz' else '' end as lo
+      from generate_series(1, 2) g)
+    select count(*) as rows_read, count(*) filter (where a.tenant_id = '<tenant A>') as of_tenant_a,
+           min(a.code), max(a.code)
+    from flip f
+    cross join lateral (
+      select * from accounts x where x.code >= f.lo order by x.code offset 0) a;
+    ```
+
+    Without the two `set local` lines the same statement on `accounts` returned nothing: with a
+    sequential scan the first pass finds no row and asks neither question, so both are answered
+    for B. It works when the tenant test is part of an index condition (asked when the scan
+    starts, in the first pass, while the setting is A) and the role test is a filter (asked
+    when the first row reaches it, in the second pass, after the setting has become B).
+    `supplier_bills` has an index on (tenant, bill date), so it needs no planner setting.
+
+    As the reviewer read it (the result was observed; the mechanism is its explanation, and
+    fits the two runs above): the first pass of the lateral scan runs the tenant InitPlan while
+    the setting is still A; the materialised CTE's second row then switches the setting to B;
+    the role InitPlan is run only when a row first reaches that test, by which time the setting
+    is B, where the caller is the owner. The policy's test becomes "tenant is A and role is
+    owner". It is the shared idiom and not this step's tables.
+  - **What held.** The same trick used to delete a main-branch draft as a north-branch
+    accountant (also an owner elsewhere) deleted nothing: the `ENABLE ALWAYS` `BEFORE` triggers
+    call `app.tenant_id()` again as each row is written and refuse a mismatch. So it is a
+    reading gap, not a writing one. Functions that return rows (`SECURITY DEFINER`, such as
+    `app.orders_to_receive()`) read the identity once into variables and are not affected.
+  - **Suggested fix**, one shared migration: a single function, for example `app.identity()`,
+    returning tenant, role and branches together as one composite, read once by each policy
+    (`(SELECT app.identity())` as one InitPlan, its fields compared). One sub-plan cannot be
+    answered in two halves, so changing the setting gives either all of A or all of B. Rewriting
+    every policy touches every track's tables, which is why it is not this step's to do.
+    Alternatively, or as well: refuse a change of `app.tenant_id` once it has been set in a
+    transaction (the setting could be read through a function that remembers the first value).
+  - **The test to pin it**: in `src/modules/tenant/policies.test.ts`, a user who is a
+    salesperson in one test company and the owner of another runs the statement above against a
+    table only an owner reads (`accounts` will do) and must get no rows; and the same for a
+    branch-limited member with `app.tenant_branch_ids()`. It should fail today and pass after
+    the fix.
 
 ## For a tax adviser
 

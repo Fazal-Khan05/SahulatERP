@@ -29,6 +29,7 @@ function refusal(error: unknown, date: string | null): unknown {
   if (closed) return new UserError(closed);
   if (code === "SE331") return new UserError("Choose two different cash or bank accounts of the company that are in use.");
   if (code === "SE332") return new UserError("That will not do: enter an amount in rupees and paisa above nothing, and say why when cancelling.");
+  if (code === "SE342") return new UserError("This form was already sent with other figures, and recorded then. Reload the page to enter another.");
   if (code === "SE341") return new UserError("An account it would post to is archived. Restore the account first, under Settings, Chart of accounts.");
   if (code === "SE333") return new UserError("That date will not do: it has not come yet, or it is before the document's own date.");
   if (code === "SE334") return new UserError("That is not in this company.");

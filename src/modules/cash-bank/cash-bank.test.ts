@@ -161,8 +161,11 @@ describe.skipIf(!hasDb)("cash and bank: accounts, transfers and expenses", () =>
     const again = await recordExpense(as.owner, sale);
     expect(again).toEqual(first);
     expect((await admin<{ n: number }[]>`select count(*)::int as n from public.expenses where tenant_id = ${tenantA} and payee = 'Courier'`)[0].n).toBe(1);
+    // The same form sent again with other figures (the browser's Back button) is refused, not swallowed.
+    await expect(recordExpense(as.owner, { ...sale, lines: [{ accountId: repairs, description: "Another parcel", amount: "900" }] })).rejects.toThrow("already sent with other figures");
     const moved = { fromId: bank, toId: cash, date: DAY, amount: "10", clientKey: randomUUID() };
     expect(await recordTransfer(as.owner, moved)).toEqual(await recordTransfer(as.owner, moved));
+    await expect(recordTransfer(as.owner, { ...moved, amount: "20" })).rejects.toThrow("already sent with other figures");
     const [cashOut] = await admin<{ id: string }[]>`select id from public.cash_transfers where tenant_id = ${tenantA} and id = ${moved.clientKey}`;
     await cancelTransfer(as.owner, cashOut.id, { date: DAY, reason: "A test of sending twice" });
     const [courier] = await admin<{ id: string }[]>`select id from public.expenses where tenant_id = ${tenantA} and payee = 'Courier'`;

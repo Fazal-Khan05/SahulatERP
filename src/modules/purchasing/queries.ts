@@ -345,8 +345,9 @@ export type GrniRow = { receiptId: string; receiptNumber: string; date: string; 
 
 /**
  * Goods that have arrived and have not been billed, at what they cost: every line of every
- * posted goods received note (no supplier bill exists until Step 25, so none is billed yet),
- * with what the books hold in Goods received not invoiced to set beside the total.
+ * posted goods received note, less what posted supplier bills have billed of it and what was
+ * sent back to the supplier unbilled, with what the books hold in Goods received not invoiced
+ * to set beside the total.
  */
 export async function getGrni(ctx: TenantContext): Promise<{ rows: GrniRow[]; total: Decimal; ledger: Decimal }> {
   requireOrderAccess(ctx);
@@ -354,7 +355,7 @@ export async function getGrni(ctx: TenantContext): Promise<{ rows: GrniRow[]; to
     const [rows, [ledger]] = await Promise.all([
       tx.execute<{ receipt_id: string; receipt_number: string; receipt_date: string; supplier_name: string; order_number: string; item_code: string; description: string; unit_code: string; quantity: string; value: string }>(sql`
         select r.id as receipt_id, r.number as receipt_number, r.receipt_date::text, s.name as supplier_name, o.number as order_number,
-               i.code as item_code, ol.description, u.code as unit_code, (l.quantity - billed.quantity)::text as quantity, (m.value - billed.value)::text as value
+               i.code as item_code, ol.description, u.code as unit_code, (l.quantity - billed.quantity - back.quantity)::text as quantity, (m.value - billed.value - back.value)::text as value
         from goods_receipts r
         join goods_receipt_lines l on l.tenant_id = r.tenant_id and l.receipt_id = r.id
         join purchase_orders o on o.tenant_id = r.tenant_id and o.id = r.order_id
@@ -368,7 +369,12 @@ export async function getGrni(ctx: TenantContext): Promise<{ rows: GrniRow[]; to
           select coalesce(sum(bl.quantity), 0) as quantity, coalesce(sum(bl.received_value), 0) as value
           from supplier_bill_lines bl join supplier_bills b on b.tenant_id = bl.tenant_id and b.id = bl.bill_id
           where bl.tenant_id = l.tenant_id and bl.receipt_line_id = l.id and b.status = 'posted') billed
-        where r.tenant_id = ${ctx.tenantId}::uuid and r.status = 'posted' and l.quantity > billed.quantity
+        -- What went back to the supplier before it was billed (Step 27), and what that took off the account.
+        cross join lateral (
+          select coalesce(sum(x.quantity), 0) as quantity, coalesce(sum(x.grni_value), 0) as value
+          from supplier_return_lines x join supplier_returns d on d.tenant_id = x.tenant_id and d.id = x.return_id
+          where x.tenant_id = l.tenant_id and x.receipt_line_id = l.id and x.bill_line_id is null and d.status = 'posted') back
+        where r.tenant_id = ${ctx.tenantId}::uuid and r.status = 'posted' and l.quantity > billed.quantity + back.quantity
         order by r.receipt_date, r.number, l.line_no`),
       tx.execute<{ balance: string }>(sql`
         select coalesce(sum(jl.credit - jl.debit), 0)::text as balance

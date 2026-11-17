@@ -22,6 +22,11 @@ export const permissions = {
   "commission_earned.own": ["owner", "sales_manager", "salesperson"],
   "commission.approve": ["owner", "accountant"],
   "commission.pay": ["owner", "accountant"],
+  // Step 34. The company's cash and bank accounts, transfers between them and expenses paid out
+  // of them: kept by the owner and an accountant, read by the auditor too. The policies and
+  // functions in drizzle/0032_cash_bank.sql name the same roles.
+  "cash_bank.read": ["owner", "accountant", "auditor"],
+  "cash_bank.manage": ["owner", "accountant"],
 } as const satisfies TrackPermissions;
 
 /**
@@ -29,7 +34,7 @@ export const permissions = {
  * words and the order of each role's menu are in src/modules/tenant/rules.ts and do not change.
  */
 export const links = {
-  cashAndBank: null,
+  cashAndBank: "/cash-bank",
   commissions: "/commissions",
   myCommission: "/commissions/earned",
   payroll: null,
@@ -51,6 +56,8 @@ export const controls = {} as const satisfies Record<string, string>;
 export const documents = {
   // Step 38: a commission payment to one person.
   CP: "Commission payment",
+  // Step 34: money moved between two of the company's cash and bank accounts.
+  TR: "Cash transfer",
 } as const satisfies Record<string, string>;
 
 /** This track's reports, listed on the Reports page under headings of its own. */

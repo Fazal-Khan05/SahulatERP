@@ -6,7 +6,8 @@ import { setBaseCurrency } from "@/modules/currencies/commands";
 import { postAdjustment, saveAdjustmentDraft } from "@/modules/inventory/commands";
 import { addUnit, createItem } from "@/modules/items/commands";
 import { addAccount, seedAccounts } from "@/modules/ledger/commands";
-import { openFiscalYear } from "@/modules/numbering/commands";
+import { openFiscalYear, setPeriodLocked } from "@/modules/numbering/commands";
+import { listFiscalPeriods } from "@/modules/numbering/queries";
 import { createParty } from "@/modules/parties/commands";
 import { postReceipt, saveOrderDraft, saveReceiptDraft, submitOrder } from "@/modules/purchasing/commands";
 import { getGrni, getOrder } from "@/modules/purchasing/queries";
@@ -321,6 +322,11 @@ describe.skipIf(!hasDb)("supplier returns", { timeout: 600_000 }, () => {
     await expect(applyReturnCredit(as.accountant, back.id, { date: "2026-11-05", allocations: [{ billId: next.id, amount: "200" }] })).rejects.toThrow("The return is dated 06-11-2026. Its credit cannot be set against a bill before that.");
     await expect(applyReturnCredit(as.accountant, back.id, { date: RETURNED, allocations: [{ billId: next.id, amount: "200.01" }] })).rejects.toThrow("200.01 is set against bills, more than what is left of the credit: 200.00.");
     await expect(applyReturnCredit(as.accountant, back.id, { date: RETURNED, allocations: [] })).rejects.toThrow("Enter an amount against at least one bill.");
+    // Not in a locked period: nothing is posted, but what is owed on a bill as at that day would change.
+    const november = (await listFiscalPeriods(as.owner)).find((period) => period.startsOn === "2026-11-01")!;
+    await setPeriodLocked(as.owner, november.id, true);
+    await expect(applyReturnCredit(as.accountant, back.id, { date: "2026-11-07", allocations: [{ billId: next.id, amount: "150" }] })).rejects.toThrow(/locked/);
+    await setPeriodLocked(as.owner, november.id, false);
     expect(await applyReturnCredit(as.accountant, back.id, { date: "2026-11-07", allocations: [{ billId: next.id, amount: "150" }] })).toEqual({ bills: 1 });
     expect(await owed(trader)).toEqual([`${next.number}: 250.00 of 400.00`]);
     const applied = await getReturn(as.accountant, back.id);
@@ -333,6 +339,7 @@ describe.skipIf(!hasDb)("supplier returns", { timeout: 600_000 }, () => {
     const call = (list: unknown) => sql`select app.apply_supplier_return_credit(${back.id}::uuid, '2026-11-07'::date, ${JSON.stringify(list)}::jsonb)`;
     expect(await codeOf(as.accountant, call([{ bill_id: next.id, amount: "50.01" }])), "more than is left").toBe("SE253");
     expect(await codeOf(as.accountant, call([{ bill_id: next.id, amount: "25" }, { bill_id: next.id, amount: "25" }])), "twice").toBe("SE253");
+    expect(await codeOf(as.accountant, call([{ bill_id: next.id, amount: "20" }, { bill_id: next.id.toUpperCase(), amount: "20" }])), "twice, typed two ways").toBe("SE253");
     expect(await codeOf(as.accountant, call([{ bill_id: next.id, amount: "-5" }])), "less than nothing").toBe("SE253");
     expect(await codeOf(as.accountant, call([{ bill_id: next.id, amount: "NaN" }])), "not a number").toBe("SE253");
     expect(await codeOf(as.accountant, call([])), "no bills").toBe("SE253");
@@ -348,6 +355,11 @@ describe.skipIf(!hasDb)("supplier returns", { timeout: 600_000 }, () => {
     expect(await owedTo(trader)).toBe("0.00");
     const audited = await admin<{ action: string }[]>`select action from public.audit_log where tenant_id = ${tenantA} and entity = 'supplier_return' and entity_id = ${back.id} order by at, id`;
     expect(audited.map((row) => row.action)).toEqual(["supplier_return.create", "supplier_return.post", "supplier_return.apply_credit", "supplier_return.apply_credit"]);
+    // The same for an advance (Step 26): a bill named twice is caught by its id, however it was typed.
+    const ahead = await savePaymentDraft(as.accountant, null, { date: "2026-11-08", supplierId: trader, branchId: mainBranch, accountId: bank, amount: "100" });
+    await postPayment(as.accountant, ahead.id, ahead.updatedAt);
+    const twice = JSON.stringify([{ bill_id: next.id, amount: "10" }, { bill_id: `{${next.id}}`, amount: "10" }]);
+    expect(await codeOf(as.accountant, sql`select app.apply_supplier_advance(${ahead.id}::uuid, '2026-11-08'::date, ${twice}::jsonb)`)).toBe("SE244");
   });
 
   it("one return for goods partly billed: each part undoes its own side, at what the stock is carried at, and what is left is exact", async () => {
@@ -464,6 +476,39 @@ describe.skipIf(!hasDb)("supplier returns", { timeout: 600_000 }, () => {
     expect(await codeOf(as.owner, sql`delete from public.journals where id = ${done.journal_id}`)).toBeDefined();
     expect(await codeOf(as.owner, sql`select app.reverse_journal(${done.journal_id}::uuid, ${RETURNED}::date, 'undo')`)).toBeDefined();
     expect(await codeOf(as.owner, sql`select app.post_supplier_return(${draft.id}::uuid)`)).toBe("SE247");
+  });
+
+  it("never lets a line into a return that was removed and written again while the line waited", async () => {
+    // Found by the reviewer of this migration. One session removes a draft and writes it again
+    // under the same id, with a line, and posts it; while that is still open, another writes a
+    // line into it. The second waits for the first, then finds nothing where the draft was.
+    // It must be refused: the return it would land in is posted.
+    const chains = await received(plain, chain, "6", "300");
+    const elsewhere = await received(plain, chain, "6", "300");
+    const me = userIds.accountant;
+    for (let round = 0; round < 3; round += 1) {
+      const id = randomUUID();
+      const header = sql`insert into public.supplier_returns (id, tenant_id, return_date, receipt_id, supplier_id, warehouse_id, branch_id, reason, created_by, updated_by) values (${id}, ${tenantA}, ${RETURNED}, ${chains.receiptId}, ${plain}, ${mainWarehouse}, ${mainBranch}, 'Swapped', ${me}, ${me})`;
+      const line = (no: number, receiptLineId: string, quantity: number) => sql`insert into public.supplier_return_lines (tenant_id, return_id, line_no, receipt_line_id, item_id, unit_factor, quantity, base_quantity, created_by) values (${tenantA}, ${id}, ${no}, ${receiptLineId}, ${chain}, 1, ${quantity}, ${quantity}, ${me})`;
+      await withTenant(me, tenantA, (tx) => tx.execute(header));
+      let posted!: () => void;
+      const waiting = new Promise<void>((resolve) => (posted = resolve));
+      const swap = withTenant(me, tenantA, async (tx) => {
+        await tx.execute(sql`delete from public.supplier_returns where id = ${id}`);
+        await tx.execute(header);
+        await tx.execute(line(1, chains.lineId, 1));
+        await tx.execute(sql`select app.post_supplier_return(${id}::uuid)`);
+        posted();
+        await tx.execute(sql`select pg_sleep(1)`);
+      });
+      await waiting;
+      expect(await codeOf(as.owner, line(2, elsewhere.lineId, 5)), `round ${round}`).toBe("23503");
+      await swap;
+      const done = await getReturn(as.auditor, id);
+      expect([done!.status, done!.lines.length], `round ${round}`).toEqual(["posted", 1]);
+    }
+    expect(await canGoBack(elsewhere.receiptId)).toEqual(["CH-5 not billed: 6 at 300"]);
+    expect(await stockAgrees()).toBe(true);
   });
 
   it("sends the same goods back once when two returns are posted at the same moment", async () => {

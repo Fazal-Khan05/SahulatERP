@@ -2,8 +2,8 @@
 -- after showing it to the founder and getting a yes. It refuses to run once any return has
 -- been posted: its journal and stock moves cannot be removed, and without this migration
 -- nothing would say where they came from. It DELETES every draft return. It puts
--- app.post_supplier_bill back as drizzle/0030_supplier_bills.sql wrote it and app.bill_owed as
--- drizzle/0032_supplier_payments.sql wrote it.
+-- app.post_supplier_bill back as drizzle/0030_supplier_bills.sql wrote it, and app.bill_owed
+-- and app.apply_supplier_advance as drizzle/0032_supplier_payments.sql wrote them.
 
 BEGIN;
 
@@ -283,6 +283,81 @@ CREATE OR REPLACE FUNCTION app.bill_owed(p_tenant uuid, p_bill uuid) RETURNS num
     FROM public.supplier_bills b WHERE b.tenant_id = p_tenant AND b.id = p_bill AND b.status = 'posted'
   $$;
 
+CREATE OR REPLACE FUNCTION app.apply_supplier_advance(p_payment uuid, p_date date, p_allocations jsonb) RETURNS integer
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+  AS $$
+DECLARE
+  v_doc public.supplier_payments%ROWTYPE := app.hold_supplier_payment(p_payment);
+  v_tenant uuid := v_doc.tenant_id;
+  v_user uuid := app.current_user_id();
+  v_role public.member_role := app.tenant_role();
+  v_supplier text;
+  v_left numeric;
+  v_line record;
+  v_total numeric := 0;
+  v_lines integer := 0;
+  v_journal uuid;
+  v_id uuid;
+BEGIN
+  IF v_doc.status <> 'posted' THEN
+    RAISE EXCEPTION 'an advance is set against a bill from a posted payment' USING ERRCODE = 'SE236';
+  END IF;
+  IF p_date IS NULL OR NOT isfinite(p_date) OR p_date < v_doc.payment_date OR p_date > (now() AT TIME ZONE 'Asia/Karachi')::date THEN
+    RAISE EXCEPTION 'an advance is set against a bill on a day that has come, on or after the payment' USING ERRCODE = 'SE242';
+  END IF;
+  IF p_allocations IS NULL OR jsonb_typeof(p_allocations) <> 'array' OR jsonb_array_length(p_allocations) NOT BETWEEN 1 AND 200 THEN
+    RAISE EXCEPTION 'name between 1 and 200 bills to set the advance against' USING ERRCODE = 'SE244';
+  END IF;
+  PERFORM app.require_open_period(v_tenant, p_date);
+  SELECT s.name INTO v_supplier FROM public.suppliers s WHERE s.tenant_id = v_tenant AND s.id = v_doc.supplier_id;
+  v_left := v_doc.amount - coalesce((SELECT sum(a.amount) FROM public.supplier_payment_allocations a WHERE a.tenant_id = v_tenant AND a.payment_id = v_doc.id), 0);
+
+  SET CONSTRAINTS public.journals_balanced, public.journal_lines_balanced, public.journals_with_document DEFERRED;
+  FOR v_line IN
+    SELECT (x.value->>'bill_id')::uuid AS bill_id, (x.value->>'amount')::numeric AS amount, b.status AS bill_status, b.supplier_id, b.branch_id, b.bill_date, b.number,
+           count(*) OVER (PARTITION BY x.value->>'bill_id') AS times
+    FROM jsonb_array_elements(p_allocations) AS x(value)
+    LEFT JOIN public.supplier_bills b ON b.tenant_id = v_tenant AND b.id = (x.value->>'bill_id')::uuid
+    ORDER BY b.bill_date, b.number
+  LOOP
+    IF v_line.bill_status IS DISTINCT FROM 'posted' OR v_line.supplier_id <> v_doc.supplier_id OR v_line.branch_id <> v_doc.branch_id OR v_line.bill_date > p_date THEN
+      RAISE EXCEPTION 'a payment settles posted bills of its own supplier and branch, dated on or before it' USING ERRCODE = 'SE238';
+    END IF;
+    IF v_line.times > 1 THEN
+      RAISE EXCEPTION 'bill % is named twice', v_line.number USING ERRCODE = 'SE244';
+    END IF;
+    -- "Not a number" passes "> 0"; the upper bound refuses it. An amount is to the paisa.
+    IF v_line.amount IS NULL OR NOT (v_line.amount > 0 AND v_line.amount < 1e16) OR v_line.amount <> round(v_line.amount, 2) THEN
+      RAISE EXCEPTION 'an amount set against a bill is more than nothing, to the paisa' USING ERRCODE = 'SE244';
+    END IF;
+    IF v_line.amount > app.bill_owed(v_tenant, v_line.bill_id) THEN
+      RAISE EXCEPTION 'more set against bill % than is still owed on it', v_line.number USING ERRCODE = 'SE239';
+    END IF;
+    v_total := v_total + v_line.amount;
+    IF v_total > v_left THEN
+      RAISE EXCEPTION 'more set against bills than is left of the advance: % against %', v_total, v_left USING ERRCODE = 'SE240';
+    END IF;
+    -- One journal for each bill, which stands with the row written for it.
+    v_id := gen_random_uuid();
+    INSERT INTO public.journals (tenant_id, journal_date, source_type, source_id, document_number, memo, branch_id, created_by)
+      VALUES (v_tenant, p_date, 'supplier_advance_application', v_id, NULL, left('Advance ' || v_doc.number || ' to ' || v_supplier || ' set against ' || v_line.number, 500), v_doc.branch_id, v_user)
+      RETURNING id INTO v_journal;
+    INSERT INTO public.journal_lines (tenant_id, journal_id, line_no, account_id, debit, credit, description, supplier_id)
+      VALUES (v_tenant, v_journal, 1, app.control_account(v_tenant, 'ap'), v_line.amount, 0, 'Advance set against ' || v_line.number, v_doc.supplier_id),
+             (v_tenant, v_journal, 2, app.control_account(v_tenant, 'supplier_advances'), 0, v_line.amount, 'Advance ' || v_doc.number || ' set against ' || v_line.number, v_doc.supplier_id);
+    INSERT INTO public.audit_log (tenant_id, actor_user_id, actor_role, action, entity, entity_id, after)
+      VALUES (v_tenant, v_user, v_role, 'journal.post', 'journal', v_journal,
+        jsonb_build_object('date', p_date, 'source', 'supplier_advance_application', 'sourceId', v_id, 'number', NULL, 'lines', 2, 'total', v_line.amount::text));
+    INSERT INTO public.supplier_payment_allocations (id, tenant_id, payment_id, bill_id, amount, applied_on, journal_id, created_by)
+      VALUES (v_id, v_tenant, v_doc.id, v_line.bill_id, v_line.amount, p_date, v_journal, v_user);
+    v_lines := v_lines + 1;
+  END LOOP;
+  INSERT INTO public.audit_log (tenant_id, actor_user_id, actor_role, action, entity, entity_id, after)
+    VALUES (v_tenant, v_user, v_role, 'supplier_payment.apply_advance', 'supplier_payment', v_doc.id,
+      jsonb_build_object('number', v_doc.number, 'supplier', v_supplier, 'date', p_date, 'amount', v_total::text, 'bills', v_lines, 'left', (v_left - v_total)::text));
+  RETURN v_lines;
+END $$;
+
 DROP FUNCTION app.audit_reserved_supplier_return(text);
 DROP FUNCTION app.journal_backed_supplier_return(public.journals);
 DROP TABLE public.supplier_return_allocations, public.supplier_return_lines, public.supplier_returns;
@@ -291,6 +366,6 @@ DROP FUNCTION app.check_supplier_return_line();
 DROP FUNCTION app.check_supplier_return();
 
 -- The row drizzle-kit wrote for 0033_supplier_returns (its "when" in drizzle/meta/_journal.json).
-DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1794935477297;
+DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1794938102861;
 
 COMMIT;

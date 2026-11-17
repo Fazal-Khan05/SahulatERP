@@ -629,10 +629,10 @@ export async function GrniScreen() {
       <Sections session={session} current="/purchases/grni" />
       <Card className="max-w-5xl">
         <div className="mb-3 flex flex-wrap justify-end gap-2">
-          <a href="/purchase-reports/export?report=grni&format=xlsx" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          <a href={`/purchase-reports/export?${new URLSearchParams({ report: "grni", format: "xlsx" })}`} className={buttonVariants({ variant: "outline", size: "sm" })}>
             Download Excel
           </a>
-          <a href="/purchase-reports/export?report=grni&format=csv" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          <a href={`/purchase-reports/export?${new URLSearchParams({ report: "grni", format: "csv" })}`} className={buttonVariants({ variant: "outline", size: "sm" })}>
             Download CSV
           </a>
           <Link href="/print/purchase-reports/grni" className={buttonVariants({ variant: "outline", size: "sm" })}>

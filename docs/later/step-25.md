@@ -10,8 +10,8 @@ received. Migration `0030_supplier_bills`.
   switches it on under Purchases, Withholding tax.
 - **When the supplier's bill is at a different price from the order, the difference goes to an
   account of its own, Purchase price differences (5120).** The stock value is not changed.
-- **The migration may be applied to the shared development database** once it has passed its
-  independent review and the local tests (the same yes covers Steps 24, 25 and 26).
+- **The migration was applied to the shared development database** on the founder's yes, after
+  its independent review and the local tests (the same yes covers Steps 24, 25 and 26).
 - For Step 26: a foreign-currency advance to a supplier is kept at the rupees actually paid; it
   is not revalued at month end.
 

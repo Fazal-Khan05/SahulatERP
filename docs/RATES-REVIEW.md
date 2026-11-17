@@ -194,6 +194,25 @@ category itself; a new withholding line needs a product update.
 - **Rates before 1 July 2026.** A document dated earlier finds no rate until a row is added for
   that period.
 
+## Payroll (Step 40)
+
+The salary tax tables of Tax Years 2026 and 2027, the surcharge on salary tax, the exempt share of
+a medical allowance, EOBI's shares and wage, the minimum wages of Islamabad, Punjab, Sindh and
+Khyber Pakhtunkhwa, and the employer's social security share are written for each company by
+`app.seed_payroll_statutory` (in `drizzle/0032_payroll_employees.sql`), each with its source. They
+were read on 15 November 2026; the table of them, what was not found, and the questions for a tax
+adviser are in [later/step-40.md](later/step-40.md), and the figures are worked in
+[examples/step-40.md](examples/step-40.md). **Checked by Claude, not an accountant.** They can be
+seen and added to in the product under Payroll, Statutory rates.
+
+| Table | Accountant agrees |
+| --- | --- |
+| Salary tax, Tax Years 2026 and 2027, and the surcharge | |
+| Medical allowance exemption | |
+| EOBI shares and wage | |
+| Minimum wages | |
+| Social security, employer's share | |
+
 ## Sign-off
 
 | Date | Reviewed by | What was reviewed | Changes asked for |

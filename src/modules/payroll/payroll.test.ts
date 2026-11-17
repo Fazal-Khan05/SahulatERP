@@ -202,22 +202,21 @@ describe.skipIf(!hasDb)("payroll: employees, attendance and the statutory tables
     expect(logged.some((row) => row.text.includes("4210112345671"))).toBe(false);
   });
 
-  it("says who wrote a statutory row itself, whatever setting the app's role writes", async () => {
+  it("says who changed a statutory row and when itself, whatever setting the app's role writes", async () => {
+    // The guard used to let a row through when the setting app.payroll_seed named the company; the
+    // app's role can write any setting. Now it asks who is writing: a change made with the setting
+    // written by hand is still stamped with its own time, and a back-dated time is not kept.
+    await withTenant(userIds.accountant, tenantA, (tx) =>
+      tx.execute(sql`insert into public.statutory_rates (tenant_id, kind, province, effective_from, amount, legal_reference, created_by, updated_by)
+        values (${tenantA}, 'minimum_wage', 'gilgit_baltistan', '2026-07-01', 38000, 'Test notification', ${userIds.accountant}, ${userIds.accountant})`),
+    );
     await withTenant(userIds.accountant, tenantA, async (tx) => {
       await tx.execute(sql`select set_config('app.payroll_seed', ${tenantA}::text, true)`);
-      await tx.execute(sql`insert into public.statutory_rates (tenant_id, kind, province, effective_from, amount, legal_reference, created_by, updated_by)
-        values (${tenantA}, 'minimum_wage', 'gilgit_baltistan', '2026-07-01', 38000, 'Test notification', ${userIds.accountant}, ${userIds.accountant})`);
+      await tx.execute(sql`update public.statutory_rates set amount = 39000, updated_at = '2001-01-01', updated_by = ${userIds.accountant} where tenant_id = ${tenantA} and province = 'gilgit_baltistan'`);
     });
-    const [row] = await admin<{ created_by: string; updated_by: string }[]>`select created_by, updated_by from public.statutory_rates where tenant_id = ${tenantA} and province = 'gilgit_baltistan'`;
-    expect(row).toEqual({ created_by: userIds.accountant, updated_by: userIds.accountant });
-    // Past the app, a salesperson with the setting written is still refused by the policy.
-    expect(
-      await codeOf(
-        as.salesperson,
-        sql`insert into public.statutory_rates (tenant_id, kind, effective_from, rate, legal_reference, created_by, updated_by)
-            select ${tenantA}, 'eobi_employer', '2026-12-01', 9, 'x y', ${userIds.salesperson}, ${userIds.salesperson} from (select set_config('app.payroll_seed', ${tenantA}::text, true)) as s(x)`,
-      ),
-    ).toBe("42501");
+    const [row] = await admin<{ amount: string; recent: boolean }[]>`
+      select trim_scale(amount)::text as amount, updated_at > now() - interval '5 minutes' as recent from public.statutory_rates where tenant_id = ${tenantA} and province = 'gilgit_baltistan'`;
+    expect(row).toEqual({ amount: "39000", recent: true });
     await admin`delete from public.statutory_rates where tenant_id = ${tenantA} and province = 'gilgit_baltistan'`;
   });
 

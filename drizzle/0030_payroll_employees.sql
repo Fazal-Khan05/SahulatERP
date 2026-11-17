@@ -301,7 +301,7 @@ CREATE POLICY statutory_rates_update ON public.statutory_rates FOR UPDATE TO app
 CREATE FUNCTION app.payroll_is_member(p_user uuid) RETURNS boolean
   LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
   AS $$
-    SELECT EXISTS (SELECT 1 FROM public.memberships m WHERE m.tenant_id = app.tenant_id() AND m.user_id = p_user)
+    SELECT EXISTS (SELECT 1 FROM public.memberships m WHERE m.tenant_id = app.tenant_id() AND m.user_id = p_user AND m.active)
   $$;
 --> statement-breakpoint
 REVOKE ALL ON FUNCTION app.payroll_is_member(uuid) FROM PUBLIC;
@@ -342,7 +342,8 @@ BEGIN
   ELSIF TG_TABLE_NAME = 'employee_pay' THEN
     -- Held while the pay is written, so how the employee is paid cannot change underneath it.
     SELECT e.pay_basis INTO v_basis FROM public.employees e WHERE e.tenant_id = NEW.tenant_id AND e.id = NEW.employee_id FOR SHARE;
-    IF (v_basis = 'daily') <> (NEW.component = 'daily_wage') THEN
+    -- An employee the writer cannot see is refused too, not let through.
+    IF v_basis IS NULL OR (v_basis = 'daily') <> (NEW.component = 'daily_wage') THEN
       RAISE EXCEPTION 'a daily employee is paid a daily wage, and a monthly employee basic pay and allowances' USING ERRCODE = 'SE322';
     END IF;
   END IF;

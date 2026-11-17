@@ -1,4 +1,4 @@
--- Reverses drizzle/0031_supplier_payments.sql. Never run automatically. Run it by hand, as postgres, only
+-- Reverses drizzle/0032_supplier_payments.sql. Never run automatically. Run it by hand, as postgres, only
 -- after showing it to the founder and getting a yes. It refuses to run once any payment has
 -- been posted or any challan recorded: their journals cannot be removed, and without this
 -- migration nothing would say where they came from. It DELETES every draft payment.
@@ -36,7 +36,7 @@ DROP FUNCTION app.refuse_challan_change();
 DROP FUNCTION app.check_supplier_payment_allocation();
 DROP FUNCTION app.check_supplier_payment();
 
--- The row drizzle-kit wrote for 0031_supplier_payments (its "when" in drizzle/meta/_journal.json).
-DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1794738950100;
+-- The row drizzle-kit wrote for 0032_supplier_payments (its "when" in drizzle/meta/_journal.json).
+DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1794921736535;
 
 COMMIT;

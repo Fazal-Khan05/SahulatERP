@@ -1,7 +1,7 @@
 # Step 26: supplier payments, advances and withholding challans
 
 Built in track B (stock and buying) by the Builder, on Step 25's supplier bills. Migration
-`0031_supplier_payments`.
+`0032_supplier_payments`.
 
 ## Decided by the founder (2026-11-15, in the Builder's chat)
 

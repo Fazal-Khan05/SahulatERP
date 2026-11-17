@@ -628,6 +628,17 @@ export async function GrniScreen() {
       <PageHead title="Goods received, not yet billed" sub="Goods that have arrived and have no supplier bill yet, at what they cost. This is what is owed to suppliers and not yet billed." />
       <Sections session={session} current="/purchases/grni" />
       <Card className="max-w-5xl">
+        <div className="mb-3 flex flex-wrap justify-end gap-2">
+          <a href="/purchase-reports/export?report=grni&format=xlsx" className={buttonVariants({ variant: "outline", size: "sm" })}>
+            Download Excel
+          </a>
+          <a href="/purchase-reports/export?report=grni&format=csv" className={buttonVariants({ variant: "outline", size: "sm" })}>
+            Download CSV
+          </a>
+          <Link href="/print/purchase-reports/grni" className={buttonVariants({ variant: "outline", size: "sm" })}>
+            Print
+          </Link>
+        </div>
         {rows.length === 0 ? (
           <Empty>No goods are waiting for a supplier&apos;s bill.</Empty>
         ) : (

@@ -19,7 +19,9 @@
   statement answered for two companies (materialised CTEs, cursors, DO blocks, savepoints). What
   the review did find was put right before the migration went anywhere: a transaction open since
   before the key was installed went on being believed (now a flag every transaction sees at
-  once, `app.identity_proof_flag`); rubbish left in the old settings broke the connection's
+  once, `app.identity_proof_flag`, raised before the key goes in, and a row written without a
+  proof stops counting when one is wanted; a second look by the same reviewer found those last
+  two points); rubbish left in the old settings broke the connection's
   later transactions; `service_role` was not shut out by name; and the app's error for a
   refused proof carried the signature in its text.
 

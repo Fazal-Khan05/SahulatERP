@@ -94,9 +94,12 @@ if (action === "generate") {
       await sql.end();
       fail(`Database ${name}: both slots hold other keys. Remove the old one first ("npm run db:identity -- remove <slot> --yes").`);
     }
-    await sql`insert into app.identity_keys (slot, inner_key, outer_key) values (${slot}, ${mine.inner}, ${mine.outer})`;
-    // The flag every transaction sees at once, also one that was open before the key went in.
+    // The flag first: every transaction sees it at once, also one that was open before the key
+    // went in, and from this moment nothing unproven is believed. For the instant until the key
+    // is in, nothing is accepted at all, which is the safe way round; if this stops in between,
+    // run install again.
     await sql`select setval('app.identity_proof_flag', 2)`;
+    await sql`insert into app.identity_keys (slot, inner_key, outer_key) values (${slot}, ${mine.inner}, ${mine.outer})`;
     console.log(`Database ${name}: key installed in slot ${slot}. From now on this database wants the proof of who is signed in.`);
   }
   await sql.end();

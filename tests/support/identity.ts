@@ -13,7 +13,14 @@ import { identityProof } from "../../src/db/identity-proof";
 export async function enterAs(tx: unknown, userId: string, tenantId: string | null): Promise<void> {
   const proof = identityProof(userId, tenantId);
   const run = tx as (strings: TemplateStringsArray, ...values: unknown[]) => PromiseLike<unknown>;
-  await run`select app.enter(${userId}::uuid, ${tenantId}::uuid, ${proof.expires}::bigint, ${proof.signature}::text)`;
+  try {
+    await run`select app.enter(${userId}::uuid, ${tenantId}::uuid, ${proof.expires}::bigint, ${proof.signature}::text)`;
+  } catch (error) {
+    // The driver's error carries the statement's parameters, the signature among them; a failed
+    // test would print it. Say what the database said, and no more.
+    const cause = error as { code?: string; message?: string };
+    throw Object.assign(new Error(`The database did not accept who is signed in${cause.message ? `: ${cause.message}` : "."}`), { code: cause.code });
+  }
 }
 
 /**

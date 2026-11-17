@@ -38,7 +38,7 @@
 -- deployed, and lets a development database run without a secret. Installing the key is the
 -- moment the proof becomes required; from then on the two settings mean nothing.
 --
--- "Is a key installed?" is answered from a flag that is not part of any transaction's picture
+-- "Is a proof wanted?" is answered from a flag that is not part of any transaction's picture
 -- of the database (a sequence), as well as from the keys themselves. A transaction that was
 -- already open when the key went in sees no key in its own picture; without the flag it would
 -- go on being believed for as long as it stayed open, and could lend its picture to others
@@ -89,12 +89,16 @@ REVOKE ALL ON FUNCTION app.identity_proof_wanted() FROM PUBLIC;
 
 -- Who each open transaction is. One row for each database connection, written over at the
 -- start of every transaction, so it never grows; a row counts only for the transaction that
--- wrote it (xid). Unlogged: nothing in it outlives its transaction.
+-- wrote it (xid). "proven" says a signature was checked when it was written: a row written
+-- without one, while no key was installed, stops counting the moment a key is (a transaction
+-- that said who it was just before the key went in is not believed after). Unlogged: nothing in
+-- it outlives its transaction.
 CREATE UNLOGGED TABLE app.identity_sessions (
   pid integer PRIMARY KEY,
   xid xid8 NOT NULL,
   user_id uuid NOT NULL,
-  tenant_id uuid
+  tenant_id uuid,
+  proven boolean NOT NULL
 ) WITH (fillfactor = 50);
 --> statement-breakpoint
 ALTER TABLE app.identity_sessions ENABLE ROW LEVEL SECURITY;
@@ -111,12 +115,13 @@ DECLARE
   v_message bytea;
   v_given bytea;
   v_valid boolean := false;
+  v_wanted boolean := app.identity_proof_wanted();
   k record;
 BEGIN
   IF p_user IS NULL THEN
     RAISE EXCEPTION 'who is signed in is needed' USING ERRCODE = 'invalid_parameter_value';
   END IF;
-  IF app.identity_proof_wanted() THEN
+  IF v_wanted THEN
     IF p_expires IS NULL OR p_signature IS NULL OR p_signature !~ '^[0-9a-f]{64}$' THEN
       RAISE EXCEPTION 'the proof of who is signed in is missing' USING ERRCODE = 'insufficient_privilege';
     END IF;
@@ -137,9 +142,10 @@ BEGIN
       RAISE EXCEPTION 'the proof of who is signed in is not valid' USING ERRCODE = 'insufficient_privilege';
     END IF;
   END IF;
-  INSERT INTO app.identity_sessions AS s (pid, xid, user_id, tenant_id)
-  VALUES (pg_backend_pid(), pg_current_xact_id(), p_user, p_tenant)
-  ON CONFLICT (pid) DO UPDATE SET xid = excluded.xid, user_id = excluded.user_id, tenant_id = excluded.tenant_id;
+  -- Reached with a proof wanted only if one was checked: v_wanted is then what "proven" means.
+  INSERT INTO app.identity_sessions AS s (pid, xid, user_id, tenant_id, proven)
+  VALUES (pg_backend_pid(), pg_current_xact_id(), p_user, p_tenant, v_wanted)
+  ON CONFLICT (pid) DO UPDATE SET xid = excluded.xid, user_id = excluded.user_id, tenant_id = excluded.tenant_id, proven = excluded.proven;
   RETURN coalesce(p_tenant::text, '');
 END $$;
 --> statement-breakpoint
@@ -162,6 +168,7 @@ CREATE FUNCTION app.identity_now() RETURNS TABLE (user_id uuid, tenant_id uuid)
            CASE WHEN s.pid IS NOT NULL THEN s.tenant_id ELSE f.tenant_id END
     FROM (SELECT 1) one
     LEFT JOIN app.identity_sessions s ON s.pid = pg_backend_pid() AND s.xid = pg_current_xact_id_if_assigned()
+      AND (s.proven OR NOT app.identity_proof_wanted())
     LEFT JOIN LATERAL (
       SELECT CASE WHEN v.user_id ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' THEN v.user_id::uuid END AS user_id,
              CASE WHEN v.tenant_id ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' THEN v.tenant_id::uuid END AS tenant_id

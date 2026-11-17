@@ -365,6 +365,9 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
   // a hosted one it would shut the app out for a moment, and for good if it stopped half-way.
   const local = hasDb && new URL(process.env.MIGRATION_DATABASE_URL!).hostname === "127.0.0.1";
   it.skipIf(!local)("stops believing a transaction that was open before the key was installed", async () => {
+    // What a run of this test that died half-way left behind (its key is marked by its date).
+    await admin`delete from app.identity_keys where slot = 2 and created_at = 'epoch'`;
+    await admin`select setval('app.identity_proof_flag', 1) where not exists (select 1 from app.identity_keys)`;
     const [{ keyed }] = await admin<{ keyed: boolean }[]>`select app.identity_proof_wanted() as keyed`;
     if (keyed) return; // This database already wants the proof: there is no "before" to test.
     const secret = randomBytes(32);
@@ -379,9 +382,22 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
         await tx`select set_config('app.user_id', ${ownerA}, true), set_config('app.tenant_id', ${tenantA}, true)`;
         seen.before = await who(tx);
         const [{ snapshot }] = await tx<{ snapshot: string }[]>`select pg_export_snapshot() as snapshot`;
-        await admin`insert into app.identity_keys (slot, inner_key, outer_key) values (2, ${Buffer.from(padded.map((b) => b ^ 0x36))}, ${Buffer.from(padded.map((b) => b ^ 0x5c))})`;
-        await admin`select setval('app.identity_proof_flag', 2)`;
-        // The same transaction, after the key: by the settings, and by an unsigned app.enter.
+        // A second one that said who it was through app.enter, unsigned, as was allowed then.
+        const entered = postgres(process.env.DATABASE_URL!, { max: 1 });
+        try {
+          await entered.begin(async (early) => {
+            await early`select app.enter(${ownerA}::uuid, ${tenantA}::uuid, 0, '')`;
+            seen.enteredBefore = await who(early);
+            // As the install does it: the flag, then the key.
+            await admin`select setval('app.identity_proof_flag', 2)`;
+            seen.betweenFlagAndKey = await who(tx);
+            await admin`insert into app.identity_keys (slot, inner_key, outer_key, created_at) values (2, ${Buffer.from(padded.map((b) => b ^ 0x36))}, ${Buffer.from(padded.map((b) => b ^ 0x5c))}, 'epoch')`;
+            seen.enteredAfter = await who(early);
+          });
+        } finally {
+          await entered.end();
+        }
+        // The first transaction, after the key: by the settings, and by an unsigned app.enter.
         seen.after = await who(tx);
         seen.unsigned = await tx.savepoint((sp) => sp`select app.enter(${ownerA}::uuid, ${tenantA}::uuid, 0, '')`).then(() => undefined, (error: { code?: string }) => error.code);
         // Another session that borrows the old picture.
@@ -399,6 +415,9 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
     }
     const nobody = { user: null, role: null, branches: 0 };
     expect(seen.before).toMatchObject({ user: ownerA, role: "owner" });
+    expect(seen.enteredBefore).toMatchObject({ user: ownerA, role: "owner" });
+    expect(seen.betweenFlagAndKey).toEqual(nobody);
+    expect(seen.enteredAfter).toEqual(nobody);
     expect(seen.after).toEqual(nobody);
     expect(seen.unsigned).toBe(DENIED);
     expect(seen.borrowed).toEqual(nobody);

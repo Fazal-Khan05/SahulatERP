@@ -110,8 +110,48 @@ To be written when the review is back.
 
 ## For a tax adviser
 
-No accountant or tax adviser has checked any of this. To be completed from the second,
-independent working of the worked example (`docs/examples/step-28.md`).
+No accountant or tax adviser has checked any of this. The second, independent working of the
+worked example (`docs/examples/step-28.md`) agreed with every entry, and raised these doubts.
+They are from the reviewer's memory of the law, not checked against it.
+
+- **What is part of the goods' cost.** Accounting standards put duties, taxes that cannot be
+  claimed back, freight, handling and the clearing agent's own fee for the consignment into
+  the cost of the goods. Only delays (demurrage, detention), penalties and general overheads
+  are expenses. The product lets you choose the kind of each charge; the example's agent fee
+  as an expense is the old tests' choice, not advice.
+- **Duty spread over items that pay different rates.** Customs works duty out line by line of
+  the goods declaration, at each line's own rate. One duty amount spread by value or quantity
+  over items with different rates costs them wrongly. To be exact, enter the duty as one bill
+  line for each item's rate and put each on a shipment of its own goods, or wait for the goods
+  declaration's lines to be kept (Later).
+- **Sales tax at import** is claimed only where the goods go into taxable sales and the goods
+  declaration is in the company's name. Tax that cannot be claimed should be entered as part
+  of what the goods cost.
+- **Value-addition tax** paid at import by a commercial importer (recalled as 3%) has no kind
+  of its own here. Whether it is claimed against output tax, and how the cap on input tax
+  applies to a commercial importer, needs an adviser before it is entered either way.
+- **When input tax is claimed.** Here the tax paid at import stays in Goods in transit until
+  the shipment is closed. The law puts it in the tax month of the goods declaration. A
+  shipment left open over a month end will make the books disagree with the return. Close
+  shipments promptly, or ask for tax lines to be released as soon as they are put on (Later).
+- **Advance income tax at import (section 148)** for a commercial importer is recalled as a
+  minimum tax: what cannot be set against the year's tax is not refunded and becomes a cost of
+  the year. The product only holds it in Advance income tax.
+- **A late charge is split by how many are held now**, not by following the particular units.
+  With stock kept at the average that is the usual approximation. It is wrong where the units
+  held came from other purchases of the same item, and it treats units written off or sent
+  back as sold. The part for units already sold lands in the month the charge is spread, not
+  the month of the sale.
+- **The province's tax on the agent's services.** Withholding all of it suggests an agent not
+  registered with the province; for a registered one a part is withheld. Where the agent is
+  registered and invoices properly the tax may be claimable against output tax, not a cost.
+  The product adds it to the cost of the line (Step 25's rule for every service bill).
+- **Income tax withheld from the agent (section 153)** is on its fee, not on what it only
+  passes on. The bill's withholding line is chosen by hand, on the whole bill.
+- **A container deposit** is an asset only for what comes back; what the shipping line keeps
+  is a cost when the refund is settled.
+- **Goods bought in a foreign currency** should come into the books at the rate on the day
+  they became the company's (often when shipped). Bills here are in rupees only.
 
 ## Later
 

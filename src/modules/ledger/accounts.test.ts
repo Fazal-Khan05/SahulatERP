@@ -68,13 +68,14 @@ describe.skipIf(!hasDb)("the chart of accounts", () => {
     expect(await hasAccounts(as.owner)).toBe(false);
     await expect(seedAccounts(as.accountant, "trading")).rejects.toThrow("Only the owner can create the chart of accounts.");
     await expect(seedAccounts(as.owner, "manufacturing")).rejects.toThrow("Choose a chart of accounts to start from.");
-    // Two clicks at the same moment make one chart, not two.
+    // Two clicks at the same moment make one chart, not two. The standard chart's 66 accounts,
+    // and Purchase price differences, which Step 25 adds with a function of its own.
     const twice = await Promise.all([seedAccounts(as.owner, "trading"), seedAccounts(as.owner, "trading")]);
-    expect(twice.map((r) => r.created).sort((a, b) => a - b)).toEqual([0, 66]);
+    expect(twice.map((r) => r.created).sort((a, b) => a - b)).toEqual([0, 67]);
     expect((await seedAccounts(as.owner, "trading")).created).toBe(0);
 
     const chart = await listAccounts(as.auditor);
-    expect(chart).toHaveLength(66);
+    expect(chart).toHaveLength(67);
     expect(chart.filter((a) => a.depth === 0).map((a) => `${a.code} ${a.name} ${a.type}`)).toEqual(["1000 Assets asset", "2000 Liabilities liability", "3000 Equity equity", "4000 Income income", "5000 Expenses expense"]);
     // Every account a posting must find is there once, locked; headings are locked too.
     const locked = chart.filter((a) => a.isControl && a.controlType !== null);
@@ -88,7 +89,7 @@ describe.skipIf(!hasDb)("the chart of accounts", () => {
     }
     expect(chart.find((a) => a.code === "1111")).toMatchObject({ name: "Cash in hand", controlType: "cash", isControl: false });
     const [audited] = await admin`select actor_role, after from public.audit_log where tenant_id = ${tenantA} and action = 'accounts.seed'`;
-    expect(audited).toEqual({ actor_role: "owner", after: { template: "trading", accounts: 66 } });
+    expect(audited).toEqual({ actor_role: "owner", after: { template: "trading", accounts: 67 } });
     // The other company has none, and sees none of these.
     expect(await hasAccounts(otherOwner)).toBe(false);
     expect(await withTenant(ownerB, tenantA, (tx) => tx.select().from(accounts))).toEqual([]);
@@ -308,8 +309,8 @@ describe.skipIf(!hasDb)("the chart of accounts", () => {
       language sql immutable as 'values (''2991'', ''Test payable'', ''liability'', ''2990'', false, true, ''zz_test''), (''2990'', ''Test heading'', ''liability'', ''2000'', true, true, null)'`);
     try {
       const { created } = await seedAccounts(ctx(ownerC, tenantC, "owner"), "trading");
-      // The standard chart and the two more, the heading before the account beneath it.
-      expect(created).toBe(68);
+      // The standard chart, Step 25's account, and the two more, the heading before the account beneath it.
+      expect(created).toBe(69);
       const added = await admin`
         select a.code, a.name, a.is_control, a.control_type, p.code as parent
         from public.accounts a left join public.accounts p on p.tenant_id = a.tenant_id and p.id = a.parent_id

@@ -27,6 +27,9 @@ export const permissions = {
   "purchase_order.manage": ["owner", "accountant"],
   "goods_receipt.read": ["owner", "accountant", "auditor", "warehouse_manager"],
   "goods_receipt.manage": ["owner", "accountant", "warehouse_manager"],
+  // Step 25. A supplier's bill carries what was bought, what it cost and what tax was withheld.
+  "supplier_bill.read": ["owner", "accountant", "auditor"],
+  "supplier_bill.manage": ["owner", "accountant"],
 } as const satisfies TrackPermissions;
 
 /**
@@ -46,7 +49,10 @@ export const links = {
  * Locked accounts this track adds, by what each is for. The account itself is added in the
  * step's migration with a function app.chart_extra_<name>().
  */
-export const controls = {} as const satisfies Record<string, string>;
+export const controls = {
+  // Step 25. Where a supplier's bill differs from what its goods came into stock at.
+  purchase_price_difference: "Purchase price differences",
+} as const satisfies Record<string, string>;
 
 /**
  * Kinds of document this track numbers, by their two letters. The migration adds a function

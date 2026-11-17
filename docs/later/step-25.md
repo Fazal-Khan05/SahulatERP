@@ -1,0 +1,242 @@
+# Step 25: supplier bills
+
+Built in track B (stock and buying) by the Builder, on Step 24's purchase orders and goods
+received. Migration `0030_supplier_bills`.
+
+## Decided by the founder (2026-11-15, in the Builder's chat)
+
+- **Tax is withheld from suppliers only by a company that switches it on.** It is off to start
+  with. A small business that is not a withholding agent never sees it; one that must deduct
+  switches it on under Purchases, Withholding tax.
+- **When the supplier's bill is at a different price from the order, the difference goes to an
+  account of its own, Purchase price differences (5120).** The stock value is not changed.
+- **The migration was applied to the shared development database** on the founder's yes, after
+  its independent review and the local tests (the same yes covers Steps 24, 25 and 26).
+- For Step 26: a foreign-currency advance to a supplier is kept at the rupees actually paid; it
+  is not revalued at month end.
+
+## What was built
+
+- **Supplier bills** (`/purchases/bills`). A bill is for one supplier and one branch, and
+  carries the supplier's own invoice number and date. Its lines are of two kinds:
+  - **goods already received**: so much of one line of a posted goods received note, at the
+    supplier's price for one. Never more than arrived and is not yet billed;
+  - **a service or an expense**: an amount charged to an expense or asset account.
+  It is a draft until it is posted; posting gives it its number (PB-2627-00001).
+- **Posting is one act of the database.** What the billed goods came into stock at leaves Goods
+  received not invoiced; the difference from the bill's price goes to Purchase price
+  differences; services go to their accounts; input tax to Sales tax receivable; what is
+  withheld to the three withholding payable accounts; and the rest is owed to the supplier in
+  Trade payables, with the supplier named.
+- **Input tax** is claimed only where the company is registered for sales tax and the supplier
+  is registered with an STRN, at the rate in force on the bill's date for the tax category
+  chosen on the line.
+- **Withholding** (`withholding_entries`). For a company that withholds, a bill names the line
+  of the withholding tables that applies, for each of income tax (section 153), sales tax
+  (Eleventh Schedule) and the province's sales tax on services. The database reads the rate in
+  force on the bill's date, at the rate for a supplier who is or is not on the Active Taxpayers
+  List as recorded on the supplier that day, and writes one entry for each: the line, the law
+  it cites, the amount it was worked on, the rate and the amount. Nothing about a rate is ever
+  typed, and the app cannot write or change an entry.
+- **The draft shows what posting will do**: the totals, each amount withheld with its rate, and
+  what will be owed to the supplier, worked out from the same tables.
+- **Goods received, not yet billed** now leaves out what has been billed, line by line.
+- **Every command writes an audit row**, including switching withholding on or off.
+
+**The acceptance test**, "A Rs 100,000 goods bill from a non-ATL company withholds 10% and posts
+to the withholding payable account": in `src/modules/supplier-bills/bills.test.ts`, and on
+screen in `e2e/supplier-bills.spec.ts`. The journal is debit Goods received not invoiced
+100,000; credit Income tax withheld payable 10,000; credit Trade payables 90,000.
+
+## Decided for Fazal, to confirm
+
+Nobody was asked these while building. Each is the option I would recommend; say if any should
+change.
+
+1. **Who does what.** The owner and an accountant write and post bills and switch withholding on
+   or off. The auditor reads. Nobody else sees a bill: it shows what things cost.
+2. **Tax withheld is recorded when the bill is posted**, not when it is paid, and the supplier
+   is then owed the rest. This is what the plan's test asks for, and it keeps what is owed to a
+   supplier and what is owed to the government apart from the first day. The law itself deducts
+   at the time of payment; see "For a tax adviser".
+3. **The person entering the bill chooses the withholding lines**, from the lines in force. The
+   income tax line for the supplier's kind (company, or individual or AOP) is offered already
+   chosen on a bill of goods. The product does not decide by itself whether a bill is under the
+   yearly limits (Rs 75,000 of goods, Rs 30,000 of services from one supplier): the form says
+   what the limits are, and "Nothing withheld" is chosen for such a bill.
+4. **Whether a supplier is on the Active Taxpayers List is what is recorded on the supplier** on
+   the day the bill is posted. Nobody checks FBR's list automatically yet.
+5. **The province's sales tax on a service bill is charged on the services billed, added to the
+   cost of the service, and withheld whole.** Only a company that withholds enters it; one that
+   does not simply enters what the supplier charges. Withholding a part of it (a fifth, a half:
+   the rule differs by province and by whether the provider is registered) is not built: see
+   "For a tax adviser".
+6. **Input tax is the line's amount at the rate in the tax tables.** If the supplier's invoice
+   shows a different tax (rounding, a special rate), the bill cannot be made to match it to the
+   rupee yet. Goods taxed on their printed retail price (the Third Schedule) cannot carry input
+   tax on a bill yet at all.
+7. **A bill belongs to one branch**, and bills goods received into that branch's warehouses.
+8. **A supplier's invoice number is billed once.** The same number from the same supplier,
+   whatever the capitals or spaces, is refused when the second bill is posted.
+9. **A posted bill is never changed or cancelled.** A wrong bill is put right with a supplier
+   return or debit note (Step 27). Until then there is no way on screen to undo one, so a bill
+   is saved as a draft first, the draft shows what posting will do, and posting is a separate
+   button.
+10. **A bill is in rupees.** Bills in a foreign currency come with Step 26 and imports.
+11. **A bill cannot be dated in the future**, in a locked period, or before the books opened.
+12. **An archived supplier can still be billed** for goods already received from it.
+
+## The independent review (2026-11-15)
+
+A reviewer who had not seen the work attacked the migration as a signed-in member running any
+SQL as the app's database role, on a database of its own. **It found nothing to fix in this
+migration.** What it tried and what held: a draft written by hand with a false tax or rate is
+refused when posted; more billed than received is refused, also when two bills are posted at
+the same moment; what a bill clears from Goods received not invoiced comes out exactly at what
+the goods came in at; the app's role cannot write a bill's status, number, journal, what was
+withheld or what a line cleared, nor any withholding entry or the audit row of a posting; an
+expense cannot be charged to a locked, heading, archived or foreign account; a supplier's
+invoice number is posted once; rates come only from the dated tables; dates in the future, off
+the calendar or in a closed period are refused; the reverse file takes everything away again.
+
+Found by the review but not this step's to change (told to the coordinator, for a migration the
+three tracks agree on):
+
+- **Every table's access rule can be read past by someone running their own SQL who belongs to
+  two companies.** In plain words: a rule asks "which company?" and "which role?" as two
+  separate questions. A member who is, say, a salesperson in company A and the owner of a
+  company B of their own (anyone can create a company) can change the company setting part-way
+  through one statement, so the first question is answered for A and the second for B, and
+  they read A's rows that only an owner, an accountant or an auditor should see. Reading only:
+  every write is checked again by a trigger and refused. The app never lets anyone run their
+  own SQL, so this matters only if another hole lets them.
+
+  The detail, for whoever writes the joint migration:
+
+  - **Which policies.** Every policy written in the shared idiom
+    `tenant_id = (SELECT app.tenant_id()) AND (SELECT app.tenant_role()) IN (...)`, which is
+    every table's since `drizzle/0000_tenancy.sql`. Postgres plans the two scalar sub-selects
+    as two separate InitPlans, each run once, when first needed. `app.tenant_id()` and
+    `app.tenant_role()` both read the transaction setting `app.tenant_id`, which the app's
+    database role can rewrite at any time with `set_config`.
+  - **How it was reproduced** (on a local database, as the role `app_runtime`; by the reviewer,
+    and again by the Builder on 2026-11-15 with the statements below as written). The user is a
+    salesperson in tenant A and the owner of a tenant B of their own. The transaction is opened
+    as `withTenant()` opens it, for their real identity in A:
+
+    ```sql
+    begin;
+    select set_config('app.user_id', '<the user>', true), set_config('app.tenant_id', '<tenant A>', true);
+    ```
+
+    A plain `select count(*) from supplier_bills` and `select count(*) from accounts` each give
+    0, as they should. **The only setting changed is `app.tenant_id`**, from A to B, with
+    `set_config('app.tenant_id', '<tenant B>', true)` called from inside the statement itself, in
+    a materialised CTE, so that it happens after the scan has started. `app.user_id` is never
+    touched: B is a company the user really owns.
+
+    On `supplier_bills` (default planner settings; returned A's three bills, `INV-1` posted
+    2,400.00, `INV-2` draft 600.00 and an empty draft, each with `tenant_id` = A):
+
+    ```sql
+    with flip as materialized (
+      select g,
+             case when g = 2 then set_config('app.tenant_id', '<tenant B>', true) end as c,
+             case when g = 1 then date '2999-01-01' else date '1900-01-01' end as d
+      from generate_series(1, 2) g)
+    select f.g, b.supplier_invoice_no, b.status, b.total, b.tenant_id
+    from flip f
+    cross join lateral (
+      select * from supplier_bills sb where sb.bill_date >= f.d order by sb.bill_date offset 0) b;
+    ```
+
+    On `accounts` (migration 0011; returned all 67 accounts of A, codes 1000 to 5830). The
+    table is small, so the planner is first told to use the index, which any session may do:
+
+    ```sql
+    set local enable_seqscan = off;
+    set local enable_bitmapscan = off;
+    with flip as materialized (
+      select g,
+             case when g = 2 then set_config('app.tenant_id', '<tenant B>', true) end as c,
+             case when g = 1 then 'zzzz' else '' end as lo
+      from generate_series(1, 2) g)
+    select count(*) as rows_read, count(*) filter (where a.tenant_id = '<tenant A>') as of_tenant_a,
+           min(a.code), max(a.code)
+    from flip f
+    cross join lateral (
+      select * from accounts x where x.code >= f.lo order by x.code offset 0) a;
+    ```
+
+    Without the two `set local` lines the same statement on `accounts` returned nothing: with a
+    sequential scan the first pass finds no row and asks neither question, so both are answered
+    for B. It works when the tenant test is part of an index condition (asked when the scan
+    starts, in the first pass, while the setting is A) and the role test is a filter (asked
+    when the first row reaches it, in the second pass, after the setting has become B).
+    `supplier_bills` has an index on (tenant, bill date), so it needs no planner setting.
+
+    As the reviewer read it (the result was observed; the mechanism is its explanation, and
+    fits the two runs above): the first pass of the lateral scan runs the tenant InitPlan while
+    the setting is still A; the materialised CTE's second row then switches the setting to B;
+    the role InitPlan is run only when a row first reaches that test, by which time the setting
+    is B, where the caller is the owner. The policy's test becomes "tenant is A and role is
+    owner". It is the shared idiom and not this step's tables.
+  - **What held.** The same trick used to delete a main-branch draft as a north-branch
+    accountant (also an owner elsewhere) deleted nothing: the `ENABLE ALWAYS` `BEFORE` triggers
+    call `app.tenant_id()` again as each row is written and refuse a mismatch. So it is a
+    reading gap, not a writing one. Functions that return rows (`SECURITY DEFINER`, such as
+    `app.orders_to_receive()`) read the identity once into variables and are not affected.
+  - **Suggested fix**, one shared migration: a single function, for example `app.identity()`,
+    returning tenant, role and branches together as one composite, read once by each policy
+    (`(SELECT app.identity())` as one InitPlan, its fields compared). One sub-plan cannot be
+    answered in two halves, so changing the setting gives either all of A or all of B. Rewriting
+    every policy touches every track's tables, which is why it is not this step's to do.
+    Alternatively, or as well: refuse a change of `app.tenant_id` once it has been set in a
+    transaction (the setting could be read through a function that remembers the first value).
+  - **The test to pin it**: in `src/modules/tenant/policies.test.ts`, a user who is a
+    salesperson in one test company and the owner of another runs the statement above against a
+    table only an owner reads (`accounts` will do) and must get no rows; and the same for a
+    branch-limited member with `app.tenant_branch_ids()`. It should fail today and pass after
+    the fix.
+
+## For a tax adviser
+
+No accountant or tax adviser has checked any of this. The second, independent working of the
+worked example (`docs/examples/step-25.md`) agreed with every figure, and raised these doubts
+about the policies themselves:
+
+- **Timing.** Section 153 has tax deducted when the supplier is paid. Recording it at the bill
+  means the withholding payable accounts hold tax that is not yet due to the government until
+  the bill is paid, and an advance paid before any bill withholds nothing here. Step 26
+  (payments, challans) must decide when the amount becomes due and deal with advances.
+- **The yearly limits** (Rs 75,000 goods, Rs 30,000 services from one supplier) are left to the
+  person entering the bill. The product could add up the year's bills and warn.
+- **Which line a service falls under.** Freight, courier, security and the other listed sectors
+  are on the lower "listed" line, not "any other service". The form lists the sectors under the
+  income tax choice (as `docs/RATES-REVIEW.md` asked), but the choice is the person's.
+- **Purchase price differences as an expense.** Accounting standards want stock at what it
+  actually cost; a large difference on goods still in stock belongs in the stock value. The
+  founder chose the separate account, and Step 28 (landed cost) is where differences can be
+  spread over stock.
+- **Sales tax withholding** is offered only when there is sales tax on the bill or the line is
+  worked on the gross amount; who must withhold from an unregistered supplier, and the
+  exclusions of the Eleventh Schedule, are not enforced. The sales tax active-taxpayer list and
+  the income tax one are treated as the same record on the supplier.
+- **Provincial sales tax.** Withholding the whole tax fits Punjab and an unregistered provider
+  elsewhere; other cases withhold a part. Treating it as part of the expense is the cautious
+  choice; it may be adjustable against output tax in some cases.
+
+## Later
+
+- **Supplier payments, advances and challans (Step 26).** A posted bill's "owed to the
+  supplier" is what Step 26 pays. `withholding_entries` has no challan yet.
+- **Supplier returns and debit notes (Step 27)**: the only way to undo a posted bill.
+- **Aged payables, the supplier statement, the withholding register and the section 165
+  statement (Step 29).** The entries hold what those need: kind, line, law, base, rate, amount,
+  supplier, date.
+- **A tax amount that differs from the table's by the supplier's own rounding**, and Third
+  Schedule goods (point 6).
+- **A bill for goods with no purchase order** (bought over the counter and brought straight in).
+  Today goods reach stock only through an order and a goods received note.
+- **Checking FBR's Active Taxpayers List** when a bill is written (point 4).
+- **Lists show the newest 200 bills**; no search, paging or export yet.

@@ -86,7 +86,9 @@ number, and the run's approval taught to recover loans). Built on Step 41 and re
   salaries' cost; final settlement, a leaver's last pay taking all that is owed and the rest
   repaid in cash, no more than is owed; approval refused when a repayment made the instalment too
   much; **the acceptance**: the bank file validating once everyone paid has an IBAN, and the audit
-  log keeping the IBAN's last four only; the year's statement.
+  log keeping the IBAN's last four only; the year's statement. Its figures are the worked
+  example's, `docs/examples/step-42.md`, agreed by a blind second working. **Checked by Claude,
+  not an accountant.**
 - `src/modules/payroll-runs/rules.test.ts`: the loan lines on a payslip, oldest first, as far as
   pay goes, all of it in the leaving month.
 - `e2e/payroll-extras.spec.ts`, in the browser: the accountant lends two people money (an
@@ -102,3 +104,7 @@ number, and the run's approval taught to recover loans). Built on Step 41 and re
 - The FBR's annexure layout for the annual statement (decision 7), and a printed certificate of
   salary and tax for each employee.
 - Interest on loans, a loan's end date, and stopping an instalment for a month.
+- Step 41's tax projection runs to June even when a leaving date is already on record, so a
+  leaver may have tax deducted in earlier months that the year does not owe (found by the worked
+  example's second working). Stopping the projection at a known leaving date is a change to Step
+  41's rule, for Fazal to decide.

@@ -126,4 +126,15 @@ company's payroll paid and deducted.
 
 ## The second working
 
-(To be filled in from the independent worker's answers.)
+An independent worker, given the rules and the events alone (not these answers, the tests or the
+software), worked every figure again on 2026-11-18 and **agreed with all of them**: each payslip's
+pay, tax, loan and take-home pay in both months; both journals and that they balance; what each
+person owed after each month and after the repayment; that 6,290.33 would be refused; 1240's
+10,000.00; September's bank file line for line, and October's paying Ali alone; the three IBAN
+remainders (1, 28, and 1 for Sara's); and the year's statement with its totals.
+
+It noted one thing to check, which the software does as worked here: in September Sara's tax is
+projected over the nine months after it, although her leaving on 20 October was already on
+record, so 100 is deducted that she turns out not to owe, and it is not given back through
+payroll. That is Step 41's s.149 rule as built (a leaving date counts only in the month itself);
+stopping the projection at a leaving date known in advance is noted in `docs/later/step-42.md`.

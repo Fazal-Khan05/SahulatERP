@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { setTimeout as sleep } from "node:timers/promises";
 import Decimal from "decimal.js";
 import { sql } from "drizzle-orm";
+import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb, withTenant, type Tx } from "@/db";
 import { setBaseCurrency } from "@/modules/currencies/commands";
@@ -16,6 +18,7 @@ import { postInvoice, postInvoiceIn, saveInvoiceDraft, saveSalesDraft, saveSales
 import { getSalesDocument, searchCustomers } from "@/modules/sales/queries";
 import type { TenantContext } from "@/modules/tenant/rules";
 import { adminSql, deleteTenants, hasAdminDb, type AdminSql } from "../../../tests/support/admin-db";
+import { enterAs } from "../../../tests/support/identity";
 import { postCounterSale } from "./commands";
 import { getCounterSaleOfInvoice } from "./queries";
 
@@ -77,6 +80,20 @@ const counts = async () =>
         || (select count(*) from public.receipts where tenant_id = ${tenantA})::text || ' receipts, '
         || (select count(*) from public.counter_sales where tenant_id = ${tenantA})::text || ' counter sales' as v`
   )[0].v;
+/** A session of the app's own role, signed in as someone, inside a transaction left open: for two at once. */
+async function appSession(userId: string) {
+  const client = postgres(process.env.DATABASE_URL!, { max: 1, onnotice: () => {} });
+  const tx = await client.reserve();
+  await tx`begin`;
+  await enterAs(tx, userId, tenantA);
+  return {
+    tx,
+    end: async () => {
+      tx.release();
+      await client.end();
+    },
+  };
+}
 const walkIn = async () => (await admin<{ id: string }[]>`select customer_id as id from public.walk_in_customers where tenant_id = ${tenantA}`)[0]?.id;
 
 /**
@@ -335,5 +352,47 @@ describe.skipIf(!hasDb)("counter sales", () => {
     const [unbalanced] = await admin<{ n: number }[]>`
       select count(*)::int as n from (select j.id from public.journals j join public.journal_lines l on l.journal_id = j.id where j.tenant_id = ${tenantA} group by j.id having sum(l.debit) <> sum(l.credit)) x`;
     expect(unbalanced.n).toBe(0);
+  });
+
+  it("holds the order a counter sale is made with, so one changed meanwhile is read as it ends up", async () => {
+    // A draft order to the walk-in customer, written past the app.
+    const order = await withTenant(as.owner.userId, tenantA, async (tx) => {
+      const [walk] = await tx.execute<{ id: string }>(sql`select app.walk_in_customer() as id`);
+      return saveSalesDraftIn(tx, as.owner, null, {
+        kind: "order",
+        date: DAY,
+        validUntil: null,
+        customerId: walk.id,
+        warehouseId: mainWarehouse,
+        customerReference: null,
+        notes: null,
+        furtherTaxExcluded: false,
+        lines: [{ itemId: helmet, description: null, unitId: null, quantity: new Decimal(1), unitPrice: null, discountPercent: null }],
+        shares: [],
+      });
+    });
+    // The owner turns it into the dealer's order and has not committed yet; an accountant, in a
+    // session of their own, makes a counter sale with it meanwhile.
+    const changer = await appSession(userIds.owner);
+    const seller = await appSession(userIds.accountant);
+    try {
+      await changer.tx`update public.sales_documents set customer_id = ${dealer} where id = ${order.id}`;
+      const sale = seller.tx`insert into public.counter_sales (tenant_id, order_id, buyer_name, client_key, created_by)
+        values (${tenantA}, ${order.id}, 'Kamran Ali', gen_random_uuid(), ${userIds.accountant})`.then(
+        () => "written",
+        (error: unknown) => (error as { code?: string }).code ?? "unknown",
+      );
+      // It waits for the change rather than reading the order as it was.
+      expect(await Promise.race([sale, sleep(500).then(() => "waiting")])).toBe("waiting");
+      await changer.tx`commit`;
+      // The order is the dealer's now: no counter sale is made with it.
+      expect(await sale).toBe("SE122");
+      await seller.tx`rollback`;
+    } finally {
+      await changer.end();
+      await seller.end();
+    }
+    const [made] = await admin<{ n: number }[]>`select count(*)::int as n from public.counter_sales where order_id = ${order.id}`;
+    expect(made.n).toBe(0);
   });
 });

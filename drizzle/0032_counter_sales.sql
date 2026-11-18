@@ -177,6 +177,8 @@ CREATE FUNCTION app.check_counter_sale() RETURNS trigger
   AS $$
 DECLARE
   v_customer uuid;
+  v_doc public.sales_documents%ROWTYPE;
+  v_receipt public.receipts%ROWTYPE;
 BEGIN
   IF session_user = 'postgres' THEN
     IF TG_OP = 'DELETE' THEN
@@ -197,10 +199,14 @@ BEGIN
     IF NEW.invoice_id IS NOT NULL OR NEW.receipt_id IS NOT NULL THEN
       RAISE EXCEPTION 'a counter sale starts with its order alone' USING ERRCODE = 'SE123';
     END IF;
-    IF v_customer IS NULL OR NOT EXISTS (
-      SELECT 1 FROM public.sales_documents d
-      WHERE d.tenant_id = NEW.tenant_id AND d.id = NEW.order_id AND d.kind = 'order' AND d.status = 'draft' AND d.customer_id = v_customer
-    ) THEN
+    -- The order is held until the transaction ends, so it is not changed, or removed and put back
+    -- under its id, meanwhile: a change that comes first is waited for and then read. One that is
+    -- not there refuses the sale here; nothing is left for the foreign key to decide.
+    SELECT d.* INTO v_doc FROM public.sales_documents d WHERE d.tenant_id = NEW.tenant_id AND d.id = NEW.order_id FOR SHARE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'no such order' USING ERRCODE = 'foreign_key_violation';
+    END IF;
+    IF v_customer IS NULL OR v_doc.kind <> 'order' OR v_doc.status <> 'draft' OR v_doc.customer_id IS DISTINCT FROM v_customer THEN
       RAISE EXCEPTION 'a counter sale is made with a draft order to the walk-in customer' USING ERRCODE = 'SE122';
     END IF;
     RETURN NEW;
@@ -212,17 +218,24 @@ BEGIN
      OR (NEW.receipt_id IS NOT NULL AND NEW.invoice_id IS NULL) THEN
     RAISE EXCEPTION 'a counter sale names its invoice and its receipt once, and nothing else about it changes' USING ERRCODE = 'SE123';
   END IF;
-  IF OLD.invoice_id IS NULL AND NEW.invoice_id IS NOT NULL AND NOT EXISTS (
-    SELECT 1 FROM public.sales_documents i
-    WHERE i.tenant_id = NEW.tenant_id AND i.id = NEW.invoice_id AND i.kind = 'invoice' AND i.status = 'draft' AND i.source_document_id = NEW.order_id
-  ) THEN
-    RAISE EXCEPTION 'a counter sale''s invoice is a draft made from its order' USING ERRCODE = 'SE122';
+  -- The invoice and the receipt it names are held the same way, and refused when not there.
+  IF OLD.invoice_id IS NULL AND NEW.invoice_id IS NOT NULL THEN
+    SELECT i.* INTO v_doc FROM public.sales_documents i WHERE i.tenant_id = NEW.tenant_id AND i.id = NEW.invoice_id FOR SHARE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'no such invoice' USING ERRCODE = 'foreign_key_violation';
+    END IF;
+    IF v_doc.kind <> 'invoice' OR v_doc.status <> 'draft' OR v_doc.source_document_id IS DISTINCT FROM NEW.order_id THEN
+      RAISE EXCEPTION 'a counter sale''s invoice is a draft made from its order' USING ERRCODE = 'SE122';
+    END IF;
   END IF;
-  IF OLD.receipt_id IS NULL AND NEW.receipt_id IS NOT NULL AND NOT EXISTS (
-    SELECT 1 FROM public.receipts r
-    WHERE r.tenant_id = NEW.tenant_id AND r.id = NEW.receipt_id AND r.status = 'draft' AND r.customer_id = v_customer AND r.method IN ('cash', 'bank')
-  ) THEN
-    RAISE EXCEPTION 'a counter sale''s receipt is a cash or bank draft from the walk-in customer' USING ERRCODE = 'SE122';
+  IF OLD.receipt_id IS NULL AND NEW.receipt_id IS NOT NULL THEN
+    SELECT r.* INTO v_receipt FROM public.receipts r WHERE r.tenant_id = NEW.tenant_id AND r.id = NEW.receipt_id FOR SHARE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'no such receipt' USING ERRCODE = 'foreign_key_violation';
+    END IF;
+    IF v_receipt.status <> 'draft' OR v_receipt.customer_id IS DISTINCT FROM v_customer OR v_receipt.method NOT IN ('cash', 'bank') THEN
+      RAISE EXCEPTION 'a counter sale''s receipt is a cash or bank draft from the walk-in customer' USING ERRCODE = 'SE122';
+    END IF;
   END IF;
   RETURN NEW;
 END $$;
@@ -250,11 +263,16 @@ BEGIN
   IF NOT FOUND THEN
     RETURN NULL;
   END IF;
+  -- Read as the transaction ends: the order, the invoice made from it and the receipt that pays
+  -- it are all the walk-in customer's, whatever happened to them along the way.
   IF v_sale.invoice_id IS NULL OR v_sale.receipt_id IS NULL OR NOT EXISTS (
     SELECT 1 FROM public.sales_documents i
+    JOIN public.sales_documents o ON o.tenant_id = i.tenant_id AND o.id = v_sale.order_id
+    JOIN public.walk_in_customers w ON w.tenant_id = i.tenant_id AND w.customer_id = o.customer_id
     JOIN public.receipts r ON r.tenant_id = i.tenant_id AND r.id = v_sale.receipt_id
     WHERE i.tenant_id = v_sale.tenant_id AND i.id = v_sale.invoice_id AND i.kind = 'invoice' AND i.status = 'submitted'
-      AND r.status = 'posted' AND r.amount = i.total
+      AND o.kind = 'order' AND i.source_document_id = o.id AND i.customer_id = o.customer_id
+      AND r.status = 'posted' AND r.customer_id = o.customer_id AND r.amount = i.total
   ) THEN
     RAISE EXCEPTION 'a counter sale is made whole at once: its order, its posted invoice, and the posted receipt that pays it in full' USING ERRCODE = 'SE123';
   END IF;

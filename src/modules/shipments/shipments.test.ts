@@ -502,7 +502,7 @@ describe.skipIf(!hasDb)("shipments and landed cost", { timeout: 600_000 }, () =>
     expect(await codeOf(otherOwner, sql`select app.allocate_shipment(${id}::uuid, ${SPREAD}::date)`)).toBe("SE255");
   });
 
-  it("never lets a line into a bill that was removed and written again while the line waited (Step 25's guard, put right in this migration)", async () => {
+  it("never lets a line into a bill that was removed and written again while the line waited (put right by the joint migration 0033_line_guards)", async () => {
     // Found by the reviewer of Step 27. One session removes a draft bill and writes it again
     // under the same id, with a line, and posts it; while that is still open, another writes a
     // line of a million into it. The second waits for the first, then finds nothing where the
@@ -524,11 +524,74 @@ describe.skipIf(!hasDb)("shipments and landed cost", { timeout: 600_000 }, () =>
         await tx.execute(sql`select pg_sleep(1)`);
       });
       await waiting;
-      expect(await codeOf(as.owner, line(2, 1000000)), `round ${round}`).toBe("23503");
+      expect(await codeOf(as.owner, line(2, 1000000)), `round ${round}`).toBe("42501");
       await swap;
       const [bill] = await admin<{ status: string; lines: number }[]>`select b.status, (select count(*)::int from public.supplier_bill_lines l where l.bill_id = b.id) as lines from public.supplier_bills b where b.id = ${id}`;
       expect(bill, `round ${round}`).toEqual({ status: "posted", lines: 1 });
     }
+  });
+
+  it("what the review found: only the shipment's own branch, and the newest goods are the ones still held", async () => {
+    // Ten arrive in the main branch on a shipment and are all sold. Ten more of the item come
+    // into the north branch on another order. The charge belongs wholly to the units sold: the
+    // north branch's stock is none of this shipment's.
+    const item = await product();
+    const id = await shipped([await arrived([{ itemId: item.id, quantity: "10", unitCost: "100" }])]);
+    await sold(item.id, "10");
+    await arrived([{ itemId: item.id, quantity: "10", unitCost: "100" }], ningbo, northWarehouse);
+    await charged(id, [{ label: "Duty", amount: "1000", basis: "quantity" }]);
+    await spread(id);
+    expect(await lastJournal(id)).toEqual({ "1310": "-1000", "5100": "1000" });
+    expect(await stock(item.id, northWarehouse)).toBe("10 worth 1000");
+
+    // Two shipments of one item, ten each, the second newer; ten are sold. The ten still held are
+    // taken as the newer shipment's: the older one's charge goes to the cost of what was sold, the
+    // newer one's into stock. Neither claims the same units.
+    const both = await product();
+    const older = await shipped([await arrived([{ itemId: both.id, quantity: "10", unitCost: "100" }])]);
+    const newer = await shipped([await arrived([{ itemId: both.id, quantity: "10", unitCost: "100" }])]);
+    await sold(both.id, "10");
+    await charged(older, [{ label: "Duty", amount: "1000", basis: "quantity" }]);
+    await charged(newer, [{ label: "Duty", amount: "1000", basis: "quantity" }]);
+    await spread(older);
+    expect(await lastJournal(older)).toEqual({ "1310": "-1000", "5100": "1000" });
+    await spread(newer);
+    expect(await lastJournal(newer)).toEqual({ "1300": "1000", "1310": "-1000" });
+    expect(await stock(both.id)).toBe("10 worth 2000");
+
+    // A shipment, then another receipt of the item not on any shipment; five are sold. Five of
+    // the shipment's ten are taken as sold: half its charge goes to stock.
+    const half = await product();
+    const shipment = await shipped([await arrived([{ itemId: half.id, quantity: "10", unitCost: "100" }])]);
+    await arrived([{ itemId: half.id, quantity: "10", unitCost: "100" }]);
+    await sold(half.id, "5");
+    await charged(shipment, [{ label: "Duty", amount: "1000", basis: "quantity" }]);
+    await spread(shipment);
+    expect(await lastJournal(shipment)).toEqual({ "1300": "500", "1310": "-1000", "5100": "500" });
+    expect(await stockAgrees()).toBe(true);
+  });
+
+  it("what the review found: sales tax at import needs a company registered for it; no number is taken for a row that is not written", async () => {
+    const id = await shipped([await sevenAndThree()]);
+    const { lineIds } = await billed([{ label: "Sales tax at import", amount: "900" }]);
+    await admin`update public.company_setup set sales_tax_registered = false, tax_rates_confirmed_at = null, strn = null where tenant_id = ${tenantA}`;
+    try {
+      await expect(addShipmentCharge(as.accountant, id, { billLineId: lineIds[0], class: "sales_tax" })).rejects.toThrow("That charge cannot go on the shipment");
+      expect(await codeOf(as.accountant, sql`insert into public.shipment_charges (tenant_id, shipment_id, bill_line_id, class, created_by) values (${tenantA}, ${id}, ${lineIds[0]}, 'sales_tax', ${userIds.accountant})`)).toBe("SE259");
+    } finally {
+      await admin`update public.company_setup set sales_tax_registered = true, tax_rates_confirmed_at = now(), strn = '1234567890123' where tenant_id = ${tenantA}`;
+    }
+    // A row whose id is taken is refused before a number is taken, so nothing is skipped.
+    const [{ next: before }] = await admin<{ next: string }[]>`select next_number::text as next from public.number_series where tenant_id = ${tenantA} and document_type = 'SH'`;
+    const me = userIds.accountant;
+    expect(await codeOf(as.accountant, sql`insert into public.shipments (id, tenant_id, number, opened_on, supplier_id, branch_id, created_by, updated_by) values (${id}, ${tenantA}, '', ${ARRIVED}, ${ningbo}, ${mainBranch}, ${me}, ${me}) on conflict do nothing`)).toBe("23505");
+    const [{ next: after }] = await admin<{ next: string }[]>`select next_number::text as next from public.number_series where tenant_id = ${tenantA} and document_type = 'SH'`;
+    expect(after).toBe(before);
+    // A shipment that is not there is refused in the same words as one in a branch the member does not work in.
+    const missing = sql`insert into public.shipment_receipts (tenant_id, shipment_id, receipt_id, created_by) values (${tenantA}, ${randomUUID()}, ${randomUUID()}, ${northAccountant})`;
+    const elsewhere = sql`insert into public.shipment_receipts (tenant_id, shipment_id, receipt_id, created_by) values (${tenantA}, ${id}, ${randomUUID()}, ${northAccountant})`;
+    expect(await codeOf(north, missing)).toBe("42501");
+    expect(await codeOf(north, elsewhere)).toBe("42501");
   });
 
   it("IMP-061: spreads a shipment's charges once when it is asked twice at the same moment", async () => {
@@ -539,9 +602,9 @@ describe.skipIf(!hasDb)("shipments and landed cost", { timeout: 600_000 }, () =>
       expect(results.map((result) => result.status).sort(), `round ${round}`).toEqual(["fulfilled", "rejected"]);
       expect((await getShipment(as.auditor, id))!.allocations).toHaveLength(1);
     }
-    // Goods in transit holds only the insurance billed in the test before this one, which was never put on a shipment.
+    // Goods in transit holds only what earlier tests billed and never put on a shipment: the insurance (40) and the sales tax a company not registered could not claim (900).
     const position = (await listShipments(as.auditor)).inTransit;
-    expect([position.ledger.toFixed(2), position.onShipments.toFixed(2), position.notOnAShipment.toFixed(2)]).toEqual(["40.00", "0.00", "40.00"]);
+    expect([position.ledger.toFixed(2), position.onShipments.toFixed(2), position.notOnAShipment.toFixed(2)]).toEqual(["940.00", "0.00", "940.00"]);
     expect(await stockAgrees()).toBe(true);
   });
 });

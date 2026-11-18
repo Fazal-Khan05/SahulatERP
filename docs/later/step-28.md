@@ -1,9 +1,10 @@
 # Step 28: shipments, import charges and landed cost
 
 Built in track B (stock and buying) by the Builder, on Step 27's supplier returns. Migration
-`0034_shipments`. Built while the founder was away (2026-11-17): nothing here was asked of
-him, and **the migration is not on the shared development database** (his yes of 2026-11-15
-covered Steps 24 to 26 only).
+`0035_shipments` (renumbered from 0034 on 2026-11-18, after the joint line-guards fix). Built
+while the founder was away (2026-11-17): nothing here was asked of him. He said yes on
+2026-11-18 (in the coordinator's chat) to every finished step going on the shared development
+database after its review and tests; the coordinator applies it.
 
 ## What was built
 
@@ -60,10 +61,9 @@ a foreign currency; allocation happens when the shipment is closed.
 
 ## Two things of earlier steps, changed
 
-- `app.check_supplier_bill_line` (Step 25, this track's) is written out again: a bill line may
-  be charged to Goods in transit, the one locked account a bill can name; and a line is never
-  written into a bill the check has not seen and held (the hole the reviewer of Step 27 found;
-  see `docs/later/step-27.md`).
+- `app.check_supplier_bill_line` is written out again, on the joint migration's version of it
+  (`0033_line_guards`): a bill line may be charged to Goods in transit, the one locked account a
+  bill can name. Nothing else in it changes.
 - Two checks on `stock_moves` (stock is this track's) no longer ask every move for a quantity:
   a move may now carry a value and no quantity. Only `app.revalue_stock`, which the app cannot
   call, writes one.
@@ -84,12 +84,16 @@ Nobody was asked these. Each is the option I would recommend; say if any should 
    to stock, however many bills have come. After that, goods cannot be put on it or taken off.
 4. **A late charge is spread on its own, on the day it is spread**, over the same goods. It
    does not go back and change earlier months.
-5. **What is "still held" is counted for the company as a whole**, item by item: if the
-   shipment brought ten and the company holds six of that item anywhere, six tenths of the
-   charge goes into stock and four tenths to cost of goods sold. It never counts more as held
-   than the shipment brought. It does not follow which particular units were sold: stock is
-   kept at the average, so units are not told apart. Goods moved to another warehouse still
-   count as held, and take their share where they are.
+5. **What of a shipment is "still held" is counted in its own branch, item by item, taking the
+   newest goods as the ones still on the shelf** (as the stock ageing report does): what the
+   branch holds of the item, less what came into the branch after the shipment's goods (other
+   purchases, found stock; not moves between its warehouses, nor goods customers sent back),
+   never below nothing and never more than the shipment brought. If the shipment brought ten,
+   nothing came after, and the branch holds six, six tenths of the charge goes into stock and
+   four tenths to cost of goods sold. Two shipments of one item no longer both claim the same
+   units: the older one's charge goes to the cost of what was sold first. Goods moved to another
+   warehouse of the branch still count as held, and take their share where they are; another
+   branch's stock is never touched.
 6. **Who does what.** The owner and an accountant work on shipments; the auditor reads. The
    warehouse does not see them (they carry cost). It goes on receiving goods as before.
 7. **How far a shipment has come is changed by hand**, in any order. Nothing follows from it.
@@ -104,9 +108,44 @@ Nobody was asked these. Each is the option I would recommend; say if any should 
     enter it as sales tax paid at import; where it cannot, as part of what the goods cost.
     (For a tax adviser, below.)
 
-## The independent review
+## The independent review (2026-11-17, fixed 2026-11-18)
 
-To be written when the review is back.
+A reviewer who had not seen the work attacked the migration as a signed-in member running any
+SQL as the app's database role, with sessions racing each other, about sixty spreadings, and a
+check of the books after each. **Nothing critical or high.** Two medium and four low findings,
+all put right:
+
+- **Medium: the spreading reached another branch.** "Still held" was counted in every
+  warehouse of the company, so a main-branch shipment could revalue stock in a north-branch
+  warehouse, in a main-branch journal, by a member who cannot read that stock. Now only the
+  shipment's own branch counts and is revalued.
+- **Medium: the same units were claimed twice.** Two shipments of one item (or a shipment and
+  another purchase) each counted every unit held as their own, so both charges went wholly to
+  stock when half the goods had been sold. Now the newest goods are taken as the ones still
+  held (point 5 above).
+- **Low: a stock balance made while the spreading waited for its locks was not held.** It now
+  holds the branch's balances again until no new one appears, before it reads anything.
+- **Low: shipment numbers could be skipped** (`insert ... on conflict do nothing` with a taken
+  id still took a number). A row whose id is taken is now refused before a number is taken. Two
+  sessions inserting the same new id at the same moment could still skip one; a number of a
+  shipment is never reused, and a gap carries no tax meaning.
+- **Low: sales tax paid at import could be claimed by a company not registered for sales tax.**
+  Refused now, when the charge is put on and again when it is spread.
+- **Low: a member could tell a shipment of another branch from no shipment** by the words of
+  the refusal. Both are refused in the policy's words now.
+
+Notes, not changed: a delivery cancelled after a charge's share went to cost of goods sold comes
+back at the old cost; units sent back to the supplier count as gone; a spreading dated in the
+past uses today's holdings. The reverse file now also removes the shipments' number series.
+
+What held: charges and goods put on twice, on two shipments, from another branch, supplier or
+company, a draft bill, a line not charged to Goods in transit; taking off or spreading again
+after spreading; two spreadings of one shipment, and of two that share items, at once; spreading
+against adding or removing a charge or goods; the arithmetic to the paisa (tiny charges over ten
+lines, lines with none of the measure, four-decimal quantities, very large amounts); what each
+bill line charged against the bill's journal, provincial tax included; the rewritten bill-line
+guard; writing anything of the spreading past the functions; reading as another role, branch or
+company; dates; no deadlock in 48 parallel stock documents; the reverse file.
 
 ## For a tax adviser
 

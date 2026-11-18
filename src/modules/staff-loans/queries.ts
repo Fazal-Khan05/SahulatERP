@@ -98,7 +98,8 @@ export async function getBankFile(ctx: TenantContext, runId: string): Promise<Ba
       order by lower(e.code)`);
     const missing = rows.filter((r) => r.iban === null).map((r) => ({ code: r.code, name: r.name }));
     if (missing.length > 0) return { missing };
-    const month = new Date(`${run.month}T00:00:00Z`).toLocaleDateString("en-GB", { month: "short", year: "numeric", timeZone: "UTC" });
+    // Three letters, whatever the server's language data says (some write "Sept").
+    const month = `${["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"][Number(run.month.slice(5, 7)) - 1]} ${run.month.slice(0, 4)}`;
     const csv = bankFile(rows.map((r) => ({ iban: r.iban!, name: r.title ?? r.name, amount: exact(r.net), reference: `SALARY ${month} ${r.code}` })));
     return { fileName: `salaries-${run.number ?? run.month.slice(0, 7)}.csv`, csv };
   });

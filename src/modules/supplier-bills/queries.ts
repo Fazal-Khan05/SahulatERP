@@ -316,7 +316,9 @@ export async function getBillChoices(ctx: TenantContext, on: string): Promise<Bi
       tx.execute<{ id: string; name: string }>(sql`select id, name from branches where tenant_id = ${ctx.tenantId}::uuid order by created_at`),
       tx.execute<{ id: string; code: string; name: string }>(sql`
         select id, code, name from accounts
-        where tenant_id = ${ctx.tenantId}::uuid and not is_group and not is_control and archived_at is null and type in ('expense', 'asset')
+        where tenant_id = ${ctx.tenantId}::uuid and not is_group and archived_at is null
+          -- Or Goods in transit (Step 28), where import charges wait to be spread over a shipment.
+          and ((not is_control and type in ('expense', 'asset')) or (is_control and control_type = 'goods_in_transit'))
         order by code`),
       selectBillTables(tx, ctx.tenantId),
       selectWithholdingOn(tx, ctx.tenantId),

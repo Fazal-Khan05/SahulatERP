@@ -225,6 +225,13 @@
       "when": 1794917214189,
       "tag": "0031_identity_proof",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1794921736535,
+      "tag": "0032_supplier_payments",
+      "breakpoints": true
     }
   ]
 }

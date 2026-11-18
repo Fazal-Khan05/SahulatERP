@@ -15,6 +15,7 @@ import { WITHHOLDING_KIND_LABELS, formatPercent } from "@/modules/tax/rules";
 import { can } from "@/modules/tenant/rules";
 import { discardBillAction, saveBillAction, setWithholdingAction } from "./bill-actions";
 import { BillForm } from "./bill-form";
+import { ChallanCards } from "./payment-screens";
 import { Back, Pill, Refused, Sections } from "./screens";
 
 const NO_BILLS = "Only an owner, an accountant or an auditor can see supplier bills.";
@@ -407,6 +408,9 @@ export async function WithholdingScreen() {
           <ActionForm action={setWithholdingAction.bind(null, !withholdingOn)} submitLabel={withholdingOn ? "Stop withholding tax" : "Start withholding tax"} compact />
         ) : null}
       </Card>
+      <div className="mt-5 flex flex-col gap-5">
+        <ChallanCards session={session} />
+      </div>
     </>
   );
 }

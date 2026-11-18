@@ -39,6 +39,7 @@ const SECTIONS: readonly { href: string; label: string; permission: Permission }
   { href: "/purchases", label: "Purchase orders", permission: "purchase_order.read" },
   { href: "/purchases/receive", label: "Receive goods", permission: "goods_receipt.read" },
   { href: "/purchases/bills", label: "Supplier bills", permission: "supplier_bill.read" },
+  { href: "/purchases/payments", label: "Supplier payments", permission: "supplier_payment.read" },
   { href: "/purchases/grni", label: "Goods received, not yet billed", permission: "purchase_order.read" },
   { href: "/purchases/withholding", label: "Withholding tax", permission: "supplier_bill.read" },
 ];

@@ -1,7 +1,7 @@
 # Step 28: shipments, import charges and landed cost
 
 Built in track B (stock and buying) by the Builder, on Step 27's supplier returns. Migration
-`0035_shipments` (renumbered from 0034 on 2026-11-18, after the joint line-guards fix). Built
+`0036_shipments` (renumbered from 0034 on 2026-11-18, after the joint line-guards fix, then to 0036 after Step 22's 0035_counter_sales merged first; the SQL the coordinator applied as 0035 is unchanged). Built
 while the founder was away (2026-11-17): nothing here was asked of him. He said yes on
 2026-11-18 (in the coordinator's chat) to every finished step going on the shared development
 database after its review and tests; the coordinator applies it.

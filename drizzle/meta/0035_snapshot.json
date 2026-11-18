@@ -1,5 +1,5 @@
 {
-  "id": "68260947-49a2-4c80-89a9-b434fbd5e238",
+  "id": "8ed37667-17ab-4f9d-8152-2c2658c7fb0e",
   "prevId": "62a6f654-d59e-424f-8b69-66c096f0596b",
   "version": "7",
   "dialect": "postgresql",
@@ -1375,6 +1375,266 @@
           "value": "\"sales_hierarchy\".\"user_id\" <> \"sales_hierarchy\".\"manager_user_id\""
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.counter_sales": {
+      "name": "counter_sales",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "order_id": {
+          "name": "order_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "invoice_id": {
+          "name": "invoice_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "receipt_id": {
+          "name": "receipt_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "buyer_name": {
+          "name": "buyer_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "buyer_phone": {
+          "name": "buyer_phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "client_key": {
+          "name": "client_key",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "counter_sales_tenant_id_tenants_id_fk": {
+          "name": "counter_sales_tenant_id_tenants_id_fk",
+          "tableFrom": "counter_sales",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "counter_sales_order_fk": {
+          "name": "counter_sales_order_fk",
+          "tableFrom": "counter_sales",
+          "tableTo": "sales_documents",
+          "columnsFrom": [
+            "tenant_id",
+            "order_id"
+          ],
+          "columnsTo": [
+            "tenant_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "counter_sales_invoice_fk": {
+          "name": "counter_sales_invoice_fk",
+          "tableFrom": "counter_sales",
+          "tableTo": "sales_documents",
+          "columnsFrom": [
+            "tenant_id",
+            "invoice_id"
+          ],
+          "columnsTo": [
+            "tenant_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "counter_sales_receipt_fk": {
+          "name": "counter_sales_receipt_fk",
+          "tableFrom": "counter_sales",
+          "tableTo": "receipts",
+          "columnsFrom": [
+            "tenant_id",
+            "receipt_id"
+          ],
+          "columnsTo": [
+            "tenant_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "counter_sales_tenant_id_id_key": {
+          "name": "counter_sales_tenant_id_id_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "tenant_id",
+            "id"
+          ]
+        },
+        "counter_sales_client_key": {
+          "name": "counter_sales_client_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "tenant_id",
+            "client_key"
+          ]
+        },
+        "counter_sales_order_key": {
+          "name": "counter_sales_order_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "tenant_id",
+            "order_id"
+          ]
+        },
+        "counter_sales_invoice_key": {
+          "name": "counter_sales_invoice_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "tenant_id",
+            "invoice_id"
+          ]
+        },
+        "counter_sales_receipt_key": {
+          "name": "counter_sales_receipt_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "tenant_id",
+            "receipt_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "counter_sales_buyer_name_length": {
+          "name": "counter_sales_buyer_name_length",
+          "value": "char_length(btrim(\"counter_sales\".\"buyer_name\")) between 2 and 120 and \"counter_sales\".\"buyer_name\" = btrim(\"counter_sales\".\"buyer_name\")"
+        },
+        "counter_sales_buyer_phone_format": {
+          "name": "counter_sales_buyer_phone_format",
+          "value": "\"counter_sales\".\"buyer_phone\" ~ '^\\+?[0-9][0-9 -]{5,18}[0-9]$'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.walk_in_customers": {
+      "name": "walk_in_customers",
+      "schema": "",
+      "columns": {
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "customer_id": {
+          "name": "customer_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "walk_in_customers_tenant_id_tenants_id_fk": {
+          "name": "walk_in_customers_tenant_id_tenants_id_fk",
+          "tableFrom": "walk_in_customers",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "walk_in_customers_customer_fk": {
+          "name": "walk_in_customers_customer_fk",
+          "tableFrom": "walk_in_customers",
+          "tableTo": "customers",
+          "columnsFrom": [
+            "tenant_id",
+            "customer_id"
+          ],
+          "columnsTo": [
+            "tenant_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "walk_in_customers_customer_key": {
+          "name": "walk_in_customers_customer_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "tenant_id",
+            "customer_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.credit_note_allocations": {
@@ -3284,11 +3544,11 @@
         },
         "stock_moves_quantity_sane": {
           "name": "stock_moves_quantity_sane",
-          "value": "\"stock_moves\".\"quantity\" > -1e12 and \"stock_moves\".\"quantity\" < 1e12 and (\"stock_moves\".\"quantity\" <> 0 or \"stock_moves\".\"value\" <> 0)"
+          "value": "\"stock_moves\".\"quantity\" <> 0 and \"stock_moves\".\"quantity\" > -1e12 and \"stock_moves\".\"quantity\" < 1e12"
         },
         "stock_moves_value_sane": {
           "name": "stock_moves_value_sane",
-          "value": "\"stock_moves\".\"value\" > -1e16 and \"stock_moves\".\"value\" < 1e16 and (\"stock_moves\".\"value\" = 0 or \"stock_moves\".\"quantity\" = 0 or sign(\"stock_moves\".\"value\") = sign(\"stock_moves\".\"quantity\"))"
+          "value": "\"stock_moves\".\"value\" > -1e16 and \"stock_moves\".\"value\" < 1e16 and (\"stock_moves\".\"value\" = 0 or sign(\"stock_moves\".\"value\") = sign(\"stock_moves\".\"quantity\"))"
         },
         "stock_moves_after_sane": {
           "name": "stock_moves_after_sane",
@@ -11677,1042 +11937,6 @@
         "company_setup_accounts_template_format": {
           "name": "company_setup_accounts_template_format",
           "value": "\"company_setup\".\"accounts_template\" ~ '^[a-z_]{2,40}$'"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.landed_cost_allocations": {
-      "name": "landed_cost_allocations",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "allocation_id": {
-          "name": "allocation_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "charge_id": {
-          "name": "charge_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "receipt_line_id": {
-          "name": "receipt_line_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "item_id": {
-          "name": "item_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "amount": {
-          "name": "amount",
-          "type": "numeric(20, 2)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "to_stock": {
-          "name": "to_stock",
-          "type": "numeric(20, 2)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "to_cogs": {
-          "name": "to_cogs",
-          "type": "numeric(20, 2)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "landed_cost_allocations_tenant_allocation_idx": {
-          "name": "landed_cost_allocations_tenant_allocation_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "allocation_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "landed_cost_allocations_tenant_receipt_line_idx": {
-          "name": "landed_cost_allocations_tenant_receipt_line_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "receipt_line_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "landed_cost_allocations_tenant_id_tenants_id_fk": {
-          "name": "landed_cost_allocations_tenant_id_tenants_id_fk",
-          "tableFrom": "landed_cost_allocations",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "landed_cost_allocations_allocation_fk": {
-          "name": "landed_cost_allocations_allocation_fk",
-          "tableFrom": "landed_cost_allocations",
-          "tableTo": "shipment_allocations",
-          "columnsFrom": [
-            "tenant_id",
-            "allocation_id"
-          ],
-          "columnsTo": [
-            "tenant_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "landed_cost_allocations_charge_fk": {
-          "name": "landed_cost_allocations_charge_fk",
-          "tableFrom": "landed_cost_allocations",
-          "tableTo": "shipment_charges",
-          "columnsFrom": [
-            "tenant_id",
-            "charge_id"
-          ],
-          "columnsTo": [
-            "tenant_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "landed_cost_allocations_receipt_line_fk": {
-          "name": "landed_cost_allocations_receipt_line_fk",
-          "tableFrom": "landed_cost_allocations",
-          "tableTo": "goods_receipt_lines",
-          "columnsFrom": [
-            "tenant_id",
-            "receipt_line_id"
-          ],
-          "columnsTo": [
-            "tenant_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "landed_cost_allocations_item_fk": {
-          "name": "landed_cost_allocations_item_fk",
-          "tableFrom": "landed_cost_allocations",
-          "tableTo": "items",
-          "columnsFrom": [
-            "tenant_id",
-            "item_id"
-          ],
-          "columnsTo": [
-            "tenant_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "landed_cost_allocations_tenant_id_id_key": {
-          "name": "landed_cost_allocations_tenant_id_id_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "tenant_id",
-            "id"
-          ]
-        },
-        "landed_cost_allocations_charge_line_key": {
-          "name": "landed_cost_allocations_charge_line_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "tenant_id",
-            "charge_id",
-            "receipt_line_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "landed_cost_allocations_amounts_exact": {
-          "name": "landed_cost_allocations_amounts_exact",
-          "value": "\"landed_cost_allocations\".\"amount\" >= 0 and \"landed_cost_allocations\".\"amount\" < 1e16 and \"landed_cost_allocations\".\"to_stock\" >= 0 and \"landed_cost_allocations\".\"to_cogs\" >= 0 and \"landed_cost_allocations\".\"to_stock\" + \"landed_cost_allocations\".\"to_cogs\" = \"landed_cost_allocations\".\"amount\""
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.shipment_allocations": {
-      "name": "shipment_allocations",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "shipment_id": {
-          "name": "shipment_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "allocated_on": {
-          "name": "allocated_on",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "total": {
-          "name": "total",
-          "type": "numeric(20, 2)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "to_stock": {
-          "name": "to_stock",
-          "type": "numeric(20, 2)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "to_cogs": {
-          "name": "to_cogs",
-          "type": "numeric(20, 2)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "journal_id": {
-          "name": "journal_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "shipment_allocations_tenant_shipment_idx": {
-          "name": "shipment_allocations_tenant_shipment_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "shipment_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "shipment_allocations_tenant_id_tenants_id_fk": {
-          "name": "shipment_allocations_tenant_id_tenants_id_fk",
-          "tableFrom": "shipment_allocations",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "shipment_allocations_shipment_fk": {
-          "name": "shipment_allocations_shipment_fk",
-          "tableFrom": "shipment_allocations",
-          "tableTo": "shipments",
-          "columnsFrom": [
-            "tenant_id",
-            "shipment_id"
-          ],
-          "columnsTo": [
-            "tenant_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "shipment_allocations_journal_fk": {
-          "name": "shipment_allocations_journal_fk",
-          "tableFrom": "shipment_allocations",
-          "tableTo": "journals",
-          "columnsFrom": [
-            "tenant_id",
-            "journal_id"
-          ],
-          "columnsTo": [
-            "tenant_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "shipment_allocations_tenant_id_id_key": {
-          "name": "shipment_allocations_tenant_id_id_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "tenant_id",
-            "id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "shipment_allocations_amounts_sane": {
-          "name": "shipment_allocations_amounts_sane",
-          "value": "\"shipment_allocations\".\"total\" > 0 and \"shipment_allocations\".\"total\" < 1e16 and \"shipment_allocations\".\"to_stock\" >= 0 and \"shipment_allocations\".\"to_cogs\" >= 0 and \"shipment_allocations\".\"to_stock\" + \"shipment_allocations\".\"to_cogs\" <= \"shipment_allocations\".\"total\""
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.shipment_charges": {
-      "name": "shipment_charges",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "shipment_id": {
-          "name": "shipment_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "bill_line_id": {
-          "name": "bill_line_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "class": {
-          "name": "class",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "basis": {
-          "name": "basis",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "account_id": {
-          "name": "account_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "amount": {
-          "name": "amount",
-          "type": "numeric(20, 2)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "allocation_id": {
-          "name": "allocation_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "shipment_charges_tenant_shipment_idx": {
-          "name": "shipment_charges_tenant_shipment_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "shipment_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "shipment_charges_tenant_id_tenants_id_fk": {
-          "name": "shipment_charges_tenant_id_tenants_id_fk",
-          "tableFrom": "shipment_charges",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "shipment_charges_shipment_fk": {
-          "name": "shipment_charges_shipment_fk",
-          "tableFrom": "shipment_charges",
-          "tableTo": "shipments",
-          "columnsFrom": [
-            "tenant_id",
-            "shipment_id"
-          ],
-          "columnsTo": [
-            "tenant_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "shipment_charges_bill_line_fk": {
-          "name": "shipment_charges_bill_line_fk",
-          "tableFrom": "shipment_charges",
-          "tableTo": "supplier_bill_lines",
-          "columnsFrom": [
-            "tenant_id",
-            "bill_line_id"
-          ],
-          "columnsTo": [
-            "tenant_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "shipment_charges_account_fk": {
-          "name": "shipment_charges_account_fk",
-          "tableFrom": "shipment_charges",
-          "tableTo": "accounts",
-          "columnsFrom": [
-            "tenant_id",
-            "account_id"
-          ],
-          "columnsTo": [
-            "tenant_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "shipment_charges_allocation_fk": {
-          "name": "shipment_charges_allocation_fk",
-          "tableFrom": "shipment_charges",
-          "tableTo": "shipment_allocations",
-          "columnsFrom": [
-            "tenant_id",
-            "allocation_id"
-          ],
-          "columnsTo": [
-            "tenant_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "shipment_charges_tenant_id_id_key": {
-          "name": "shipment_charges_tenant_id_id_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "tenant_id",
-            "id"
-          ]
-        },
-        "shipment_charges_bill_line_key": {
-          "name": "shipment_charges_bill_line_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "tenant_id",
-            "bill_line_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "shipment_charges_class_known": {
-          "name": "shipment_charges_class_known",
-          "value": "\"shipment_charges\".\"class\" in ('inventory', 'sales_tax', 'advance_income_tax', 'deposit', 'expense')"
-        },
-        "shipment_charges_basis_known": {
-          "name": "shipment_charges_basis_known",
-          "value": "\"shipment_charges\".\"basis\" in ('value', 'quantity', 'weight', 'volume')"
-        },
-        "shipment_charges_basis_for_inventory": {
-          "name": "shipment_charges_basis_for_inventory",
-          "value": "(\"shipment_charges\".\"class\" = 'inventory') = (\"shipment_charges\".\"basis\" is not null)"
-        },
-        "shipment_charges_account_for_class": {
-          "name": "shipment_charges_account_for_class",
-          "value": "(\"shipment_charges\".\"class\" in ('deposit', 'expense')) = (\"shipment_charges\".\"account_id\" is not null)"
-        },
-        "shipment_charges_amount_sane": {
-          "name": "shipment_charges_amount_sane",
-          "value": "\"shipment_charges\".\"amount\" > 0 and \"shipment_charges\".\"amount\" < 1e16"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.shipment_receipts": {
-      "name": "shipment_receipts",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "shipment_id": {
-          "name": "shipment_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "receipt_id": {
-          "name": "receipt_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "shipment_receipts_tenant_shipment_idx": {
-          "name": "shipment_receipts_tenant_shipment_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "shipment_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "shipment_receipts_tenant_id_tenants_id_fk": {
-          "name": "shipment_receipts_tenant_id_tenants_id_fk",
-          "tableFrom": "shipment_receipts",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "shipment_receipts_shipment_fk": {
-          "name": "shipment_receipts_shipment_fk",
-          "tableFrom": "shipment_receipts",
-          "tableTo": "shipments",
-          "columnsFrom": [
-            "tenant_id",
-            "shipment_id"
-          ],
-          "columnsTo": [
-            "tenant_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "shipment_receipts_receipt_fk": {
-          "name": "shipment_receipts_receipt_fk",
-          "tableFrom": "shipment_receipts",
-          "tableTo": "goods_receipts",
-          "columnsFrom": [
-            "tenant_id",
-            "receipt_id"
-          ],
-          "columnsTo": [
-            "tenant_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "shipment_receipts_tenant_id_id_key": {
-          "name": "shipment_receipts_tenant_id_id_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "tenant_id",
-            "id"
-          ]
-        },
-        "shipment_receipts_receipt_key": {
-          "name": "shipment_receipts_receipt_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "tenant_id",
-            "receipt_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.shipments": {
-      "name": "shipments",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "number": {
-          "name": "number",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'open'"
-        },
-        "stage": {
-          "name": "stage",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'ordered'"
-        },
-        "opened_on": {
-          "name": "opened_on",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "supplier_id": {
-          "name": "supplier_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "branch_id": {
-          "name": "branch_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "origin": {
-          "name": "origin",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "port": {
-          "name": "port",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "container_no": {
-          "name": "container_no",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "bl_number": {
-          "name": "bl_number",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "lc_number": {
-          "name": "lc_number",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "gd_number": {
-          "name": "gd_number",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "gd_date": {
-          "name": "gd_date",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "customs_value": {
-          "name": "customs_value",
-          "type": "numeric(20, 2)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "expected_on": {
-          "name": "expected_on",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "note": {
-          "name": "note",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "closed_at": {
-          "name": "closed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "closed_by": {
-          "name": "closed_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "cancelled_at": {
-          "name": "cancelled_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "cancelled_by": {
-          "name": "cancelled_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "cancel_reason": {
-          "name": "cancel_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_by": {
-          "name": "updated_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "shipments_tenant_opened_idx": {
-          "name": "shipments_tenant_opened_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "opened_on",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "shipments_tenant_supplier_idx": {
-          "name": "shipments_tenant_supplier_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "supplier_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "shipments_tenant_id_tenants_id_fk": {
-          "name": "shipments_tenant_id_tenants_id_fk",
-          "tableFrom": "shipments",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "shipments_supplier_fk": {
-          "name": "shipments_supplier_fk",
-          "tableFrom": "shipments",
-          "tableTo": "suppliers",
-          "columnsFrom": [
-            "tenant_id",
-            "supplier_id"
-          ],
-          "columnsTo": [
-            "tenant_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "shipments_branch_fk": {
-          "name": "shipments_branch_fk",
-          "tableFrom": "shipments",
-          "tableTo": "branches",
-          "columnsFrom": [
-            "tenant_id",
-            "branch_id"
-          ],
-          "columnsTo": [
-            "tenant_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "shipments_tenant_id_id_key": {
-          "name": "shipments_tenant_id_id_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "tenant_id",
-            "id"
-          ]
-        },
-        "shipments_number_key": {
-          "name": "shipments_number_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "tenant_id",
-            "number"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "shipments_number_format": {
-          "name": "shipments_number_format",
-          "value": "\"shipments\".\"number\" ~ '^SH-[0-9]{4}-[0-9]{5,}$'"
-        },
-        "shipments_status_known": {
-          "name": "shipments_status_known",
-          "value": "\"shipments\".\"status\" in ('open', 'closed', 'cancelled')"
-        },
-        "shipments_stage_known": {
-          "name": "shipments_stage_known",
-          "value": "\"shipments\".\"stage\" in ('ordered', 'shipped', 'at_port', 'cleared', 'received')"
-        },
-        "shipments_text_lengths": {
-          "name": "shipments_text_lengths",
-          "value": "char_length(btrim(\"shipments\".\"origin\")) between 1 and 80 and char_length(btrim(\"shipments\".\"port\")) between 1 and 80 and char_length(btrim(\"shipments\".\"container_no\")) between 1 and 60 and char_length(btrim(\"shipments\".\"bl_number\")) between 1 and 60 and char_length(btrim(\"shipments\".\"lc_number\")) between 1 and 60 and char_length(btrim(\"shipments\".\"gd_number\")) between 1 and 100 and char_length(btrim(\"shipments\".\"note\")) between 1 and 500"
-        },
-        "shipments_customs_value_sane": {
-          "name": "shipments_customs_value_sane",
-          "value": "\"shipments\".\"customs_value\" > 0 and \"shipments\".\"customs_value\" < 1e16"
-        },
-        "shipments_closed_is_whole": {
-          "name": "shipments_closed_is_whole",
-          "value": "(\"shipments\".\"closed_at\" is null) = (\"shipments\".\"closed_by\" is null) and (\"shipments\".\"status\" <> 'closed' or \"shipments\".\"closed_at\" is not null)"
-        },
-        "shipments_cancelled_is_whole": {
-          "name": "shipments_cancelled_is_whole",
-          "value": "(\"shipments\".\"status\" = 'cancelled') = (\"shipments\".\"cancelled_at\" is not null) and (\"shipments\".\"status\" = 'cancelled') = (\"shipments\".\"cancelled_by\" is not null) and (\"shipments\".\"status\" = 'cancelled') = (\"shipments\".\"cancel_reason\" is not null)"
-        },
-        "shipments_cancel_reason_length": {
-          "name": "shipments_cancel_reason_length",
-          "value": "char_length(btrim(\"shipments\".\"cancel_reason\")) between 3 and 300"
         }
       },
       "isRLSEnabled": false

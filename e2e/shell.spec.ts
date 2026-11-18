@@ -36,12 +36,14 @@ const PNG = Buffer.from(
 let sql: AdminSql;
 let owner: TestUser;
 let seller: TestUser;
+let bookkeeper: TestUser;
 let tenantId: string;
 
 test.beforeAll(async () => {
   sql = adminSql();
   owner = await createUser("shell-owner", { canCreateCompany: true });
   seller = await createUser("shell-seller", { canCreateCompany: false });
+  bookkeeper = await createUser("shell-accountant", { canCreateCompany: false });
 });
 
 test.afterAll(async () => {
@@ -73,7 +75,8 @@ test("the owner gets the shell: their menu, an empty inbox and their company in 
   tenantId = rows[0].id;
   // A second person in the same company, as a salesperson.
   await sql`insert into public.memberships (tenant_id, user_id, email, role, created_by)
-    values (${tenantId}, ${seller.id}, ${seller.email}, 'salesperson', ${owner.id})`;
+    values (${tenantId}, ${seller.id}, ${seller.email}, 'salesperson', ${owner.id}),
+           (${tenantId}, ${bookkeeper.id}, ${bookkeeper.email}, 'accountant', ${owner.id})`;
 
   expect(await railLabels(page)).toEqual(OWNER_MENU);
   // Only screens that exist are links.
@@ -101,6 +104,32 @@ test("a salesperson gets their own short menu and no settings", async ({ page })
   }
   // Of the settings tabs, only the branches they work in.
   await expect(page.getByRole("navigation", { name: "Settings" }).getByRole("link")).toHaveText(["Branches"]);
+});
+
+test("an accountant gets the books and the stock, and reaches the stock from their menu", async ({ page }) => {
+  await signIn(page, bookkeeper);
+  expect(await railLabels(page)).toEqual([
+    "Home",
+    "Needs attention",
+    "Sales invoices",
+    "Customers",
+    "Price lists",
+    "Bills and payments",
+    "Suppliers",
+    "Stock",
+    "Items",
+    "Bank and cash",
+    "Chart of accounts",
+    "Journals",
+    "Opening balances",
+    "Period close",
+    "Reports",
+    "Exchange rates",
+    "Tax rates",
+  ]);
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Stock", exact: true }).click();
+  await expect(page).toHaveURL(/\/stock$/);
+  await expect(page.getByText(/does not include/)).toHaveCount(0);
 });
 
 test("switching a module off removes its menu entry for everyone, and on brings it back", async ({ page, browser }) => {

@@ -30,10 +30,11 @@ built on Step 34 and renumbered at merge. Nothing here posts to the books.
   deposit of many cheques, or an entry and its reversal with nothing on the statement).
 - **Unmatch** takes a match back; **Remove** takes back an import while none of its lines is
   matched.
-- **The reconciliation** on the last statement's last day, or any day asked: balance per bank,
-  balance per books, less the entries the bank has not shown yet, plus the lines on the statement
-  not in the books yet, the books reconciled, and the difference, which is nil when everything is
-  explained.
+- **The reconciliation** on the last statement's last day, or any day asked: balance per bank
+  (the running balance the bank itself gives on its last line to the day), balance per books, less
+  the entries the bank has not shown yet, plus the lines on the statement not in the books yet, the
+  books reconciled, and the difference, which is nil when everything is explained. When the bank's
+  balance is not what the lines imported add up to, the screen says a statement is missing.
 
 The acceptance, tested against the database (`reconciliation.test.ts`) with the made-up sample
 statement `docs/examples/step-35-statement.csv`: **9 of its 10 lines (90%) match automatically**,
@@ -63,8 +64,34 @@ The figures are worked in `docs/examples/step-35.md`. **Checked by Claude, not a
 7. **A bank charge on the statement is put in the books as an expense** (Step 34, Bank charges)
    and then matched; the screen does not post it by itself.
 8. **The reconciliation starts with the first statement imported**: entries in the books before
-   it are brought forward; when that statement says what the account held before it and the books
-   say otherwise, the screen shows by how much they already differed.
+   it are taken to be in the bank's opening balance, except a cheque written before it and
+   presented after it, which is matched like any other entry and counts as on its way.
+9. **A statement imported before another that shares days with it is removed only after the later
+   one** (SE368): the later one keeps no copy of the shared days.
+
+## Review
+
+An independent review (2026-11-18) found the access rules, the functions and the races right, and
+these, all fixed:
+
+- **The difference could never show what was wrong.** The bank's balance was worked out from its
+  own imported lines, so a missing statement or a lost line still read "Reconciled", and a cheque
+  written before the first statement and presented after it showed a difference for ever. The
+  bank's balance is now the running balance the bank gives; such a cheque is matched and counts as
+  on its way at the start; and the screen says when a statement is missing.
+- Removing an older statement that a later one overlaps took the shared days out of the account;
+  it is refused until the later one goes (SE368).
+- Total, opening and closing rows are known by their description before their money is read (a
+  total row with both columns, or an opening balance in the Credit column, no longer stops or
+  pollutes an import).
+- An account number read as an amount, a stray character, or a blank file name now refuses the
+  file in words (SE361) instead of failing.
+- A same-day file listed newest first is read the right way round.
+- Automatic matching passes over a pair someone matched meanwhile instead of undoing the import;
+  it compares lines of the same amount only; and only entries from sixty days before the first
+  statement are offered (a long history no longer crowds out this month's).
+- Matching and unmatching take their lines in one order (no deadlock between them), check the
+  role before taking any lock, and their audit rows name the lines.
 
 ## Tests
 
@@ -87,3 +114,4 @@ The figures are worked in `docs/examples/step-35.md`. **Checked by Claude, not a
 - Recording a bank charge straight from its statement line.
 - A printed or PDF reconciliation statement for the auditor.
 - Matching suggestions for what is not sure (a ranked list of candidates), and a tolerance.
+- Every match, not only the latest fifty, to unmatch from the screen.

@@ -147,6 +147,17 @@ describe.skipIf(!hasDb)("bank reconciliation", () => {
     expect(await messageOf(deleteStatement(as.owner, november.id))).toBe("Some of this statement's lines are matched. Unmatch them first.");
     await deleteStatement(as.owner, december.id);
     expect((await getReconciliationPage(as.owner, bank))!.statements.map((s) => s.fileName)).toEqual(["hbl-november.csv"]);
+    // Two later files sharing a day: the earlier is not removed while the later stands (it holds no copy of the shared day).
+    const head = SAMPLE.split("\n").slice(0, 5).join("\n");
+    await importStatement(as.owner, bank, { name: "early.csv", text: `${head}\n02-Dec-2026,02-Dec-2026,Deposit,,,"100.00","49,695.67"\n03-Dec-2026,03-Dec-2026,Deposit,,,"200.00","49,895.67"\n` }, "hbl");
+    await importStatement(as.owner, bank, { name: "late.csv", text: `${head}\n03-Dec-2026,03-Dec-2026,Deposit,,,"200.00","49,895.67"\n04-Dec-2026,04-Dec-2026,Deposit,,,"300.00","50,195.67"\n` }, "hbl");
+    const files = (await getReconciliationPage(as.owner, bank))!.statements;
+    const early = files.find((f) => f.fileName === "early.csv")!;
+    const late = files.find((f) => f.fileName === "late.csv")!;
+    expect(await messageOf(deleteStatement(as.owner, early.id))).toBe("A statement imported after this one shares days with it. Remove that one first.");
+    await deleteStatement(as.owner, late.id);
+    await deleteStatement(as.owner, early.id);
+    expect((await getReconciliationPage(as.owner, bank))!.statements.map((s) => s.fileName)).toEqual(["hbl-november.csv"]);
     const [audit] = await admin<{ n: number }[]>`select count(*)::int as n from public.audit_log where tenant_id = ${tenant} and action like 'bank_%'`;
     expect(audit.n).toBeGreaterThanOrEqual(14);
   });

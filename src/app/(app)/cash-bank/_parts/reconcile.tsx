@@ -277,13 +277,16 @@ export async function ReconcileScreen({
               {r.difference.isZero()
                 ? "Reconciled: the books, with what is still to come through, equal the bank."
                 : `The books and the bank differ by ${formatAmount(r.difference.abs())}. ${
-                    r.bankOpening.minus(r.booksAtStart).isZero()
-                      ? "Match the rest, or put what is missing in the books."
-                      : `They already differed by ${formatAmount(r.bankOpening.minus(r.booksAtStart).abs())} when the first statement began on ${formatIsoDate(r.startsOn)}.`
+                    !r.missingFromStatements.isZero()
+                      ? `The bank's balance is ${formatAmount(r.missingFromStatements.abs())} ${r.missingFromStatements.isNegative() ? "less" : "more"} than the lines imported add up to: a statement is missing, or a line was lost. Import the missing statement.`
+                      : "Match the rest (a cheque written before the first statement and presented after it is matched too), or put what is missing in the books."
                   }`}
               {r.openingFromBooks
                 ? " The first statement does not say what the account held before it; the books' figure is taken."
                 : ""}
+              {r.bankBalanceGiven
+                ? ""
+                : " The bank's files give no running balance, so the bank's figure is its lines added up: a missing statement would not show."}
             </p>
             <form method="get" className="mt-3 flex flex-wrap items-end gap-2">
               <div className="flex flex-col gap-1.5">

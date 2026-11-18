@@ -27,6 +27,7 @@ function refusal(error: unknown): UserError | null {
   if (code === "SE365") return new UserError("The lines chosen do not add up to the same money. Choose lines whose total in the statement equals their total in the books.");
   if (code === "SE366") return new UserError("That statement or match is not in this company any more. Reload the page.");
   if (code === "SE367") return new UserError("Some of this statement's lines are matched. Unmatch them first.");
+  if (code === "SE368") return new UserError("A statement imported after this one shares days with it. Remove that one first.");
   if (code === "23505") return new UserError("One of the entries was matched meanwhile. Reload the page.");
   if (code === "42501") return new UserError("Your role does not permit this action.");
   return null;
@@ -35,13 +36,23 @@ function refusal(error: unknown): UserError | null {
 const ROLES: readonly Role[] = ["date", "description", "reference", "out", "in", "amount", "balance"];
 export const MAX_FILE_BYTES = 2 * 1024 * 1024;
 
-/** Matches everything the rules are sure of, in a transaction already open. Returns how many. */
+/**
+ * Matches everything the rules are sure of, in a transaction already open. Returns how many. A
+ * pair someone matched meanwhile is passed over (each pair has a savepoint of its own), never the
+ * whole import.
+ */
 async function matchSure(tx: Tx, tenantId: string, accountId: string): Promise<number> {
   const pairs = autoMatch(await selectUnmatchedBank(tx, tenantId, accountId), await selectUnmatchedBooks(tx, tenantId, accountId));
+  let matched = 0;
   for (const pair of pairs) {
-    await tx.execute(sql`select app.match_bank_lines(${accountId}::uuid, array[${pair.statementId}]::uuid[], array[${pair.journalLineId}]::uuid[], ${pair.rule})`);
+    try {
+      await tx.transaction((one) => one.execute(sql`select app.match_bank_lines(${accountId}::uuid, array[${pair.statementId}]::uuid[], array[${pair.journalLineId}]::uuid[], ${pair.rule})`));
+      matched += 1;
+    } catch (error) {
+      if (pgCode(error) !== "SE364" && pgCode(error) !== "23505") throw error;
+    }
   }
-  return pairs.length;
+  return matched;
 }
 
 export type ImportOutcome = { problems: string[] } | { lines: number; added: number; matched: number };
@@ -79,7 +90,7 @@ export async function importStatement(
   return withTenant(ctx.userId, ctx.tenantId, async (tx) => {
     try {
       const [row] = await tx.execute<{ result: { lines: number; added: number } }>(sql`
-        select app.import_bank_statement(${accountId}::uuid, ${file.name.slice(0, 200) || "statement.csv"}, ${rawLayout}, ${JSON.stringify(lines)}::jsonb,
+        select app.import_bank_statement(${accountId}::uuid, ${file.name.trim().slice(0, 200) || "statement.csv"}, ${rawLayout}, ${JSON.stringify(lines)}::jsonb,
           ${read.opening?.toFixed(AMOUNT_SCALE) ?? null}::numeric, ${read.closing?.toFixed(AMOUNT_SCALE) ?? null}::numeric) as result`);
       const matched = await matchSure(tx, ctx.tenantId, accountId);
       return { lines: row.result.lines, added: row.result.added, matched };

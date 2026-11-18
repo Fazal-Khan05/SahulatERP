@@ -46,16 +46,19 @@ export async function listBankAccounts(ctx: TenantContext): Promise<{ id: string
 
 /** The entries in the books on a bank account that no statement line has matched, with what names them. */
 export async function selectUnmatchedBooks(tx: Tx, tenantId: string, accountId: string): Promise<UnmatchedBookLine[]> {
+  // From sixty days before the first statement: older entries are in the bank's opening balance,
+  // except a cheque still on its way, which is matched from here when it is presented.
   const rows = await tx.execute<{ id: string; date: string; amount: string; number: string | null; cheque: string | null; description: string | null; memo: string | null }>(sql`
     select l.id, j.journal_date::text as date, (l.debit - l.credit)::text as amount, j.document_number as number, r.cheque_number as cheque, l.description, j.memo
     from public.journal_lines l
     join public.journals j on j.tenant_id = l.tenant_id and j.id = l.journal_id
     left join public.receipts r on r.tenant_id = j.tenant_id and r.id = j.source_id
     where l.tenant_id = ${tenantId} and l.account_id = ${accountId}
+      and j.journal_date >= coalesce((select min(s.period_from) - 60 from public.bank_statements s where s.tenant_id = l.tenant_id and s.account_id = l.account_id), '-infinity'::date)
       and not exists (select 1 from public.bank_match_journal_lines m where m.tenant_id = l.tenant_id and m.journal_line_id = l.id)
-    order by j.journal_date, j.created_at, l.line_no
+    order by j.journal_date desc, j.created_at desc, l.line_no
     limit 5000`);
-  return rows.map((r) => ({ id: r.id, date: r.date, amount: exact(r.amount), documentNumber: r.number, chequeNumber: r.cheque, description: r.description ?? r.memo ?? "" }));
+  return rows.map((r) => ({ id: r.id, date: r.date, amount: exact(r.amount), documentNumber: r.number, chequeNumber: r.cheque, description: r.description ?? r.memo ?? "" })).reverse();
 }
 
 /** The statement lines of a bank account no entry in the books has matched. */
@@ -64,9 +67,9 @@ export async function selectUnmatchedBank(tx: Tx, tenantId: string, accountId: s
     select l.id, l.line_date::text as date, l.amount::text, l.reference, l.description, l.balance::text
     from public.bank_statement_lines l
     where l.tenant_id = ${tenantId} and l.account_id = ${accountId} and l.match_id is null
-    order by l.line_date, l.created_at, l.line_no
+    order by l.line_date desc, l.created_at desc, l.line_no desc
     limit 5000`);
-  return rows.map((r) => ({ id: r.id, date: r.date, amount: exact(r.amount), reference: r.reference, description: r.description, balance: r.balance === null ? null : exact(r.balance) }));
+  return rows.reverse().map((r) => ({ id: r.id, date: r.date, amount: exact(r.amount), reference: r.reference, description: r.description, balance: r.balance === null ? null : exact(r.balance) }));
 }
 
 /** One bank account's reconciliation on a day (the last statement's last day, unless asked): what is matched, what is not, and the figures. */
@@ -106,15 +109,23 @@ export async function getReconciliationPage(ctx: TenantContext, accountId: strin
       const asAt = asked ?? statements.map((s) => s.period_to).sort().at(-1)!;
       const startsOn = statements.map((s) => s.period_from).sort()[0];
       const first = statements.find((s) => s.period_from === startsOn)!;
-      const lines = await tx.execute<{ side: "bank" | "books"; id: string; date: string; amount: string; match_id: string | null }>(sql`
-        select 'bank' as side, l.id, l.line_date::text as date, l.amount::text, l.match_id from public.bank_statement_lines l where l.tenant_id = ${ctx.tenantId} and l.account_id = ${accountId}
-        union all
-        select 'books', l.id, j.journal_date::text, (l.debit - l.credit)::text, m.match_id
+      // The bank's lines in its own order: by day, then as its files listed them.
+      const bank = await tx.execute<{ id: string; date: string; amount: string; balance: string | null; match_id: string | null }>(sql`
+        select l.id, l.line_date::text as date, l.amount::text, l.balance::text, l.match_id
+        from public.bank_statement_lines l join public.bank_statements s on s.tenant_id = l.tenant_id and s.id = l.statement_id
+        where l.tenant_id = ${ctx.tenantId} and l.account_id = ${accountId}
+        order by l.line_date, s.imported_at, l.line_no`);
+      const books = await tx.execute<{ id: string; date: string; amount: string; match_id: string | null }>(sql`
+        select l.id, j.journal_date::text as date, (l.debit - l.credit)::text as amount, m.match_id
         from public.journal_lines l join public.journals j on j.tenant_id = l.tenant_id and j.id = l.journal_id
         left join public.bank_match_journal_lines m on m.tenant_id = l.tenant_id and m.journal_line_id = l.id
         where l.tenant_id = ${ctx.tenantId} and l.account_id = ${accountId}`);
-      const of = (side: "bank" | "books") => lines.filter((l) => l.side === side).map((l) => ({ id: l.id, date: l.date, amount: exact(l.amount), matchId: l.match_id }));
-      reconciliation = reconcile(asAt, { startsOn, opening: first.opening === null ? null : exact(first.opening) }, of("bank"), of("books"));
+      reconciliation = reconcile(
+        asAt,
+        { startsOn, opening: first.opening === null ? null : exact(first.opening) },
+        bank.map((l) => ({ id: l.id, date: l.date, amount: exact(l.amount), balance: l.balance === null ? null : exact(l.balance), matchId: l.match_id })),
+        books.map((l) => ({ id: l.id, date: l.date, amount: exact(l.amount), matchId: l.match_id })),
+      );
     }
     return {
       account,

@@ -113,7 +113,8 @@ export function readBankAmount(input: string | undefined): Decimal | null | "bad
     if (side[1].toLowerCase() === "dr") sign = -sign;
   }
   text = text.replace(/,/g, "").replace(/\s/g, "");
-  if (!/^-?\d+(\.\d{1,4})?$/.test(text)) return "bad";
+  // Sixteen figures before the point at most: anything longer is an account number or an IBAN, not money.
+  if (!/^-?\d{1,16}(\.\d{1,4})?$/.test(text)) return "bad";
   return new Decimal(text).times(sign);
 }
 
@@ -122,8 +123,9 @@ export type ReadStatement =
   | { ok: true; lines: StatementLine[]; opening: Decimal | null; closing: Decimal | null; from: string; to: string }
   | { ok: false; problems: string[] };
 
-const OPENING = /opening balance|balance b\/?f|brought forward|balance forward/i;
-const CLOSING = /closing balance|balance c\/?f|carried forward|total/i;
+// A row that gives a balance or a total rather than money moved, by how its description starts.
+const OPENING = /^(opening balance|balance b\/?f|brought forward|balance forward)\b/i;
+const CLOSING = /^(closing balance|balance c\/?f|carried forward|total|grand total)\b/i;
 export const MAX_STATEMENT_LINES = 5000;
 
 /**
@@ -176,12 +178,20 @@ export function readStatement(csv: string, layout: Layout, columns: ColumnNames 
     if (cells.every((cell) => blank(cell))) continue;
     const row = r + 1;
     const cell = (role: Role) => (at[role] === undefined ? undefined : cells[at[role]!]);
-    const description = (cell("description") ?? "").trim().replace(/\s+/g, " ");
+    const description = (cell("description") ?? "").replace(/\u0000/g, "").trim().replace(/\s+/g, " ");
     const money = (role: Role) => readBankAmount(cell(role));
     const out = money("out");
     const into = money("in");
     const signed = money("amount");
     const balance = money("balance");
+    // An opening or closing balance, or a total, whatever it has in the money columns.
+    if (OPENING.test(description) || CLOSING.test(description)) {
+      if (balance !== null && balance !== "bad") {
+        if (OPENING.test(description)) opening = balance;
+        else closing = balance;
+      }
+      continue;
+    }
     if (out === "bad" || into === "bad" || signed === "bad" || balance === "bad") {
       problems.push(`Row ${row}: an amount is not a number.`);
       continue;
@@ -195,8 +205,8 @@ export function readStatement(csv: string, layout: Layout, columns: ColumnNames 
     else if (out !== null && !out.isZero()) amount = out.abs().negated();
     const date = blank(cell("date")) ? null : readBankDate(cell("date")!);
     if (amount === null || amount.isZero()) {
-      if (OPENING.test(description) && balance !== null) opening = balance;
-      else if (CLOSING.test(description) || (date === null && blank(cell("date")))) {
+      // A row with no day and no money (a note the bank adds) is passed over; a dated one is a mistake.
+      if (date === null && blank(cell("date"))) {
         if (balance !== null) closing = balance;
       } else problems.push(`Row ${row}: no money in or out.`);
       continue;
@@ -209,7 +219,7 @@ export function readStatement(csv: string, layout: Layout, columns: ColumnNames 
       problems.push(`Row ${row}: the description is longer than 500 characters.`);
       continue;
     }
-    const reference = blank(cell("reference")) ? null : cell("reference")!.trim().slice(0, 60);
+    const reference = blank(cell("reference")) ? null : cell("reference")!.replace(/\u0000/g, "").trim().slice(0, 60) || null;
     read.push({ row, date, description, reference, amount, balance });
   }
   if (problems.length === 0 && read.length === 0) problems.push("The file has no lines with money in or out.");
@@ -219,12 +229,22 @@ export function readStatement(csv: string, layout: Layout, columns: ColumnNames 
   // Oldest first: a bank that lists the newest first is read the other way round.
   if (read[0].date > read[read.length - 1].date) read.reverse();
   if (read.every((line) => line.balance !== null)) {
-    for (let i = 1; i < read.length && problems.length < 20; i++) {
-      if (!read[i - 1].balance!.plus(read[i].amount).eq(read[i].balance!)) {
-        problems.push(`Row ${read[i].row}: the balance does not follow from the line before (${read[i - 1].balance!.toFixed(2)} and ${read[i].amount.toFixed(2)} is not ${read[i].balance!.toFixed(2)}). Check that money in and money out are the right columns.`);
+    const breaks = (lines: typeof read) => {
+      const found: string[] = [];
+      for (let i = 1; i < lines.length && found.length < 20; i++) {
+        if (!lines[i - 1].balance!.plus(lines[i].amount).eq(lines[i].balance!)) {
+          found.push(`Row ${lines[i].row}: the balance does not follow from the line before (${lines[i - 1].balance!.toFixed(2)} and ${lines[i].amount.toFixed(2)} is not ${lines[i].balance!.toFixed(2)}). Check that money in and money out are the right columns.`);
+        }
       }
+      return found;
+    };
+    let found = breaks(read);
+    // A newest-first file whose lines are all of one day cannot be told by its days: by its balances.
+    if (found.length > 0 && read[0].date === read[read.length - 1].date && breaks([...read].reverse()).length === 0) {
+      read.reverse();
+      found = [];
     }
-    if (problems.length > 0) return { ok: false, problems };
+    if (found.length > 0) return { ok: false, problems: found };
     opening ??= read[0].balance!.minus(read[0].amount);
     closing ??= read[read.length - 1].balance;
   }
@@ -270,8 +290,12 @@ export function autoMatch(bankLines: readonly BankLine[], bookLines: readonly Bo
   const pairs: Pair[] = [];
   const usedBank = new Set<string>();
   const usedBook = new Set<string>();
+  // Entries by amount: a statement line is only ever compared with entries of its own amount.
+  const byAmount = new Map<string, BookLine[]>();
+  for (const book of bookLines) byAmount.set(book.amount.toFixed(4), [...(byAmount.get(book.amount.toFixed(4)) ?? []), book]);
+  const same = (bank: BankLine) => byAmount.get(bank.amount.toFixed(4)) ?? [];
   for (const bank of bankLines) {
-    const candidates = bookLines.filter((book) => !usedBook.has(book.id) && book.amount.eq(bank.amount) && Math.abs(days(bank.date, book.date)) <= 45 && names(bank, book));
+    const candidates = same(bank).filter((book) => !usedBook.has(book.id) && Math.abs(days(bank.date, book.date)) <= 45 && names(bank, book));
     if (candidates.length === 1) {
       pairs.push({ statementId: bank.id, journalLineId: candidates[0].id, rule: "reference" });
       usedBank.add(bank.id);
@@ -280,11 +304,12 @@ export function autoMatch(bankLines: readonly BankLine[], bookLines: readonly Bo
   }
   const near = (bank: BankLine, book: BookLine) => book.amount.eq(bank.amount) && days(bank.date, book.date) >= -3 && days(bank.date, book.date) <= 10;
   const bankLeft = bankLines.filter((bank) => !usedBank.has(bank.id));
-  const bookLeft = bookLines.filter((book) => !usedBook.has(book.id));
+  const bankByAmount = new Map<string, BankLine[]>();
+  for (const bank of bankLeft) bankByAmount.set(bank.amount.toFixed(4), [...(bankByAmount.get(bank.amount.toFixed(4)) ?? []), bank]);
   for (const bank of bankLeft) {
-    const candidates = bookLeft.filter((book) => !usedBook.has(book.id) && near(bank, book));
+    const candidates = same(bank).filter((book) => !usedBook.has(book.id) && near(bank, book));
     if (candidates.length !== 1) continue;
-    const rivals = bankLeft.filter((other) => !usedBank.has(other.id) && near(other, candidates[0]));
+    const rivals = (bankByAmount.get(bank.amount.toFixed(4)) ?? []).filter((other) => !usedBank.has(other.id) && near(other, candidates[0]));
     if (rivals.length !== 1) continue;
     pairs.push({ statementId: bank.id, journalLineId: candidates[0].id, rule: "amount_date" });
     usedBank.add(bank.id);
@@ -296,48 +321,66 @@ export function autoMatch(bankLines: readonly BankLine[], bookLines: readonly Bo
 // ── The reconciliation ──────────────────────────────────────────────────────────────────────────
 
 export type ReconcileLine = { id: string; date: string; amount: Decimal; matchId: string | null };
+/** A statement line as the reconciliation needs it: with the running balance the bank gave, if it gave one. */
+export type ReconcileBankLine = ReconcileLine & { balance: Decimal | null };
 
 export type Reconciliation = {
   asAt: string;
   /** The day the first statement starts: entries in the books before it are brought forward. */
   startsOn: string;
+  /** What the bank says the account held before its first statement; worked out from the books when no statement says. */
   bankOpening: Decimal;
-  /** True when no statement says what the account held before its first line: the books' figure is taken. */
   openingFromBooks: boolean;
+  /** The books before the first statement, and what of it the bank had not yet shown then (matched to later lines). */
   booksAtStart: Decimal;
+  inTransitAtStart: Decimal;
+  /** What the bank says the account held on the day: the running balance of its last line, or its lines added up when the files give none. */
   bankBalance: Decimal;
+  bankBalanceGiven: boolean;
+  /** The bank's balance less what its imported lines add up to: a statement missing, or a line lost. Nil when nothing is missing. */
+  missingFromStatements: Decimal;
   bookBalance: Decimal;
-  /** Entries in the books from the start to the day that no statement line has matched yet. */
+  /** Entries in the books the bank has not shown by the day: unmatched since the start, or matched to a later line. */
   unmatchedBooks: Decimal;
-  /** Statement lines to the day not yet matched with the books. */
+  /** Statement lines to the day not in the books by the day. */
   unmatchedBank: Decimal;
   /** The books, less what the bank has not shown yet, plus what the books do not have yet. */
   adjustedBooks: Decimal;
-  /** The bank less the adjusted books: nil when the account is reconciled. */
+  /** The bank less the books reconciled: nil when every rupee is explained. */
   difference: Decimal;
 };
 
 /**
- * The reconciliation of one bank account on a day. A match counts only when every line of it is
- * dated on or before the day; otherwise its lines are unmatched as at that day.
+ * One bank account's reconciliation on a day, against what the bank itself says it held.
+ *
+ * A match is settled on the day when every line of it, on both sides, is dated on or before the
+ * day. Entries in the books before the first statement are taken to be in the bank's opening
+ * balance, except those matched to a later statement line: those were on their way (a cheque
+ * written in October and presented in November). The bank's balance on the day is the running
+ * balance its last line gives; when its files give none, it is the opening plus its lines, which
+ * cannot show a missing statement (said so on the screen).
  */
 export function reconcile(
   asAt: string,
   statement: { startsOn: string; opening: Decimal | null },
-  bankLines: readonly ReconcileLine[],
+  bankLines: readonly ReconcileBankLine[],
   bookLines: readonly ReconcileLine[],
 ): Reconciliation {
   const sum = (lines: readonly ReconcileLine[]) => lines.reduce((t, line) => t.plus(line.amount), ZERO);
-  const late = new Set<string>();
-  for (const line of [...bankLines, ...bookLines]) if (line.matchId && line.date > asAt) late.add(line.matchId);
-  for (const line of bookLines) if (line.matchId && line.date < statement.startsOn) late.add(line.matchId);
-  const settled = (line: ReconcileLine) => line.matchId !== null && !late.has(line.matchId);
-  const booksAtStart = sum(bookLines.filter((line) => line.date < statement.startsOn));
-  const bankOpening = statement.opening ?? booksAtStart;
-  const bankBalance = bankOpening.plus(sum(bankLines.filter((line) => line.date <= asAt)));
+  const unsettled = new Set<string>();
+  for (const line of [...bankLines, ...bookLines]) if (line.matchId && line.date > asAt) unsettled.add(line.matchId);
+  const settled = (line: ReconcileLine) => line.matchId !== null && !unsettled.has(line.matchId);
+  const before = bookLines.filter((line) => line.date < statement.startsOn);
+  const booksAtStart = sum(before);
+  const inTransitAtStart = sum(before.filter((line) => line.matchId !== null));
+  const bankOpening = statement.opening ?? booksAtStart.minus(inTransitAtStart);
+  const shown = bankLines.filter((line) => line.date <= asAt);
+  const added = bankOpening.plus(sum(shown));
+  const last = shown.at(-1);
+  const bankBalance = last?.balance ?? added;
   const bookBalance = sum(bookLines.filter((line) => line.date <= asAt));
-  const unmatchedBooks = sum(bookLines.filter((line) => line.date >= statement.startsOn && line.date <= asAt && !settled(line)));
-  const unmatchedBank = sum(bankLines.filter((line) => line.date <= asAt && !settled(line)));
+  const unmatchedBooks = sum(bookLines.filter((line) => line.date <= asAt && (line.date >= statement.startsOn || line.matchId !== null) && !settled(line)));
+  const unmatchedBank = sum(shown.filter((line) => !settled(line)));
   const adjustedBooks = bookBalance.minus(unmatchedBooks).plus(unmatchedBank);
   return {
     asAt,
@@ -345,7 +388,10 @@ export function reconcile(
     bankOpening,
     openingFromBooks: statement.opening === null,
     booksAtStart,
+    inTransitAtStart,
     bankBalance,
+    bankBalanceGiven: last?.balance !== null && last !== undefined,
+    missingFromStatements: bankBalance.minus(added),
     bookBalance,
     unmatchedBooks,
     unmatchedBank,

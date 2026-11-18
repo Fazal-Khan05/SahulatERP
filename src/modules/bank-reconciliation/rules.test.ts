@@ -69,6 +69,16 @@ describe("reading a statement", () => {
     expect(read.ok && money(read.opening)).toBe("8000.00");
   });
 
+  it("passes over totals and balances whatever their money columns hold, and reads a same-day newest-first file", () => {
+    const csv = "Date,Description,Debit,Credit,Balance\n01/11/2026,Opening balance,,100.00,100.00\n02/11/2026,Sale,,50.00,150.00\n,Total,0.00,50.00,\n";
+    const read = readStatement(csv, "auto");
+    expect(read.ok && [read.lines.length, money(read.opening)]).toEqual([1, "100.00"]);
+    const sameDay = "Date,Description,Debit,Credit,Balance\n05/11/2026,Second,20.00,,130.00\n05/11/2026,First,,50.00,150.00\n";
+    const day = readStatement(sameDay, "auto");
+    expect(day.ok && day.lines.map((l) => l.description)).toEqual(["First", "Second"]);
+    expect(readStatement("Date,Description,Amount\n01/11/2026,IBAN,12345678901234567\n", "auto")).toEqual({ ok: false, problems: ["Row 2: an amount is not a number."] });
+  });
+
   it("reads columns the company names itself", () => {
     const csv = "Posted,What,Out,In\n01/11/2026,Rent,30000,\n02/11/2026,Sale,,5000\n";
     const read = readStatement(csv, "columns", { date: "Posted", description: "What", out: "Out", in: "In" });
@@ -131,28 +141,45 @@ describe("matching the bank with the books", () => {
 
 describe("the reconciliation", () => {
   const line = (id: string, date: string, amount: number, matchId: string | null = null) => ({ id, date, amount: d(amount), matchId });
+  const bankLine = (id: string, date: string, amount: number, balance: number | null, matchId: string | null = null) => ({ id, date, amount: d(amount), balance: balance === null ? null : d(balance), matchId });
+  const figures = (r: ReturnType<typeof reconcile>) => [r.bankBalance, r.bookBalance, r.unmatchedBooks, r.unmatchedBank, r.adjustedBooks, r.difference].map(money);
 
-  it("acceptance: with everything explained, the books reconciled equal the bank", () => {
+  it("acceptance: with everything explained, the books reconciled equal what the bank says", () => {
     const books = [line("b0", "2026-10-15", 100000), line("b1", "2026-11-02", 50000, "m1"), line("b2", "2026-11-03", -20000, "m2"), line("b3", "2026-11-28", -7000)];
-    const bank = [line("s1", "2026-11-02", 50000, "m1"), line("s2", "2026-11-03", -20000, "m2"), line("s3", "2026-11-05", -250)];
+    const bank = [bankLine("s1", "2026-11-02", 50000, 150000, "m1"), bankLine("s2", "2026-11-03", -20000, 130000, "m2"), bankLine("s3", "2026-11-05", -250, 129750)];
     const r = reconcile("2026-11-30", { startsOn: "2026-11-02", opening: d(100000) }, bank, books);
-    expect([r.bankBalance, r.bookBalance, r.unmatchedBooks, r.unmatchedBank, r.adjustedBooks, r.difference].map(money)).toEqual([
-      "129750.00",
-      "123000.00",
-      "-7000.00",
-      "-250.00",
-      "129750.00",
-      "0.00",
-    ]);
+    expect(figures(r)).toEqual(["129750.00", "123000.00", "-7000.00", "-250.00", "129750.00", "0.00"]);
+    expect([money(r.missingFromStatements), r.bankBalanceGiven]).toEqual(["0.00", true]);
   });
 
-  it("counts a match only when all of it is on or before the day, and says when the start disagreed", () => {
+  it("counts a cheque written before the first statement and presented after it as on its way, once matched", () => {
+    // Books: 100,000 in, then a 20,000 cheque on 28 October: 80,000. The bank's November statement opens at 100,000.
+    const books = [line("b0", "2026-10-01", 100000), line("b1", "2026-10-28", -20000)];
+    const bank = [bankLine("s1", "2026-11-03", -20000, 80000)];
+    const before = reconcile("2026-11-30", { startsOn: "2026-11-01", opening: d(100000) }, bank, books);
+    // Unmatched, the cheque reads as a line the books do not have: 20,000 unexplained.
+    expect(money(before.difference)).toBe("20000.00");
+    const matched = reconcile("2026-11-30", { startsOn: "2026-11-01", opening: d(100000) }, [{ ...bank[0], matchId: "m" }], [books[0], { ...books[1], matchId: "m" }]);
+    expect([money(matched.inTransitAtStart), money(matched.difference)]).toEqual(["-20000.00", "0.00"]);
+    // On 31 October, before it was presented, it is still on its way.
+    const october = reconcile("2026-10-31", { startsOn: "2026-11-01", opening: d(100000) }, [{ ...bank[0], matchId: "m" }], [books[0], { ...books[1], matchId: "m" }]);
+    expect(figures(october)).toEqual(["100000.00", "80000.00", "-20000.00", "0.00", "100000.00", "0.00"]);
+  });
+
+  it("shows a statement that is missing: the bank's balance is not what its imported lines add up to", () => {
+    // November and January imported, everything in them matched; December's statement never was.
+    const books = [line("b1", "2026-11-05", 1000, "m1"), line("b2", "2026-12-10", 7000), line("b3", "2027-01-05", 500, "m3")];
+    const bank = [bankLine("s1", "2026-11-05", 1000, 1000, "m1"), bankLine("s3", "2027-01-05", 500, 8500, "m3")];
+    const r = reconcile("2027-01-31", { startsOn: "2026-11-01", opening: d(0) }, bank, books);
+    expect([money(r.bankBalance), money(r.missingFromStatements), money(r.difference)]).toEqual(["8500.00", "7000.00", "7000.00"]);
+  });
+
+  it("works the bank's figure out from its lines when its files give no balance, and says so", () => {
     const books = [line("b1", "2026-11-29", -5000, "m1")];
-    const bank = [line("s1", "2026-12-02", -5000, "m1")];
-    const november = reconcile("2026-11-30", { startsOn: "2026-11-01", opening: d(1000) }, bank, books);
-    expect([november.unmatchedBooks, november.unmatchedBank, november.difference].map(money)).toEqual(["-5000.00", "0.00", "1000.00"]);
-    expect(money(november.bankOpening.minus(november.booksAtStart))).toBe("1000.00");
+    const bank = [bankLine("s1", "2026-12-02", -5000, null, "m1")];
+    const november = reconcile("2026-11-30", { startsOn: "2026-11-01", opening: null }, bank, books);
+    expect([money(november.unmatchedBooks), money(november.unmatchedBank), money(november.difference), november.openingFromBooks, november.bankBalanceGiven]).toEqual(["-5000.00", "0.00", "0.00", true, false]);
     const december = reconcile("2026-12-31", { startsOn: "2026-11-01", opening: null }, bank, books);
-    expect([december.unmatchedBooks, december.difference, december.openingFromBooks].map((v) => (typeof v === "boolean" ? v : money(v)))).toEqual(["0.00", "0.00", true]);
+    expect([money(december.unmatchedBooks), money(december.difference)]).toEqual(["0.00", "0.00"]);
   });
 });

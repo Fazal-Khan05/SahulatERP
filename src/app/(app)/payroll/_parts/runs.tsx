@@ -11,6 +11,7 @@ import { formatAmount } from "@/lib/money";
 import { formatIsoDate } from "@/modules/currencies/rules";
 import { getPayslip, getRun, listPayingAccounts, listRuns, type PayslipRow, type RunDetail } from "@/modules/payroll-runs/queries";
 import { approvalJournal, monthEnd, RUN_STATUS_LABELS } from "@/modules/payroll-runs/rules";
+import { getBankFile } from "@/modules/staff-loans/queries";
 import { isMonth } from "@/modules/payroll/rules";
 import { can } from "@/modules/tenant/rules";
 import { approveRunAction, cancelRunAction, payRunAction, reviewRunAction, workOutRunAction } from "./run-actions";
@@ -103,7 +104,8 @@ function Totals({ run }: { run: RunDetail }) {
       <Figure label="Commission" value={amount(run.commission)} />
       <Figure label="Income tax deducted" value={amount(run.tax)} />
       <Figure label="EOBI, employees' share" value={amount(run.eobiEmployee)} />
-      <Figure label="Fixed deductions" value={amount(run.deductions)} />
+      <Figure label="Fixed deductions" value={amount(run.deductions.minus(run.loanRecovery))} />
+      <Figure label="Loan instalments" value={amount(run.loanRecovery)} />
       <Figure label="Take home" value={amount(run.net)} />
       <Figure label="EOBI, employer's share" value={amount(run.employerEobi)} />
       <Figure label="Social security, employer's share" value={amount(run.employerSocialSecurity)} />
@@ -133,6 +135,9 @@ export async function RunScreen({ params }: { params: Promise<{ id: string }> })
   const pay = can(session.role, "payroll_run.pay") && wide;
   const open = run.status === "draft" || run.status === "reviewed";
   const accounts = run.status === "approved" && pay ? await listPayingAccounts(session) : [];
+  // Step 42: the bank file is for whoever prepares or makes the payment, across the whole company.
+  const banker = (can(session.role, "payroll.manage") || pay) && wide;
+  const bankFile = (run.status === "approved" || run.status === "paid") && banker ? await getBankFile(session, run.id) : null;
   const journal = approvalJournal(run);
   return (
     <>
@@ -269,6 +274,56 @@ export async function RunScreen({ params }: { params: Promise<{ id: string }> })
                 </div>
               </div>
             </ActionForm>
+          </Card>
+        ) : null}
+        {bankFile ? (
+          <Card title="Bank file">
+            {"missing" in bankFile ? (
+              <p className="text-sm text-muted-foreground" data-testid="bank-file-missing">
+                The bank file pays each person to the IBAN on their page. None is on record for{" "}
+                {bankFile.missing.map((m, index) => (
+                  <span key={m.id}>
+                    {index > 0 ? ", " : ""}
+                    <Link href={`/payroll/employees/${m.id}`} className="underline underline-offset-4">
+                      {m.code} {m.name}
+                    </Link>
+                  </span>
+                ))}
+                .
+              </p>
+            ) : "problems" in bankFile ? (
+              <div className="text-sm" data-testid="bank-file-problems">
+                <p className="mb-2 text-muted-foreground">A bank would refuse this file as the details stand. Put each right on the person&apos;s page:</p>
+                <ul className="list-disc pl-5">
+                  {bankFile.problems.map((problem) => (
+                    <li key={problem}>{problem}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <>
+                <p className="mb-3 text-sm text-muted-foreground">One line for each person with pay to take home, to the IBAN on their page, to upload to the bank.</p>
+                {bankFile.changed.length > 0 ? (
+                  <div className="mb-3 rounded-lg border border-destructive/40 p-3 text-sm" data-testid="bank-file-changed">
+                    <p className="mb-1 font-medium">Bank details changed after this run was approved. Check each with the person before uploading:</p>
+                    <ul className="list-disc pl-5">
+                      {bankFile.changed.map((c) => (
+                        <li key={c.id}>
+                          <Link href={`/payroll/employees/${c.id}`} className="underline underline-offset-4">
+                            {c.code} {c.name}
+                          </Link>
+                          , {formatDateTime(new Date(c.at))}
+                          {c.by ? `, by ${c.by}` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                <a href={`/payroll/runs/${run.id}/bank-file`} className={buttonVariants({ variant: "outline", size: "sm" })}>
+                  Download the bank file
+                </a>
+              </>
+            )}
           </Card>
         ) : null}
         {open && manage ? (

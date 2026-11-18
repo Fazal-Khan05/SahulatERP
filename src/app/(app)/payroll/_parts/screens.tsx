@@ -1,6 +1,7 @@
 import Decimal from "decimal.js";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { ReactNode } from "react";
 import { ImportForm } from "@/app/(app)/_parties/import-form";
 import { ActionForm } from "@/components/action-form";
 import { Field } from "@/components/field";
@@ -39,7 +40,7 @@ export function Shut({ title, why }: { title: string; why: string }) {
   );
 }
 
-export function PayrollNav({ here }: { here: "employees" | "attendance" | "runs" | "payslips" | "rates" }) {
+export function PayrollNav({ here }: { here: "employees" | "attendance" | "runs" | "payslips" | "loans" | "annual" | "rates" }) {
   const tab = (key: typeof here, href: string, label: string) => (
     <Link
       href={href}
@@ -55,6 +56,8 @@ export function PayrollNav({ here }: { here: "employees" | "attendance" | "runs"
       {tab("attendance", "/payroll/attendance", "Attendance")}
       {tab("runs", "/payroll/runs", "Payroll runs")}
       {tab("payslips", "/payroll/payslips", "Payslips")}
+      {tab("loans", "/payroll/loans", "Loans")}
+      {tab("annual", "/payroll/annual", "Year's statement")}
       {tab("rates", "/payroll/rates", "Statutory rates")}
     </nav>
   );
@@ -230,7 +233,8 @@ export async function NewEmployeeScreen() {
   );
 }
 
-export async function EmployeeScreen({ params }: { params: Promise<{ id: string }> }) {
+/** A person's page. `more` adds what later steps keep about them (Step 42: bank account, loans). */
+export async function EmployeeScreen({ params, more }: { params: Promise<{ id: string }>; more?: (employee: EmployeeDetail) => ReactNode }) {
   const session = await requireTenant();
   const why = closed(session);
   if (why) return <Shut title="Employee" why={why} />;
@@ -389,6 +393,7 @@ export async function EmployeeScreen({ params }: { params: Promise<{ id: string 
             </dl>
           </Card>
         )}
+        {more ? more(employee) : null}
       </div>
     </>
   );

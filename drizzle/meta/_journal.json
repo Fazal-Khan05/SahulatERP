@@ -239,6 +239,13 @@
       "when": 1794973863838,
       "tag": "0033_payroll_runs",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1795009276787,
+      "tag": "0034_payroll_extras",
+      "breakpoints": true
     }
   ]
 }

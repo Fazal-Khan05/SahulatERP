@@ -38,7 +38,7 @@ function refusal(error: unknown, date: string): UserError | null {
   if (code === "SE353") return new UserError(NOT_HERE);
   if (code === "SE354") return new UserError("The run is not at that stage any more. Reload the page.");
   if (code === "SE355") return new UserError("That date cannot be used: a month is approved once it has begun, and salaries are paid on or after the day the run was approved, never on a day still to come.");
-  if (code === "SE356") return new UserError("The run is out of date: an earlier month was approved since, someone's day of joining changed, or its figures no longer add up. Work it out again.");
+  if (code === "SE356") return new UserError("The run is out of date: an earlier month was approved since, someone's day of joining changed, a loan was repaid since, or its figures no longer add up. Work it out again.");
   if (code === "SE357") return new UserError("A receipt, a cheque or a return is being recorded on a salesperson's invoice right now. Try again in a moment.");
   if (code === "SE359") return new UserError("Choose a cash or bank account that is in use. An archived account cannot be used: restore it first under Chart of accounts.");
   if (code === "SE351" || code === "SE352" || code === "SE074") return new UserError("That could not be done as it stands. Reload the page and try again.");
@@ -90,6 +90,12 @@ async function loadPayslips(tx: Tx, tenantId: string, month: string): Promise<{ 
     .groupBy(payslips.employeeId);
   const tables = await selectPayrollTables(tx, tenantId);
   const slabs = slabsOn(tables, last);
+  // Loans to staff still owed on, made by the month's end, oldest first (Step 42).
+  const loans = await tx.execute<{ id: string; number: string; employee_id: string; instalment: string; owed: string }>(sql`
+    select s.id, s.number, s.employee_id, s.instalment::text, (s.amount - s.recovered)::text as owed
+    from public.staff_loans s
+    where s.tenant_id = ${tenantId} and s.issued_on <= ${last}::date and s.recovered < s.amount
+    order by s.issued_on, s.number`);
 
   const payslipsOut: Payslip[] = [];
   const problems: WorkOutProblem[] = [];
@@ -120,6 +126,9 @@ async function loadPayslips(tx: Tx, tenantId: string, month: string): Promise<{ 
       slabs,
       rates: tables.rates,
       commission,
+      loans: loans
+        .filter((loan) => loan.employee_id === employee.id)
+        .map((loan) => ({ id: loan.id, number: loan.number, instalment: exact(loan.instalment), owed: exact(loan.owed) })),
       before: earlier ? { taxable: exact(earlier.taxable), tax: exact(earlier.tax), months: earlier.months } : { taxable: new Decimal(0), tax: new Decimal(0), months: 0 },
     });
     if (worked.ok) payslipsOut.push(worked.payslip);
@@ -159,6 +168,7 @@ export async function workOutRun(ctx: TenantContext, rawMonth: unknown): Promise
       tax: money(totals.tax),
       eobi_employee: money(totals.eobiEmployee),
       deductions: money(totals.deductions),
+      loan_recovery: money(totals.loanRecovery),
       net: money(totals.net),
       employer_eobi: money(totals.employerEobi),
       employer_social_security: money(totals.employerSocialSecurity),
@@ -169,7 +179,7 @@ export async function workOutRun(ctx: TenantContext, rawMonth: unknown): Promise
         runId = existing.id;
         await tx.execute(sql`
           update public.payroll_runs set status = 'draft', earnings = ${figures.earnings}, commission = ${figures.commission}, tax = ${figures.tax},
-            eobi_employee = ${figures.eobi_employee}, deductions = ${figures.deductions}, net = ${figures.net}, employer_eobi = ${figures.employer_eobi},
+            eobi_employee = ${figures.eobi_employee}, deductions = ${figures.deductions}, loan_recovery = ${figures.loan_recovery}, net = ${figures.net}, employer_eobi = ${figures.employer_eobi},
             employer_social_security = ${figures.employer_social_security}, updated_by = ${ctx.userId}
           where tenant_id = ${ctx.tenantId} and id = ${runId}`);
         const old = tx.select({ id: payslips.id }).from(payslips).where(and(eq(payslips.tenantId, ctx.tenantId), eq(payslips.runId, runId)));
@@ -177,9 +187,9 @@ export async function workOutRun(ctx: TenantContext, rawMonth: unknown): Promise
         await tx.delete(payslips).where(and(eq(payslips.tenantId, ctx.tenantId), eq(payslips.runId, runId)));
       } else {
         const [row] = await tx.execute<{ id: string }>(sql`
-          insert into public.payroll_runs (tenant_id, month, status, earnings, commission, tax, eobi_employee, deductions, net, employer_eobi, employer_social_security, created_by, updated_by)
+          insert into public.payroll_runs (tenant_id, month, status, earnings, commission, tax, eobi_employee, deductions, loan_recovery, net, employer_eobi, employer_social_security, created_by, updated_by)
           values (${ctx.tenantId}, ${month}, 'draft', ${figures.earnings}, ${figures.commission}, ${figures.tax}, ${figures.eobi_employee}, ${figures.deductions},
-            ${figures.net}, ${figures.employer_eobi}, ${figures.employer_social_security}, ${ctx.userId}, ${ctx.userId})
+            ${figures.loan_recovery}, ${figures.net}, ${figures.employer_eobi}, ${figures.employer_social_security}, ${ctx.userId}, ${ctx.userId})
           returning id`);
         runId = row.id;
       }
@@ -207,6 +217,7 @@ export async function workOutRun(ctx: TenantContext, rawMonth: unknown): Promise
           tax: money(slip.tax),
           eobiEmployee: money(slip.eobiEmployee),
           deductions: money(slip.deductions),
+          loanRecovery: money(slip.loanRecovery),
           net: money(slip.net),
           employerEobi: money(slip.employerEobi),
           employerSocialSecurity: money(slip.employerSocialSecurity),
@@ -225,7 +236,7 @@ export async function workOutRun(ctx: TenantContext, rawMonth: unknown): Promise
         .returning({ id: payslips.id });
       if (slip.lines.length > 0) {
         await tx.insert(payslipLines).values(
-          slip.lines.map((line, index) => ({ tenantId: ctx.tenantId, payslipId: row.id, lineNo: index + 1, kind: line.kind, code: line.code, label: line.label, amount: money(line.amount) })),
+          slip.lines.map((line, index) => ({ tenantId: ctx.tenantId, payslipId: row.id, lineNo: index + 1, kind: line.kind, code: line.code, label: line.label, amount: money(line.amount), loanId: line.loanId ?? null })),
         );
       }
     }

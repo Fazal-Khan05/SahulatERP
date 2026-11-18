@@ -138,7 +138,7 @@ test("a report downloads as Excel and as CSV, and prints on the company's letter
   expect(bytes.subarray(0, 2).toString("latin1")).toBe("PK");
   expect(bytes.length).toBeGreaterThan(2000);
   // Anything else asked of the address is simply not found.
-  expect((await page.request.get("/reports/export?report=cash-flow&format=csv")).status()).toBe(404);
+  expect((await page.request.get("/reports/export?report=no-such-report&format=csv")).status()).toBe(404);
   expect((await page.request.get("/reports/export?report=trial-balance&format=pdf")).status()).toBe(404);
 
   await page.getByRole("link", { name: "Print" }).click();

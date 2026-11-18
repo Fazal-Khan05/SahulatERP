@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { setTimeout as sleep } from "node:timers/promises";
 import { sql } from "drizzle-orm";
+import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb, withTenant } from "@/db";
 import { approveCommission } from "@/modules/commission-ledger/commands";
@@ -16,6 +18,7 @@ import { postInvoice, saveInvoiceDraft, saveSalesDraft, startInvoice, submitSale
 import { getSalesDocument } from "@/modules/sales/queries";
 import type { TenantContext } from "@/modules/tenant/rules";
 import { adminSql, deleteTenants, hasAdminDb, type AdminSql } from "../../../tests/support/admin-db";
+import { enterAs } from "../../../tests/support/identity";
 import { seedStock } from "../../../tests/support/stock";
 import { approveRun, cancelRun, payRun, reviewRun, workOutRun } from "./commands";
 import { getRun, listRuns } from "./queries";
@@ -106,6 +109,21 @@ async function balance(code: string): Promise<string> {
   return row.net;
 }
 const money = (value: { toFixed(scale: number): string }) => value.toFixed(2);
+/** A session of the app's own role, signed in as someone, inside a transaction left open: for two at once. */
+async function appSession(userId: string) {
+  const client = postgres(process.env.DATABASE_URL!, { max: 1, onnotice: () => {} });
+  const tx = await client.reserve();
+  await tx`begin`;
+  await enterAs(tx, userId, tenant);
+  return {
+    tx,
+    end: async () => {
+      tx.release();
+      await client.end();
+    },
+  };
+}
+const codeOfError = (error: unknown) => (error as { code?: string }).code ?? "unknown";
 
 describe.skipIf(!hasDb)("payroll runs", () => {
   beforeAll(async () => {
@@ -264,6 +282,35 @@ describe.skipIf(!hasDb)("payroll runs", () => {
     expect(money(after.commission)).toBe("100.00");
     await approveRun(as.owner, november);
     expect(await balance("2320")).toBe("0.00");
+  });
+
+  it("holds the run while a payslip line is written, so a review meanwhile never passes one unseen", async () => {
+    const { id } = (await workOutRun(as.payroll_administrator, "2026-08-01")) as { id: string };
+    const [slip] = await admin<{ id: string }[]>`select id from public.payslips where run_id = ${id} limit 1`;
+    // The owner reviews August and has not committed yet; the payroll administrator, in a session
+    // of their own, writes a line into one of its payslips meanwhile.
+    const reviewer = await appSession(userIds.owner);
+    const writer = await appSession(userIds.payroll_administrator);
+    try {
+      await reviewer.tx`select app.review_payroll_run(${id}::uuid)`;
+      const line = writer.tx`insert into public.payslip_lines (tenant_id, payslip_id, line_no, kind, code, label, amount)
+        values (${tenant}, ${slip.id}, 40, 'earning', 'extra', 'Extra', 1000)`.then(
+        () => "written",
+        (error: unknown) => codeOfError(error),
+      );
+      // It waits for the review rather than reading the run as it was before it.
+      expect(await Promise.race([line, sleep(500).then(() => "waiting")])).toBe("waiting");
+      await reviewer.tx`commit`;
+      // Once the run is reviewed, the line is refused.
+      expect(await line).toBe("SE351");
+      await writer.tx`rollback`;
+    } finally {
+      await reviewer.end();
+      await writer.end();
+    }
+    expect((await getRun(as.owner, id))!.status).toBe("reviewed");
+    const [extra] = await admin<{ n: number }[]>`select count(*)::int as n from public.payslip_lines where payslip_id = ${slip.id} and code = 'extra'`;
+    expect(extra.n).toBe(0);
   });
 
   it("cancels a run before approval, saying why, and the month is worked out anew", async () => {

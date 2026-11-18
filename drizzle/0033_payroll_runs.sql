@@ -251,7 +251,12 @@ CREATE TRIGGER payroll_runs_check BEFORE INSERT OR UPDATE OR DELETE ON public.pa
 --> statement-breakpoint
 ALTER TABLE public.payroll_runs ENABLE ALWAYS TRIGGER payroll_runs_check;
 --> statement-breakpoint
--- A payslip and its lines are written and thrown away only while their run is a draft.
+-- A payslip and its lines are written and thrown away only while their run is a draft. The run
+-- is held while they are (FOR SHARE), so it is not approved or worked out again meanwhile: an
+-- approval that comes first is waited for and then seen, and one that comes after waits for this
+-- write and then counts it. A line's payslip is read again once the run is held, and must still be
+-- that run's (working a run out again, which removes payslips, holds the run first). A run or
+-- payslip that is not there refuses the row; nothing is left for the foreign key to decide.
 CREATE FUNCTION app.check_payslip_row() RETURNS trigger
   LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp
   AS $$
@@ -276,10 +281,21 @@ BEGIN
   IF TG_TABLE_NAME = 'payslips' THEN
     v_run := v_row.run_id;
   ELSE
+    -- Which run, read first; a payslip never moves to another run (nobody may update one).
     SELECT p.run_id INTO v_run FROM public.payslips p WHERE p.tenant_id = v_row.tenant_id AND p.id = v_row.payslip_id;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'no such payslip' USING ERRCODE = 'foreign_key_violation';
+    END IF;
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM public.payroll_runs r WHERE r.tenant_id = v_row.tenant_id AND r.id = v_run AND r.status = 'draft') THEN
+  PERFORM 1 FROM public.payroll_runs r WHERE r.tenant_id = v_row.tenant_id AND r.id = v_run AND r.status = 'draft' FOR SHARE;
+  IF NOT FOUND THEN
     RAISE EXCEPTION 'a payslip is written only while its run is a draft' USING ERRCODE = 'SE351';
+  END IF;
+  IF TG_TABLE_NAME = 'payslip_lines' THEN
+    PERFORM 1 FROM public.payslips p WHERE p.tenant_id = v_row.tenant_id AND p.id = v_row.payslip_id AND p.run_id = v_run;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'no such payslip' USING ERRCODE = 'foreign_key_violation';
+    END IF;
   END IF;
   IF TG_OP = 'DELETE' THEN
     RETURN OLD;

@@ -65,8 +65,8 @@ one branch.
 ## Tests
 
 - `src/modules/reports/cash-flow.test.ts`: where each kind of money goes; the acceptance on a
-  dozen journals; one branch's money moved to another, and a journal split across branches;
-  sharing out to the paisa and beyond; a statement that does not agree saying so; the owner's
+  dozen journals; an opening balance reversed and entered again; sharing out to the paisa and
+  beyond; a statement that does not agree saying so; the owner's
   figures.
 - `src/modules/reports/cash-flow-books.test.ts`, against the database: the acceptance against
   the trial balance; one branch, and a member who works in it; a later period starting where this

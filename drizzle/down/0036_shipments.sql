@@ -1,4 +1,4 @@
--- Reverses drizzle/0035_shipments.sql. Never run automatically. Run it by hand, as postgres, only
+-- Reverses drizzle/0036_shipments.sql. Never run automatically. Run it by hand, as postgres, only
 -- after showing it to the founder and getting a yes. It refuses to run once any shipment's
 -- charges have been spread or any bill line has been charged to Goods in transit: their
 -- journals and stock moves cannot be removed, and without this migration nothing would say
@@ -126,7 +126,7 @@ ALTER TABLE public.stock_moves DROP CONSTRAINT stock_moves_quantity_sane, DROP C
 ALTER TABLE public.stock_moves ADD CONSTRAINT stock_moves_quantity_sane CHECK (quantity <> 0 and quantity > -1e12 and quantity < 1e12);
 ALTER TABLE public.stock_moves ADD CONSTRAINT stock_moves_value_sane CHECK (value > -1e16 and value < 1e16 and (value = 0 or sign(value) = sign(quantity)));
 
--- The row drizzle-kit wrote for 0035_shipments (its "when" in drizzle/meta/_journal.json).
-DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1795006467997;
+-- The row drizzle-kit wrote for 0036_shipments (its "when" in drizzle/meta/_journal.json).
+DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1795020343324;
 
 COMMIT;

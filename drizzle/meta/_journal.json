@@ -246,13 +246,6 @@
       "when": 1795006247028,
       "tag": "0034_supplier_returns",
       "breakpoints": true
-    },
-    {
-      "idx": 35,
-      "version": "7",
-      "when": 1795006467997,
-      "tag": "0035_shipments",
-      "breakpoints": true
     }
   ]
 }

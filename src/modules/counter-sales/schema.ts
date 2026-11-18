@@ -16,7 +16,7 @@ import { tenants } from "../tenant/schema";
 //
 // The walk-in customer gets no credit and is sold to in no other way: the database refuses a
 // quotation, a delivery note, or an order or invoice that is not a counter sale's, and a
-// receipt for it that is not the counter sale's own (drizzle/0032_counter_sales.sql).
+// receipt for it that is not the counter sale's own (drizzle/0033_counter_sales.sql).
 
 /** Which customer stands for walk-in buyers, one per company. Written only by app.walk_in_customer(). */
 export const walkInCustomers = pgTable(

@@ -30,7 +30,7 @@ export const permissions = {
   "recovery.manage": ["owner", "accountant", "recovery_officer", "sales_manager"],
   // Step 22. A sale at the counter to a walk-in buyer, who pays at once: it sells and takes the
   // money in one act, so it is for those who do both, the owner and an accountant. The policies
-  // on counter_sales and app.walk_in_customer() in drizzle/0032_counter_sales.sql name the same two.
+  // on counter_sales and app.walk_in_customer() in drizzle/0033_counter_sales.sql name the same two.
   "counter_sale.manage": ["owner", "accountant"],
 } as const satisfies TrackPermissions;
 

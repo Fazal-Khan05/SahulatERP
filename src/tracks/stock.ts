@@ -36,6 +36,9 @@ export const permissions = {
   // Step 27. Goods sent back to a supplier, and what the supplier owes back for them.
   "supplier_return.read": ["owner", "accountant", "auditor"],
   "supplier_return.manage": ["owner", "accountant"],
+  // Step 28. Shipments, the charges of bringing them in, and spreading those over the goods.
+  "shipment.read": ["owner", "accountant", "auditor"],
+  "shipment.manage": ["owner", "accountant"],
 } as const satisfies TrackPermissions;
 
 /**
@@ -64,7 +67,7 @@ export const controls = {
  * Kinds of document this track numbers, by their two letters. The migration adds a function
  * app.document_type_<letters>() for each.
  */
-export const documents = { SC: "Stock count", WC: "Withholding challan" } as const satisfies Record<string, string>;
+export const documents = { SC: "Stock count", WC: "Withholding challan", SH: "Shipment" } as const satisfies Record<string, string>;
 
 /** This track's reports, listed on the Reports page under headings of its own. */
 export const reports: readonly ReportSection[] = [

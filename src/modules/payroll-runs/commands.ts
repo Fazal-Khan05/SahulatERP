@@ -38,7 +38,7 @@ function refusal(error: unknown, date: string): UserError | null {
   if (code === "SE353") return new UserError(NOT_HERE);
   if (code === "SE354") return new UserError("The run is not at that stage any more. Reload the page.");
   if (code === "SE355") return new UserError("That date cannot be used: a month is approved once it has begun, and salaries are paid on or after the day the run was approved, never on a day still to come.");
-  if (code === "SE356") return new UserError("The run is out of date: an earlier month was approved since, someone's day of joining changed, or its figures no longer add up. Work it out again.");
+  if (code === "SE356") return new UserError("The run is out of date: an earlier month was approved since, someone's day of joining changed, a loan was repaid since, or its figures no longer add up. Work it out again.");
   if (code === "SE357") return new UserError("A receipt, a cheque or a return is being recorded on a salesperson's invoice right now. Try again in a moment.");
   if (code === "SE359") return new UserError("Choose a cash or bank account that is in use. An archived account cannot be used: restore it first under Chart of accounts.");
   if (code === "SE351" || code === "SE352" || code === "SE074") return new UserError("That could not be done as it stands. Reload the page and try again.");

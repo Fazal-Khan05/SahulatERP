@@ -293,7 +293,8 @@ export function workOutPayslip(input: PayslipInput): { ok: true; payslip: Paysli
   const loanLines: PayslipLine[] = [];
   for (const loan of input.loans ?? []) {
     const due = Decimal.min(leaving ? loan.owed : loan.instalment, loan.owed);
-    const take = Decimal.min(due, left);
+    // To the paisa, rounded down: what is left of the pay may carry part of a paisa (commission).
+    const take = Decimal.min(due, left).toDecimalPlaces(2, Decimal.ROUND_DOWN);
     if (take.lte(0)) continue;
     loanLines.push({ kind: "deduction", code: "loan", label: take.lt(due) ? `Loan ${loan.number}, ${take.toFixed(2)} of ${due.toFixed(2)}` : `Loan ${loan.number}`, amount: take, loanId: loan.id });
     left = left.minus(take);

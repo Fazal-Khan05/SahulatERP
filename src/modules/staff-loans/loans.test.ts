@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { setTimeout as sleep } from "node:timers/promises";
 import Decimal from "decimal.js";
+import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb } from "@/db";
 import { seedAccounts } from "@/modules/ledger/commands";
@@ -9,6 +11,7 @@ import { approveRun, reviewRun, workOutRun } from "@/modules/payroll-runs/comman
 import { getRun } from "@/modules/payroll-runs/queries";
 import type { TenantContext } from "@/modules/tenant/rules";
 import { adminSql, deleteTenants, hasAdminDb, type AdminSql } from "../../../tests/support/admin-db";
+import { enterAs } from "../../../tests/support/identity";
 import { issueLoan, repayLoan, saveBankAccount } from "./commands";
 import { getAnnualStatement, getBankFile, listLoans } from "./queries";
 import { checkBankFile } from "./rules";
@@ -26,6 +29,9 @@ const roles = ["owner", "payroll_administrator", "accountant", "auditor"] as con
 const userIds = Object.fromEntries(roles.map((role) => [role, randomUUID()])) as Record<(typeof roles)[number], string>;
 const ctx = (userId: string, role: TenantContext["role"]): TenantContext => ({ userId, email: `${role}-${userId.slice(0, 4)}@loans.test`, tenantId: tenant, tenantName: "x", role, branchIds: null });
 const as = Object.fromEntries(roles.map((role) => [role, ctx(userIds[role], role)])) as Record<(typeof roles)[number], TenantContext>;
+// An accountant kept to one branch: the database does not let them lend.
+const branchAccountant = randomUUID();
+const branch = randomUUID();
 
 let admin: AdminSql;
 let cash: string;
@@ -46,6 +52,21 @@ async function journalLines(journalId: string): Promise<Record<string, string>> 
     where l.journal_id = ${journalId} group by a.code order by a.code`;
   return Object.fromEntries(rows.map((r) => [r.code, r.net]));
 }
+/** A session of the app's own role, signed in as someone, inside a transaction left open: for two at once. */
+async function appSession(userId: string) {
+  const client = postgres(process.env.DATABASE_URL!, { max: 1, onnotice: () => {} });
+  const tx = await client.reserve();
+  await tx`begin`;
+  await enterAs(tx, userId, tenant);
+  return {
+    tx,
+    end: async () => {
+      tx.release();
+      await client.end();
+    },
+  };
+}
+const codeOf = (error: unknown) => (error as { code?: string }).code ?? String(error);
 async function approveMonth(month: string): Promise<string> {
   const { id } = (await workOutRun(as.payroll_administrator, month)) as { id: string };
   await reviewRun(as.payroll_administrator, id);
@@ -60,6 +81,9 @@ describe.skipIf(!hasDb)("loans to staff, the bank file and the year's statement"
     await deleteTenants(admin, stale.map((r) => r.id));
     await admin`insert into public.tenants (id, name, created_by) values (${tenant}, ${PREFIX}, ${userIds.owner})`;
     await admin`insert into public.memberships ${admin(roles.map((role) => ({ tenant_id: tenant, user_id: userIds[role], email: as[role].email, role, branch_ids: null, created_by: userIds.owner })))}`;
+    await admin`insert into public.branches (id, tenant_id, name, created_by) values (${branch}, ${tenant}, 'City', ${userIds.owner})`;
+    await admin`insert into public.memberships (tenant_id, user_id, email, role, branch_ids, created_by)
+      values (${tenant}, ${branchAccountant}, 'branch-accountant@loans.test', 'accountant', ${[branch]}, ${userIds.owner})`;
     await seedAccounts(as.owner, "trading");
     await openFiscalYear(as.owner, { month: "7", year: "2026" });
     cash = (await admin<{ id: string }[]>`select id from public.accounts where tenant_id = ${tenant} and code = '1111'`)[0].id;
@@ -86,6 +110,9 @@ describe.skipIf(!hasDb)("loans to staff, the bank file and the year's statement"
     const [journal] = await admin<{ id: string }[]>`select id from public.journals where tenant_id = ${tenant} and document_number = ${number}`;
     expect(await journalLines(journal.id)).toEqual({ "1111": "-30000.00", "1240": "30000.00" });
     expect(await messageOf(issueLoan(as.owner, { employeeId: sara, date: "2026-11-01", amount: "1000", instalment: "100", accountId: cash }))).toBe("A loan is made to someone employed on that day.");
+    // An accountant kept to one branch does not lend: the database refuses, whatever the app asks.
+    const kept: TenantContext = { ...ctx(branchAccountant, "accountant"), branchIds: [branch] };
+    expect(await messageOf(issueLoan(kept, { employeeId: ali, date: "2026-08-05", amount: "1000", instalment: "100", accountId: cash }))).toBe("Your role does not permit this action.");
   });
 
   it("takes each month's instalment from pay, and credits it back to the loan, not off the salaries' cost", async () => {
@@ -151,14 +178,24 @@ describe.skipIf(!hasDb)("loans to staff, the bank file and the year's statement"
     expect(await getBankFile(as.accountant, september.id)).toEqual({ missing: [{ id: ali, code: "E-001", name: "Ali Raza" }, { id: sara, code: "E-002", name: "Sara Khan" }] });
     expect(await messageOf(saveBankAccount(as.payroll_administrator, ali, { bankName: "Standard Chartered", accountTitle: "Ali Raza", iban: "PK36SCBL0000001123456703" }))).toMatch(/Enter the IBAN/);
     await saveBankAccount(as.payroll_administrator, ali, { bankName: "Standard Chartered", accountTitle: "Ali Raza", iban: "pk36 scbl 0000 0011 2345 6702" });
+    // The same IBAN on both pages: the file is not given, and each line a bank would refuse is named.
+    await saveBankAccount(as.owner, sara, { bankName: "Standard Chartered", accountTitle: "Sara Khan", iban: "PK36SCBL0000001123456702" });
+    expect(await getBankFile(as.accountant, september.id)).toEqual({ problems: ["E-002 Sara Khan: PK36SCBL0000001123456702 is paid twice."] });
     await saveBankAccount(as.owner, sara, { bankName: "HBL", accountTitle: "Sara Khan", iban: "PK72HABB0012345678901234" });
-    const file = (await getBankFile(as.accountant, september.id)) as { fileName: string; csv: string };
+    const file = (await getBankFile(as.accountant, september.id)) as { fileName: string; csv: string; changed: { code: string; by: string | null }[] };
     expect(file.fileName).toMatch(/^salaries-PR-2627-\d{5}\.csv$/);
     expect(checkBankFile(file.csv)).toEqual([]);
     const run = (await getRun(as.owner, september.id))!;
     expect(file.csv.split("\r\n").slice(1, 3)).toEqual(
       run.payslips.map((p, index) => `${index + 1},${p.code === "E-001" ? "PK36SCBL0000001123456702,ALI RAZA" : "PK72HABB0012345678901234,SARA KHAN"},${money(p.net)},SALARY SEP 2026 ${p.code}`),
     );
+    // Both were changed after September was approved: whoever uploads the file is told, and the
+    // owner, who reads the company's members, is told by whom.
+    expect(file.changed.map((c) => [c.code, c.by])).toEqual([
+      ["E-001", null],
+      ["E-002", null],
+    ]);
+    expect(((await getBankFile(as.owner, september.id)) as { changed: { by: string | null }[] }).changed.map((c) => c.by)).toEqual([as.payroll_administrator.email, as.owner.email]);
     // The audit log keeps the IBAN's last four only.
     const [logged] = await admin<{ after: { iban: string } }[]>`select after from public.audit_log where tenant_id = ${tenant} and action = 'employee.bank_account' and entity_id = ${ali}`;
     expect(logged.after.iban).toBe("…6702");
@@ -171,5 +208,52 @@ describe.skipIf(!hasDb)("loans to staff, the bank file and the year's statement"
       ["E-002", 2],
     ]);
     expect(csv.split("\r\n")[1]).toBe("Code,Name,CNIC,Months paid,Pay and commission,Taxable salary,Income tax deducted");
+  });
+
+  it("takes a loan back in as many cash repayments as it takes, each with its own journal", async () => {
+    const { number } = await issueLoan(as.owner, { employeeId: ali, date: "2026-11-03", amount: "2000", instalment: "1000", accountId: cash });
+    const loan = (await listLoans(as.owner, ali)).find((l) => l.number === number)!;
+    const first = await repayLoan(as.accountant, loan.id, { date: "2026-11-04", amount: "500", accountId: cash });
+    const second = await repayLoan(as.accountant, loan.id, { date: "2026-11-05", amount: "1500", accountId: cash });
+    expect(first.number).not.toBe(second.number);
+    const settled = (await listLoans(as.owner, ali)).find((l) => l.number === number)!;
+    expect([money(settled.owed), settled.movements.map((m) => [m.kind, money(m.amount), m.reference])]).toEqual([
+      "0.00",
+      [
+        ["repaid", "500.00", first.number],
+        ["repaid", "1500.00", second.number],
+      ],
+    ]);
+    const journals = await admin<{ source_id: string; total: string }[]>`
+      select j.source_id, sum(l.debit)::numeric(20,2)::text as total from public.journals j join public.journal_lines l on l.journal_id = j.id
+      where j.tenant_id = ${tenant} and j.document_number in (${first.number}, ${second.number}) group by j.source_id`;
+    expect(journals.map((j) => j.total).sort()).toEqual(["1500.00", "500.00"]);
+  });
+
+  it("holds the loans while a run is approved, so a cash repayment meanwhile waits and then cannot take the same money twice", async () => {
+    const { number } = await issueLoan(as.owner, { employeeId: ali, date: "2026-11-06", amount: "3000", instalment: "3000", accountId: cash });
+    const loan = (await listLoans(as.owner, ali)).find((l) => l.number === number)!;
+    // November, worked out again, takes the whole 3,000; the accountant approves it and has not
+    // committed yet.
+    const { id } = (await workOutRun(as.payroll_administrator, "2026-11-01")) as { id: string };
+    await reviewRun(as.payroll_administrator, id);
+    const approver = await appSession(userIds.accountant);
+    const payer = await appSession(userIds.owner);
+    try {
+      await approver.tx`select app.approve_payroll_run(${id}::uuid)`;
+      const repaid = payer.tx`select app.repay_staff_loan(${loan.id}::uuid, '2026-11-07'::date, 3000, ${cash}::uuid)`.then(
+        () => "repaid",
+        (error: unknown) => codeOf(error),
+      );
+      expect(await Promise.race([repaid, sleep(500).then(() => "waiting")])).toBe("waiting");
+      await approver.tx`commit`;
+      // Once the run has taken it, nothing is left to repay.
+      expect(await repaid).toBe("SE372");
+      await payer.tx`rollback`;
+    } finally {
+      await approver.end();
+      await payer.end();
+    }
+    expect(money((await listLoans(as.owner, ali)).find((l) => l.number === number)!.owed)).toBe("0.00");
   });
 });

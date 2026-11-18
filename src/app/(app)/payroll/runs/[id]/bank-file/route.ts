@@ -17,6 +17,7 @@ export async function GET(_: Request, { params }: RouteContext<"/payroll/runs/[i
     const file = await getBankFile(session, id);
     if (!file) return plain(404, "Not found");
     if ("missing" in file) return plain(409, `No bank account is on record for ${file.missing.map((m) => `${m.code} ${m.name}`).join(", ")}. Add each one on their page first.`);
+    if ("problems" in file) return plain(409, `A bank would refuse this file: ${file.problems.join(" ")}`);
     return new Response(file.csv, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",

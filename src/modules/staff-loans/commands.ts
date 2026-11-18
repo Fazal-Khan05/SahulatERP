@@ -23,6 +23,7 @@ function refusal(error: unknown, date: string): UserError | null {
   if (code === "SE374") return new UserError("Choose a cash or bank account that is in use.");
   if (code === "SE375") return new UserError("That loan is not in this company.");
   if (code === "23503") return new UserError("That person is not on the payroll.");
+  if (code === "23505") return new UserError("Someone else saved these details at the same moment. Reload the page and look again.");
   if (code === "42501") return new UserError("Your role does not permit this action.");
   return null;
 }
@@ -39,7 +40,7 @@ export async function saveBankAccount(ctx: TenantContext, employeeId: unknown, r
       const [before] = await tx.execute<{ bank_name: string; account_title: string; iban: string }>(sql`
         select bank_name, account_title, iban from public.employee_bank_accounts where tenant_id = ${ctx.tenantId} and employee_id = ${employeeId} for update`);
       if (before) {
-        await tx.execute(sql`update public.employee_bank_accounts set bank_name = ${bankName}, account_title = ${accountTitle}, iban = ${iban}, updated_by = ${ctx.userId}
+        await tx.execute(sql`update public.employee_bank_accounts set bank_name = ${bankName}, account_title = ${accountTitle}, iban = ${iban}, updated_by = ${ctx.userId}, updated_at = now()
           where tenant_id = ${ctx.tenantId} and employee_id = ${employeeId}`);
       } else {
         await tx.execute(sql`insert into public.employee_bank_accounts (tenant_id, employee_id, bank_name, account_title, iban, created_by, updated_by)

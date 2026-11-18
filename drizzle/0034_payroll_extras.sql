@@ -248,6 +248,9 @@ DECLARE
   v_loan public.staff_loans%ROWTYPE;
   v_number text;
   v_journal uuid;
+  -- Each repayment is its own movement, and its journal stands on that movement (a loan is
+  -- repaid as many times as it takes).
+  v_movement uuid := gen_random_uuid();
 BEGIN
   IF v_tenant IS NULL OR v_me IS NULL OR app.tenant_role() IS NULL OR app.tenant_role() NOT IN ('owner', 'accountant') OR app.tenant_branch_ids() IS NOT NULL THEN
     RAISE EXCEPTION 'a loan is repaid to the owner or an accountant who works across the whole company' USING ERRCODE = 'insufficient_privilege';
@@ -271,16 +274,16 @@ BEGIN
   v_number := app.next_document_number('LR', p_date);
   SET CONSTRAINTS public.journals_balanced, public.journal_lines_balanced, public.journals_with_document DEFERRED;
   INSERT INTO public.journals (tenant_id, journal_date, source_type, source_id, document_number, memo, created_by)
-    VALUES (v_tenant, p_date, 'staff_loan_repayment', p_loan, v_number, 'Repayment of loan ' || v_loan.number, v_me) RETURNING id INTO v_journal;
+    VALUES (v_tenant, p_date, 'staff_loan_repayment', v_movement, v_number, 'Repayment of loan ' || v_loan.number, v_me) RETURNING id INTO v_journal;
   INSERT INTO public.journal_lines (tenant_id, journal_id, line_no, account_id, debit, credit, description)
     VALUES (v_tenant, v_journal, 1, p_account, p_amount, 0, 'Repayment of loan ' || v_loan.number),
            (v_tenant, v_journal, 2, app.control_account(v_tenant, 'staff_advances'), 0, p_amount, 'Repayment of loan ' || v_loan.number);
-  INSERT INTO public.staff_loan_movements (tenant_id, loan_id, kind, amount, movement_date, number, account_id, journal_id, created_by)
-    VALUES (v_tenant, p_loan, 'repaid', p_amount, p_date, v_number, p_account, v_journal, v_me);
+  INSERT INTO public.staff_loan_movements (id, tenant_id, loan_id, kind, amount, movement_date, number, account_id, journal_id, created_by)
+    VALUES (v_movement, v_tenant, p_loan, 'repaid', p_amount, p_date, v_number, p_account, v_journal, v_me);
   UPDATE public.staff_loans s SET recovered = s.recovered + p_amount WHERE s.tenant_id = v_tenant AND s.id = p_loan;
   INSERT INTO public.audit_log (tenant_id, actor_user_id, actor_role, action, entity, entity_id, after)
     VALUES (v_tenant, v_me, app.tenant_role(), 'journal.post', 'journal', v_journal,
-      jsonb_build_object('date', p_date, 'source', 'staff_loan_repayment', 'sourceId', p_loan, 'number', v_number, 'lines', 2, 'total', p_amount::text)),
+      jsonb_build_object('date', p_date, 'source', 'staff_loan_repayment', 'sourceId', v_movement, 'number', v_number, 'lines', 2, 'total', p_amount::text)),
            (v_tenant, v_me, app.tenant_role(), 'staff_loan.repay', 'staff_loan', p_loan,
       jsonb_build_object('number', v_number, 'loan', v_loan.number, 'date', p_date, 'amount', p_amount::text, 'stillOwed', (v_loan.amount - v_loan.recovered - p_amount)::text));
   RETURN v_number;
@@ -303,7 +306,7 @@ CREATE FUNCTION app.journal_backed_staff_loan(p_journal public.journals) RETURNS
 CREATE FUNCTION app.journal_backed_staff_loan_repayment(p_journal public.journals) RETURNS boolean
   LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
   AS $$
-    SELECT EXISTS (SELECT 1 FROM public.staff_loan_movements m WHERE m.tenant_id = p_journal.tenant_id AND m.loan_id = p_journal.source_id AND m.journal_id = p_journal.id
+    SELECT EXISTS (SELECT 1 FROM public.staff_loan_movements m WHERE m.tenant_id = p_journal.tenant_id AND m.id = p_journal.source_id AND m.journal_id = p_journal.id
       AND m.number = p_journal.document_number AND m.movement_date = p_journal.journal_date AND m.kind = 'repaid')
   $$;
 --> statement-breakpoint
@@ -503,14 +506,21 @@ BEGIN
     WHERE s.tenant_id = v_tenant AND s.id IN (SELECT l.loan_id FROM public.payslip_lines l JOIN public.payslips p ON p.tenant_id = l.tenant_id AND p.id = l.payslip_id
                                                WHERE p.tenant_id = v_tenant AND p.run_id = v_run.id AND l.loan_id IS NOT NULL)
     ORDER BY s.id FOR UPDATE;
+  -- A loan is on one line of one payslip, as a deduction; the run's lines for it are added up
+  -- before they are compared with what is owed.
   FOR v_row IN
-    SELECT l.loan_id, l.amount, p.employee_id, s.employee_id AS loan_employee, s.amount - s.recovered AS owed, s.issued_on
+    SELECT l.loan_id, sum(l.amount) AS amount, min(p.employee_id::text)::uuid AS employee_id, count(DISTINCT p.employee_id) AS people, count(*) AS lines,
+           bool_and(l.kind = 'deduction') AS deducted, s.employee_id AS loan_employee, s.amount - s.recovered AS owed, s.issued_on
     FROM public.payslip_lines l
     JOIN public.payslips p ON p.tenant_id = l.tenant_id AND p.id = l.payslip_id
     JOIN public.staff_loans s ON s.tenant_id = l.tenant_id AND s.id = l.loan_id
     WHERE p.tenant_id = v_tenant AND p.run_id = v_run.id AND l.loan_id IS NOT NULL
+    GROUP BY l.loan_id, s.employee_id, s.amount, s.recovered, s.issued_on
     ORDER BY l.loan_id
   LOOP
+    IF v_row.lines <> 1 OR v_row.people <> 1 OR NOT v_row.deducted THEN
+      RAISE EXCEPTION 'a loan is taken on one line of one payslip, as a deduction; work the run out again' USING ERRCODE = 'SE356';
+    END IF;
     IF v_row.loan_employee <> v_row.employee_id OR v_row.amount > v_row.owed OR v_row.issued_on > v_date THEN
       RAISE EXCEPTION 'a loan''s instalment is more than is owed on it now; work the run out again' USING ERRCODE = 'SE356';
     END IF;

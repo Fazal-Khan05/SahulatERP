@@ -104,7 +104,8 @@ function Totals({ run }: { run: RunDetail }) {
       <Figure label="Commission" value={amount(run.commission)} />
       <Figure label="Income tax deducted" value={amount(run.tax)} />
       <Figure label="EOBI, employees' share" value={amount(run.eobiEmployee)} />
-      <Figure label="Fixed deductions" value={amount(run.deductions)} />
+      <Figure label="Fixed deductions" value={amount(run.deductions.minus(run.loanRecovery))} />
+      <Figure label="Loan instalments" value={amount(run.loanRecovery)} />
       <Figure label="Take home" value={amount(run.net)} />
       <Figure label="EOBI, employer's share" value={amount(run.employerEobi)} />
       <Figure label="Social security, employer's share" value={amount(run.employerSocialSecurity)} />
@@ -290,9 +291,34 @@ export async function RunScreen({ params }: { params: Promise<{ id: string }> })
                 ))}
                 .
               </p>
+            ) : "problems" in bankFile ? (
+              <div className="text-sm" data-testid="bank-file-problems">
+                <p className="mb-2 text-muted-foreground">A bank would refuse this file as the details stand. Put each right on the person&apos;s page:</p>
+                <ul className="list-disc pl-5">
+                  {bankFile.problems.map((problem) => (
+                    <li key={problem}>{problem}</li>
+                  ))}
+                </ul>
+              </div>
             ) : (
               <>
                 <p className="mb-3 text-sm text-muted-foreground">One line for each person with pay to take home, to the IBAN on their page, to upload to the bank.</p>
+                {bankFile.changed.length > 0 ? (
+                  <div className="mb-3 rounded-lg border border-destructive/40 p-3 text-sm" data-testid="bank-file-changed">
+                    <p className="mb-1 font-medium">Bank details changed after this run was approved. Check each with the person before uploading:</p>
+                    <ul className="list-disc pl-5">
+                      {bankFile.changed.map((c) => (
+                        <li key={c.id}>
+                          <Link href={`/payroll/employees/${c.id}`} className="underline underline-offset-4">
+                            {c.code} {c.name}
+                          </Link>
+                          , {formatDateTime(new Date(c.at))}
+                          {c.by ? `, by ${c.by}` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
                 <a href={`/payroll/runs/${run.id}/bank-file`} className={buttonVariants({ variant: "outline", size: "sm" })}>
                   Download the bank file
                 </a>

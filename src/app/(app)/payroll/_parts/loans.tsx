@@ -47,7 +47,7 @@ function RepayForm({ loan, accounts }: { loan: LoanRow; accounts: Accounts }) {
     <ActionForm action={repayLoanAction.bind(null, loan.id)} submitLabel="Record the repayment">
       <div className="grid gap-3 sm:grid-cols-3">
         <Field label="Repaid on" name="date" id={`repaid-on-${loan.id}`} type="date" defaultValue={todayIso(new Date())} max={todayIso(new Date())} required />
-        <Field label="Amount" name="amount" id={`repaid-${loan.id}`} inputMode="decimal" defaultValue={loan.owed.toFixed(2)} required />
+        <Field label="Amount" name="amount" id={`repaid-${loan.id}`} inputMode="decimal" placeholder={`Up to ${formatAmount(loan.owed)}`} required />
         <AccountSelect accounts={accounts} label="Into" id={`into-${loan.id}`} />
       </div>
     </ActionForm>

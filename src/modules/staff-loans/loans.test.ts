@@ -96,7 +96,12 @@ describe.skipIf(!hasDb)("loans to staff, the bank file and the year's statement"
     expect([money(run.loanRecovery), money(run.deductions)]).toEqual(["15000.00", "15000.00"]);
     // Salaries and wages carry the whole pay: 100,000 and 60,000.
     const lines = await journalLines(run.journalId!);
-    expect([lines["5210"], lines["1240"], lines["2300"]]).toEqual(["160000.00", "-15000.00", money(run.net.negated())]);
+    // The worked example (docs/examples/step-42.md): Ali 1,00,000 less tax 500 and 10,000; Sara 60,000 less tax 100 and 5,000.
+    expect(["E-001", "E-002"].map((code) => [money(slip(code).tax), money(slip(code).net)])).toEqual([
+      ["500.00", "89500.00"],
+      ["100.00", "54900.00"],
+    ]);
+    expect([lines["5210"], lines["1240"], lines["2300"], lines["2210"]]).toEqual(["160000.00", "-15000.00", "-144400.00", "-600.00"]);
     const loans = await listLoans(as.auditor);
     expect(loans.map((l) => [l.code, money(l.recovered), money(l.owed)]).sort()).toEqual([
       ["E-001", "10000.00", "20000.00"],
@@ -109,12 +114,13 @@ describe.skipIf(!hasDb)("loans to staff, the bank file and the year's statement"
     const run = (await getRun(as.owner, october))!;
     const saraSlip = run.payslips.find((p) => p.code === "E-002")!;
     // 20 of October's 31 days: 38,709.68. Everything left after her tax goes to the loan; she takes home nothing.
-    expect(money(saraSlip.earnings)).toBe("38709.68");
+    expect([money(saraSlip.earnings), money(saraSlip.tax)]).toEqual(["38709.68", "0.00"]);
     const taken = saraSlip.lines.find((l) => l.code === "loan")!.amount;
-    expect(money(taken)).toBe(money(saraSlip.earnings.minus(saraSlip.tax)));
+    expect(money(taken)).toBe("38709.68");
     expect(money(saraSlip.net)).toBe("0.00");
     const loan = (await listLoans(as.owner, sara))[0];
-    expect(money(loan.owed)).toBe(money(new Decimal(45000).minus(taken)));
+    expect(money(loan.owed)).toBe("6290.32");
+    expect(await journalLines(run.journalId!)).toMatchObject({ "5210": "138709.68", "1240": "-48709.68", "2300": "-89500.00", "2210": "-500.00" });
     // The rest is repaid in cash; no more than is owed.
     expect(await messageOf(repayLoan(as.accountant, loan.id, { date: "2026-11-01", amount: loan.owed.plus(1).toFixed(2), accountId: cash }))).toBe(
       "Repay no more than is owed on the loan, and give a loan an instalment no more than itself.",

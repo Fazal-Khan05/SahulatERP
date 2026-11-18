@@ -232,13 +232,6 @@
       "when": 1794921736535,
       "tag": "0032_supplier_payments",
       "breakpoints": true
-    },
-    {
-      "idx": 33,
-      "version": "7",
-      "when": 1794938102861,
-      "tag": "0033_supplier_returns",
-      "breakpoints": true
     }
   ]
 }

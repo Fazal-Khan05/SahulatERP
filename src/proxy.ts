@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { idleTooLong, lastActiveFrom, nowInSeconds, proofsOf, sessionTooOld } from "@/lib/auth/rules";
+import { readLastActive, signLastActive } from "@/lib/auth/activity-cookie";
+import { idleTooLong, nowInSeconds, proofsOf, sessionTooOld } from "@/lib/auth/rules";
 import { LAST_ACTIVE_COOKIE, sessionCookieOptions } from "@/lib/supabase/cookie-options";
 
 // Runs before every page request. It refreshes the Supabase session cookie when the access token
@@ -9,8 +10,8 @@ import { LAST_ACTIVE_COOKIE, sessionCookieOptions } from "@/lib/supabase/cookie-
 // checks the session and the membership again.
 //
 // It also ends a session that has been left idle, or has run its full length (Step 47). The idle
-// time is kept in a cookie the server alone writes; the full length is read from the verified
-// token, so it holds even if that cookie is tampered with.
+// time is kept in a cookie the server signs for this session (src/lib/auth/activity-cookie.ts);
+// one missing or forged counts as idle. The full length is read from the verified token.
 
 const SIGNED_OUT_ONLY = new Set(["/sign-in", "/forgot-password"]);
 const OPEN_TO_ALL = new Set(["/auth/confirm"]);
@@ -40,10 +41,14 @@ export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const now = nowInSeconds();
 
+  const proofs = proofsOf(data?.claims?.amr);
+  const sessionId = typeof data?.claims?.session_id === "string" ? data.claims.session_id : "";
+  const lastActive = sessionId ? readLastActive(request.cookies.get(LAST_ACTIVE_COOKIE)?.value, sessionId, now) : null;
+
   let ended: "idle" | "limit" | null = null;
   if (signedIn) {
-    if (sessionTooOld(proofsOf(data?.claims?.amr), now)) ended = "limit";
-    else if (idleTooLong(lastActiveFrom(request.cookies.get(LAST_ACTIVE_COOKIE)?.value), now)) ended = "idle";
+    if (sessionTooOld(proofs, now)) ended = "limit";
+    else if (idleTooLong(lastActive, proofs, now)) ended = "idle";
   }
   if (ended) {
     // Ends this browser's session (other devices keep theirs) and clears its cookies.
@@ -64,10 +69,10 @@ export async function proxy(request: NextRequest) {
   // The time is written at most once a minute, and never on a server action's reply: a cookie
   // set there makes Next.js draw the page again inside the reply, which drops what the form was
   // told to do next (go to another page, say). A page is always loaded around the actions.
-  const lastActive = lastActiveFrom(request.cookies.get(LAST_ACTIVE_COOKIE)?.value);
   const isAction = request.headers.has("next-action");
-  if (signedIn && !isAction && (lastActive === null || now - lastActive >= 60)) {
-    reply.cookies.set(LAST_ACTIVE_COOKIE, String(now), sessionCookieOptions);
+  if (signedIn && sessionId && !isAction && (lastActive === null || now - lastActive >= 60)) {
+    // Kept as long as the session's own cookies, so closing the browser does not lose it.
+    reply.cookies.set(LAST_ACTIVE_COOKIE, signLastActive(now, sessionId), { ...sessionCookieOptions, maxAge: 400 * 24 * 3600 });
   } else if (!signedIn && request.cookies.has(LAST_ACTIVE_COOKIE)) reply.cookies.delete(LAST_ACTIVE_COOKIE);
   return reply;
 }

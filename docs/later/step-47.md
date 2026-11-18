@@ -22,17 +22,20 @@ migration.
   - An email link (invite, password reset) does not get round it: an account with an app gives
     its code before choosing a password.
   - **A lost phone**: `npm run two-step:remove -- member@example.com --yes` removes the app from
-    the account, for whoever looks after the product, after making sure outside the app that the
+    the account and ends every session of it, for whoever looks after the product, after making sure outside the app that the
     member asked. Recorded in each of the member's companies as "Had two-step sign-in removed by
     support". Supabase has no recovery codes on its free plan that this could rely on, so there
     are none.
 - **Session limits.** A session ends after **60 minutes without use** and **12 hours after the
-  password was entered**, however busy. The idle time is a cookie only the server writes; the
-  full length is read from the verified token's proofs (`amr`), so it holds even if the cookie
-  is tampered with. The sign-in page says why the member was signed out. **Sign out everywhere**
+  password was entered**, however busy. The idle time is a cookie the server signs for the
+  session (with a key derived from `IDENTITY_SIGNING_SECRET`), kept as long as the session's own
+  cookies; one missing, forged, moved forward or from another session counts as idle unless the
+  password was given in the last two minutes. The full length is read from the verified token's
+  proofs (`amr`). The sign-in page says why the member was signed out. **Sign out everywhere**
   on Your account ends every session of the account.
-- **Changing the password needs a recent proof**: a sign-in, code or email link from the last
-  10 minutes, or the current password (closes the item in docs/LATER.md).
+- **Changing the password, or setting up an authenticator app, needs a recent proof**: a
+  password or email link from the last 10 minutes (an authenticator code does not count), or the
+  current password (closes the item in docs/LATER.md).
 - **Password policy**: at least 12 characters (was 10), no rules about kinds of character; refused
   when made of fewer than 5 different characters, one of the most used passwords (a short list
   with Pakistani favourites), the product's name, or the name part of the member's own email. A
@@ -77,6 +80,44 @@ migration.
 - A bug found on the way: a cookie set by the proxy on a server action's reply made Next.js draw
   the page again inside the reply, which dropped where the form was to go next (the setup
   wizard stayed on its page). The idle cookie is never written on an action's reply.
+
+## The independent attack review (2026-11-18)
+
+A reviewer who had not seen the work attacked it on a local database with hosted sign-in, as
+someone holding a member's password, a stolen session cookie, or their own cookies to edit.
+**Nothing critical or high.** Two medium and three low findings, all put right:
+
+- **Medium: the idle limit could be skipped.** The cookie was unsigned and ended with the browser:
+  leaving it out, or setting a time in the future, kept a session alive for ever; closing the
+  window lost it. Now signed for the session, kept as long as the session, and a missing or bad
+  one counts as idle.
+- **Medium: the recent-proof rule could be passed with a code.** Someone holding an old session of
+  a member without an app could set up their own app, give its code, and then change the password
+  without the old one. Now a code does not count as a recent proof, and setting up an app needs a
+  recent password or the current one.
+- **Low: the setup's finishing step could be used to guess codes for an app already in use**
+  without a wrong code being recorded. Now it takes only a factor this account has just started
+  setting up, and refuses a session that owes a code. The key is no longer sent back to the server.
+- **Low: the company logo was served to an owner or accountant who had not given a code.** Now
+  refused until the code.
+- **Low: removing a lost phone did not end its sessions.** The support script now ends every
+  session of the account.
+
+What held: the token's `amr` is `[{method, timestamp}]` and the password's time does not move on
+refresh (anything else fails closed); a forged copy of the account in the cookie changes nothing
+(the app asks Supabase Auth); every page, export, PDF, file and action of a company goes through
+the role check; Supabase itself refuses a second app or a password change at `aal1` on an account
+with an app; turning off two-step through Supabase directly drops the session to `aal1` at its
+next refresh, and the app then asks for the setup again; no open redirect; no secret, code or
+address in the logs.
+
+**Not closable in the app, noted for Fazal:** whoever holds a stolen session can still call
+Supabase Auth directly with it, and Supabase lets a session change its own password without a
+recent proof (its "secure password change" setting asks for one only after 24 hours). And a
+stolen session refreshed directly at Supabase outlives the 12 hours, though the app refuses it.
+Ending sessions older than 12 hours at the source (a job deleting old `auth.sessions` rows, or
+Supabase Pro's time-boxed sessions) would close both; left for the founder to choose, as it
+deletes rows in Supabase's own tables.
 
 ## The secrets audit (2026-11-18)
 

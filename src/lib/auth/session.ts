@@ -89,6 +89,17 @@ export const hasAuthenticator = cache(async (): Promise<boolean> => {
   return (data?.totp.length ?? 0) > 0;
 });
 
+/**
+ * True when this member's role in the company needs two-step sign-in and this session has not
+ * given a code. For the few addresses that name a company without going through
+ * getTenantSession() (the logo).
+ */
+export async function needsCodeFor(userId: string, tenantId: string): Promise<boolean> {
+  if ((await getSignedInAccount())?.level === "aal2") return false;
+  const { memberships } = await loadWorkspace(userId, null);
+  return memberships.some((m) => m.tenantId === tenantId && m.active && twoStepRequiredFor(m.role));
+}
+
 export async function requireUser(): Promise<SessionUser> {
   const account = await getSignedInAccount();
   if (!account) redirect("/sign-in");

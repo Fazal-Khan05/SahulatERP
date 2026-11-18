@@ -2,9 +2,9 @@
 //
 // For a member who has lost the phone with their authenticator app (Step 47). Removes the app
 // from their account, so the next sign-in asks for the password only and then offers the setup
-// again (which an owner or accountant must go through before going on). A session that already
-// gave a code runs on until it ends (at most an hour without use, twelve hours in all). Each
-// company they belong to gets a row in its sign-in history.
+// again (which an owner or accountant must go through before going on). Every session of the
+// account is ended too (a token already handed out works until it expires, at most an hour).
+// Each company they belong to gets a row in its sign-in history.
 //
 // Only after making sure, outside the app, that the request comes from the member themself:
 // whoever can run this can take away the second step of anyone's sign-in. Without --yes it only
@@ -39,7 +39,9 @@ try {
     process.exit(0);
   }
   if (!really) {
-    console.log(`${maskEmail(email)} has ${apps.length} authenticator app(s). Run again with --yes to remove them.`);
+    console.log(
+      `${maskEmail(email)} has ${apps.length} authenticator app(s). Run again with --yes to remove them and end every session of the account.`,
+    );
     process.exit(0);
   }
 
@@ -50,6 +52,10 @@ try {
       process.exit(1);
     }
   }
+  // Whoever has the phone may also have a session that gave its code: end every session of the
+  // account at the source (its refresh tokens go with it). The member signs in again.
+  await sql`delete from auth.sessions where user_id = ${account.id}`;
+
   // Written by the system, not by a member: no actor.
   const companies = await sql`
     insert into public.audit_log (tenant_id, actor_user_id, actor_role, action, entity, entity_id, after)

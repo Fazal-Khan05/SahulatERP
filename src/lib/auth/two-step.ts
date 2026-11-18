@@ -6,12 +6,12 @@
 
 import { logFailure } from "@/lib/errors";
 import type { FormState } from "@/lib/form-state";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseEmailClient, createSupabaseServerClient } from "@/lib/supabase/server";
 import { recordAuthEvent } from "@/modules/tenant/commands";
 import { loadWorkspace } from "@/modules/tenant/queries";
 import { DEFAULT_PRODUCT_NAME } from "@/modules/tenant/rules";
 import { requestDetail } from "./request";
-import { cleanCode, twoStepRequiredFor } from "./rules";
+import { cleanCode, provedRecently, twoStepRequiredFor } from "./rules";
 import { getSignedInAccount } from "./session";
 
 const NOT_RIGHT = "That code is not right. Check the time on your phone and try the newest code.";
@@ -79,16 +79,20 @@ function qrImage(qr: string): string {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
-/** The setup form: its first button starts the setup, its second finishes it with a code. */
-export async function setupAction(state: SetupState, formData: FormData): Promise<SetupState> {
-  return formData.get("step") === "finish" ? finishSetup(state, formData) : startSetup();
-}
-
-/** Starts setting up an authenticator app: a new secret, shown once, not yet in force. */
-async function startSetup(): Promise<SetupState> {
+/**
+ * Starts setting up an authenticator app: a new secret, shown once, not yet in force. A session
+ * whose password or email link is more than a few minutes old must give the current password:
+ * whoever holds an old session of a member without an app could otherwise set up their own.
+ */
+export async function startSetupAction(_: SetupState, formData: FormData): Promise<SetupState> {
   const account = await getSignedInAccount();
   if (!account) return { location: "/sign-in" };
   if (account.gate === "code") return { location: "/two-step" };
+  if (!provedRecently(account.proofs)) {
+    const current = formData.get("current");
+    if (typeof current !== "string" || !current) return { error: "Enter your current password." };
+    if (!(await passwordIsRight(account.email, current))) return { error: "The current password is not right." };
+  }
 
   const supabase = await createSupabaseServerClient();
   const { data: factors, error: listError } = await supabase.auth.mfa.listFactors();
@@ -112,20 +116,30 @@ async function startSetup(): Promise<SetupState> {
   return { factorId: data.id, qr: qrImage(data.totp.qr_code), secret: data.totp.secret };
 }
 
-/** Finishes the setup with the first code the app shows; two-step sign-in is then on. */
-async function finishSetup(state: SetupState, formData: FormData): Promise<SetupState> {
+/**
+ * Finishes the setup with the first code the app shows; two-step sign-in is then on. Only for
+ * the factor this account has just started setting up: a code for an app already in use is given
+ * on the code page, where a wrong one is recorded.
+ */
+export async function finishSetupAction(_: FormState, formData: FormData): Promise<FormState> {
   const account = await getSignedInAccount();
   if (!account) return { location: "/sign-in" };
-  const factorId = state.factorId;
-  if (!factorId) return { error: "Start the setup again." };
+  if (account.gate === "code") return { location: "/two-step" };
+  const factorId = formData.get("factorId");
+  if (typeof factorId !== "string" || !factorId) return { error: "Start the setup again." };
   const code = cleanCode(formData.get("code"));
-  if (!code) return { ...state, error: ENTER_CODE };
+  if (!code) return { error: ENTER_CODE };
 
   const supabase = await createSupabaseServerClient();
+  const { data: factors, error: listError } = await supabase.auth.mfa.listFactors();
+  if (listError || !factors) return { error: TRY_AGAIN };
+  const pending = factors.all.some((f) => f.id === factorId && f.factor_type === "totp" && f.status === "unverified");
+  if (!pending) return { error: "Start the setup again." };
+
   const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId, code });
   if (error) {
     if (refusalFor(error.code) === TRY_AGAIN) logFailure(`two-step setup code (${error.code ?? "unknown"})`, error);
-    return { ...state, error: refusalFor(error.code) };
+    return { error: refusalFor(error.code) };
   }
   try {
     await recordAuthEvent(account.id, "auth.two_step_on", await requestDetail());
@@ -134,6 +148,15 @@ async function finishSetup(state: SetupState, formData: FormData): Promise<Setup
     logFailure("two-step on audit", failure);
   }
   return { location: "/" };
+}
+
+/** Checks a password without keeping the session the check makes. */
+async function passwordIsRight(email: string, password: string): Promise<boolean> {
+  const check = createSupabaseEmailClient();
+  const { error } = await check.auth.signInWithPassword({ email, password });
+  if (error) return false;
+  await check.auth.signOut({ scope: "local" });
+  return true;
 }
 
 /**

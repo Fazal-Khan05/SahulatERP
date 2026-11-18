@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { ActionForm } from "@/components/action-form";
 import { signOutAction } from "@/lib/auth/actions";
-import { twoStepRequiredFor } from "@/lib/auth/rules";
+import { provedRecently, twoStepRequiredFor } from "@/lib/auth/rules";
 import { getSignedInAccount, hasAuthenticator } from "@/lib/auth/session";
 import { loadWorkspace } from "@/modules/tenant/queries";
 import { SetupForm } from "./setup-form";
@@ -31,7 +31,7 @@ async function Setup() {
   return (
     <>
       <p className="text-sm text-muted-foreground">For {account.email}</p>
-      <SetupForm required={required} />
+      <SetupForm required={required} askCurrent={!provedRecently(account.proofs)} />
       <ActionForm action={signOutAction} submitLabel="Sign out" compact />
     </>
   );

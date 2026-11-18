@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { passwordSchema, passwordUsesEmail } from "@/modules/tenant/rules";
+import { readLastActive, signLastActive } from "./activity-cookie";
 import {
+  FRESH_SIGN_IN_SECONDS,
   IDLE_MINUTES,
   MAX_SESSION_HOURS,
   RECENT_SIGN_IN_MINUTES,
@@ -8,7 +10,6 @@ import {
   clientAddressOf,
   deviceOf,
   idleTooLong,
-  lastActiveFrom,
   proofsOf,
   provedRecently,
   sessionTooOld,
@@ -68,21 +69,27 @@ describe("session limits", () => {
   });
 
   it(`ends a session left for more than ${IDLE_MINUTES} minutes`, () => {
-    expect(idleTooLong(NOW - IDLE_MINUTES * 60, NOW)).toBe(false);
-    expect(idleTooLong(NOW - IDLE_MINUTES * 60 - 1, NOW)).toBe(true);
-    // No cookie yet: just signed in.
-    expect(idleTooLong(null, NOW)).toBe(false);
-    expect(lastActiveFrom(String(NOW))).toBe(NOW);
-    expect(lastActiveFrom("soon")).toBeNull();
-    expect(lastActiveFrom("1e9")).toBeNull();
-    expect(lastActiveFrom(undefined)).toBeNull();
+    const morning = signedIn(5 * 3600);
+    expect(idleTooLong(NOW - IDLE_MINUTES * 60, morning, NOW)).toBe(false);
+    expect(idleTooLong(NOW - IDLE_MINUTES * 60 - 1, morning, NOW)).toBe(true);
+  });
+
+  it("takes a session with no trustworthy record of its last use as idle, unless it was just signed in", () => {
+    expect(idleTooLong(null, signedIn(FRESH_SIGN_IN_SECONDS), NOW)).toBe(false);
+    expect(idleTooLong(null, signedIn(FRESH_SIGN_IN_SECONDS + 1), NOW)).toBe(true);
+    // A code given just now does not count as just signed in.
+    expect(idleTooLong(null, [...signedIn(3600), { method: "totp", timestamp: NOW }], NOW)).toBe(true);
+    expect(idleTooLong(null, [], NOW)).toBe(true);
   });
 
   it(`lets the password change without the old one only within ${RECENT_SIGN_IN_MINUTES} minutes of a proof`, () => {
     expect(provedRecently(signedIn(RECENT_SIGN_IN_MINUTES * 60), NOW)).toBe(true);
     expect(provedRecently(signedIn(RECENT_SIGN_IN_MINUTES * 60 + 1), NOW)).toBe(false);
-    // The newest proof counts: a code given a minute ago, after a password this morning.
-    expect(provedRecently([...signedIn(5 * 3600), { method: "totp", timestamp: NOW - 60 }], NOW)).toBe(true);
+    // A code is not a proof of who is at the keyboard for this: anyone holding an old session of a
+    // member without an app could set up one of their own and give its code.
+    expect(provedRecently([...signedIn(5 * 3600), { method: "totp", timestamp: NOW - 60 }], NOW)).toBe(false);
+    // An email link is.
+    expect(provedRecently([...signedIn(5 * 3600), { method: "otp", timestamp: NOW - 60 }], NOW)).toBe(true);
     expect(provedRecently([], NOW)).toBe(false);
   });
 });
@@ -133,5 +140,28 @@ describe("the sign-in history", () => {
     expect(clientAddressOf("2001:db8::1")).toBe("2001:db8::1");
     expect(clientAddressOf("<script>")).toBeNull();
     expect(clientAddressOf(undefined)).toBeNull();
+  });
+});
+
+describe("the idle-time cookie", () => {
+  const SECRET = "ab".repeat(32);
+  const SESSION = "6f1f8c1e-0000-4000-8000-000000000001";
+
+  it("is read back only for the session it was signed for, unchanged, and not from the future", () => {
+    const value = signLastActive(NOW - 100, SESSION, SECRET);
+    expect(readLastActive(value, SESSION, NOW, SECRET)).toBe(NOW - 100);
+    expect(readLastActive(value, "6f1f8c1e-0000-4000-8000-000000000002", NOW, SECRET)).toBeNull();
+    const moved = value.replace(String(NOW - 100), String(NOW - 10));
+    expect(readLastActive(moved, SESSION, NOW, SECRET)).toBeNull();
+    expect(readLastActive(String(NOW), SESSION, NOW, SECRET)).toBeNull();
+    expect(readLastActive(signLastActive(NOW + 3600, SESSION, SECRET), SESSION, NOW, SECRET)).toBeNull();
+    expect(readLastActive(undefined, SESSION, NOW, SECRET)).toBeNull();
+    expect(readLastActive(signLastActive(NOW, SESSION, "cd".repeat(32)), SESSION, NOW, SECRET)).toBeNull();
+  });
+
+  it("is a plain time where no secret is set (a local database)", () => {
+    expect(signLastActive(NOW, SESSION, "")).toBe(String(NOW));
+    expect(readLastActive(String(NOW - 5), SESSION, NOW, "")).toBe(NOW - 5);
+    expect(readLastActive("soon", SESSION, NOW, "")).toBeNull();
   });
 });

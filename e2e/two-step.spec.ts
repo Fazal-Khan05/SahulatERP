@@ -2,7 +2,8 @@ import { expect, type Page } from "@playwright/test";
 import { adminSql, type AdminSql } from "../tests/support/admin-db";
 import { createUser, hasE2EEnv, type TestUser } from "./support/admin";
 import { createCompany, giveCode, signIn, test } from "./support/ui";
-import { freshCode, keyFromPage } from "./support/two-step";
+import { signLastActive } from "../src/lib/auth/activity-cookie";
+import { freshCode, keyFromPage, sessionIdOf } from "./support/two-step";
 
 // Step 47 on screen: two-step sign-in with an authenticator app, the sign-in history, and a
 // session ended when left idle. The plan's test: "A member without 2FA is prompted on next login".
@@ -151,9 +152,10 @@ test("the owner sees every sign-in, with the device, and wrong codes", async ({ 
 test("a session left idle is ended", async ({ page, context, baseURL }) => {
   await signIn(page, owner);
   await expect(page.getByTestId("company-name")).toHaveText(COMPANY);
-  // As if the last request was two hours ago.
-  const twoHoursAgo = String(Math.floor(Date.now() / 1000) - 2 * 3600);
-  await context.addCookies([{ name: "last_active", value: twoHoursAgo, url: baseURL! }]);
+  // As if the last request was two hours ago, signed as the server signs it.
+  const twoHoursAgo = Math.floor(Date.now() / 1000) - 2 * 3600;
+  const value = signLastActive(twoHoursAgo, await sessionIdOf(context));
+  await context.addCookies([{ name: "last_active", value, url: baseURL! }]);
   await page.goto("/");
   await expect(page).toHaveURL(/\/sign-in\?ended=idle$/);
   await expect(page.getByText("You were signed out because the app was not used for a while.")).toBeVisible();

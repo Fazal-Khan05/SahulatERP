@@ -39,10 +39,15 @@ export function sessionStartedAt(proofs: ProofEntry[]): number | null {
   return Math.min(...proofs.map((p) => p.timestamp));
 }
 
-/** When the member last proved who they are in this session (a password, a code, an email link). */
+/**
+ * When the member last proved who they are in this session with something only they should know
+ * or receive: a password or an email link. An authenticator code does not count: whoever holds an
+ * old session of a member without an app could set up an app of their own and give its code.
+ */
 export function lastProvedAt(proofs: ProofEntry[]): number | null {
-  if (proofs.length === 0) return null;
-  return Math.max(...proofs.map((p) => p.timestamp));
+  const first = proofs.filter((p) => p.method !== "totp" && !p.method.startsWith("mfa"));
+  if (first.length === 0) return null;
+  return Math.max(...first.map((p) => p.timestamp));
 }
 
 /** Seconds since 1970. */
@@ -60,15 +65,18 @@ export function provedRecently(proofs: ProofEntry[], now = nowInSeconds()): bool
   return last !== null && now - last <= RECENT_SIGN_IN_MINUTES * 60;
 }
 
-/** The idle-time cookie's value, or null when it is missing or not a time. */
-export function lastActiveFrom(value: string | undefined): number | null {
-  if (!value || !/^\d{1,12}$/.test(value)) return null;
-  return Number(value);
-}
+/** How long a signed-in session may go without its idle-time cookie (src/lib/auth/activity-cookie.ts). */
+export const FRESH_SIGN_IN_SECONDS = 120;
 
-/** True when the browser has not been used for longer than the idle limit. */
-export function idleTooLong(lastActive: number | null, now = nowInSeconds()): boolean {
-  return lastActive !== null && now - lastActive > IDLE_MINUTES * 60;
+/**
+ * True when the session counts as idle: its last use is longer ago than the idle limit, or there
+ * is no trustworthy record of it (the cookie missing, forged, or for another session) and the
+ * member did not sign in just now. A session cannot be kept alive by leaving the cookie out.
+ */
+export function idleTooLong(lastActive: number | null, proofs: ProofEntry[], now = nowInSeconds()): boolean {
+  if (lastActive !== null) return now - lastActive > IDLE_MINUTES * 60;
+  const last = lastProvedAt(proofs);
+  return last === null || now - last > FRESH_SIGN_IN_SECONDS;
 }
 
 /**

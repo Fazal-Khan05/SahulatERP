@@ -7,7 +7,7 @@ import { branches, tenants } from "../tenant/schema";
 // statutory tables payroll reads. Payroll runs and payslips are Step 41's.
 //
 // Salaries are read by the owner, the payroll administrator, the accountant and the auditor, and
-// kept by the owner and the payroll administrator (drizzle/0036_payroll_employees.sql).
+// kept by the owner and the payroll administrator (drizzle/0037_payroll_employees.sql).
 
 /** Someone the company pays: monthly, or by the day. Linked to a login when they have one; most do not. */
 export const employees = pgTable(

@@ -199,7 +199,7 @@ category itself; a new withholding line needs a product update.
 The salary tax tables of Tax Years 2026 and 2027, the surcharge on salary tax, the exempt share of
 a medical allowance, EOBI's shares and wage, the minimum wages of Islamabad, Punjab, Sindh and
 Khyber Pakhtunkhwa, and the employer's social security share are written for each company by
-`app.seed_payroll_statutory` (in `drizzle/0036_payroll_employees.sql`), each with its source. They
+`app.seed_payroll_statutory` (in `drizzle/0037_payroll_employees.sql`), each with its source. They
 were read on 15 November 2026; the table of them, what was not found, and the questions for a tax
 adviser are in [later/step-40.md](later/step-40.md), and the figures are worked in
 [examples/step-40.md](examples/step-40.md). **Checked by Claude, not an accountant.** They can be

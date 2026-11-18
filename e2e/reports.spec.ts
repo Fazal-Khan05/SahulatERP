@@ -54,7 +54,7 @@ test("an owner reads the books: trial balance, balance sheet, profit and loss, a
   await post("1111", "4100", "12500.50", "JV-2627-00003", "Cash sale");
 
   await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Reports" }).click();
-  await expect(page.getByRole("list", { name: "Ledger reports" }).getByRole("link")).toHaveText(["Trial balance", "General ledger", "Balance sheet", "Profit and loss"]);
+  await expect(page.getByRole("list", { name: "Ledger reports" }).getByRole("link")).toHaveText(["Trial balance", "General ledger", "Balance sheet", "Profit and loss", "Cash flow"]);
 
   // Trial balance: the fiscal year so far, and totals that agree.
   await page.getByRole("link", { name: "Trial balance" }).click();

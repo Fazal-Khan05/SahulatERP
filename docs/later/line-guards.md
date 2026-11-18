@@ -137,9 +137,13 @@ kinds, judged safe:
 - `commission_after_document`, `commission_after_allocation`, `commission_after_credit`,
   `commission_after_receipt`: after-triggers of posting, reading inside the posting transaction.
 - The `refuse_*` functions refuse every change and look nothing up.
-- `check_sales_hierarchy` (not this shape, **noted for whoever owns it**): it walks the chain of
-  managers without holding it, so two sessions that each add one side of a loop at the same moment
-  may both pass, and the hierarchy would then hold a cycle. Not tested and not changed here.
+- `check_sales_hierarchy` (track C, Step 37): it walks the chain of managers without holding the
+  rows, which first looked as if two sessions each adding one side of a loop at the same moment
+  could both pass. They cannot: it first calls `app.guard_commission_setup`, which holds the
+  company's row (`FOR NO KEY UPDATE`) and insists on read committed, so the second session waits
+  for the first to end and then walks the chain as it now is. Tried on 2026-11-18 with two real
+  sessions (A under B, held open; B under A a second later): the second was refused with SE302.
+  The app's role may not update the table, so every change passes through the guard.
 
 ## A single place to close the whole class?
 

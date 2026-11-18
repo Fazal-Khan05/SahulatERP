@@ -8,21 +8,22 @@ import { formatDay } from "@/lib/format";
 import { buttonVariants } from "@/components/ui/button";
 import { getCompanySetup } from "@/modules/setup/queries";
 import { ROLE_LABELS, can } from "@/modules/tenant/rules";
+import { OwnerFigures } from "./_home/owner-figures";
 
 export const metadata: Metadata = { title: "Home" };
 
-// Each role's home fills in as its modules are built. Until then it is the same for everyone:
-// who you are, where you are, and what is waiting on you.
-export default function HomePage() {
+// Each role's home fills in as its modules are built: who you are, where you are, and what is
+// waiting on you. The owner's also has the business's figures for a period (Step 36).
+export default function HomePage({ searchParams }: PageProps<"/">) {
   return (
     <Suspense fallback={<PageLoading />}>
-      <Home />
+      <Home searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function Home() {
-  const session = await requireTenant();
+async function Home({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const [session, raw] = await Promise.all([requireTenant(), searchParams]);
   const setup = await getCompanySetup(session);
   return (
     <>
@@ -43,6 +44,18 @@ async function Home() {
             <p className="text-sm text-muted-foreground">The owner has not finished setting up {session.tenantName} yet.</p>
           )}
         </Card>
+      ) : null}
+      {setup !== null && session.role === "owner" && can(session.role, "report.read") ? (
+        // Its own wait: Home shows at once, and the figures follow when the books are read.
+        <Suspense
+          fallback={
+            <Card title="The business" className="mb-5">
+              <p className="text-sm text-muted-foreground">Reading the books…</p>
+            </Card>
+          }
+        >
+          <OwnerFigures session={session} raw={raw} />
+        </Suspense>
       ) : null}
       <Card title="Needs attention">
         <Empty>Nothing needs your attention.</Empty>

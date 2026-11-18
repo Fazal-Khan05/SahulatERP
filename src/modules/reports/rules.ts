@@ -234,6 +234,7 @@ export const REPORTS = {
   "general-ledger": { title: "General ledger", about: "Every entry in one account, in order, with the balance after each." },
   "balance-sheet": { title: "Balance sheet", about: "What the company owns, what it owes, and what is left for its owners, on one day." },
   "profit-and-loss": { title: "Profit and loss", about: "Income less expenses over a period." },
+  "cash-flow": { title: "Cash flow", about: "Where the money in the cash and bank accounts came from and went to over a period, and what they held at its start and end." },
 } as const;
 export type ReportKey = keyof typeof REPORTS;
 export const isReportKey = (value: unknown): value is ReportKey => typeof value === "string" && Object.hasOwn(REPORTS, value);

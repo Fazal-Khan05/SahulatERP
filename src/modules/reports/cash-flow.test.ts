@@ -37,10 +37,10 @@ const CHART: ReportAccount[] = [
 ];
 const d = (value: string | number) => new Decimal(value);
 let journalNo = 0;
-/** One journal's lines: account and debits less credits, in the branch asked for unless said otherwise. */
-const journal = (lines: [string, number, boolean?][], sourceType = "manual_journal"): CashFlowEntry[] => {
+/** One journal's lines: account and debits less credits. */
+const journal = (lines: [string, number][], sourceType = "manual_journal"): CashFlowEntry[] => {
   journalNo += 1;
-  return lines.map(([accountId, net, inScope]) => ({ journalId: `j${journalNo}`, sourceType, accountId, net: d(net), inScope: inScope ?? true }));
+  return lines.map(([accountId, net]) => ({ journalId: `j${journalNo}`, sourceType, accountId, net: d(net) }));
 };
 const money = (value: Decimal) => value.toFixed(2);
 
@@ -94,7 +94,6 @@ describe("the cash-flow statement", () => {
       loans: "5000.00",
       owners: "1000.00",
       opening: "700.00",
-      between: "0.00",
     });
     expect([report.operating, report.investing, report.financing, report.net, report.moved].map(money)).toEqual(["218.00", "-2000.00", "6000.00", "4918.00", "4918.00"]);
     // The net change is what the accounts moved: from 1,000 to 5,918.
@@ -104,16 +103,16 @@ describe("the cash-flow statement", () => {
     expect(table.notes[0]).toMatch(/^The net change, 4,918.00, is what the cash and bank accounts moved in the period/);
   });
 
-  it("for one branch: money moved to another branch's cash is shown as such, and a journal split across branches is shared out", () => {
+  it("shows an opening balance reversed and entered again as opening balances, not as owners' money", () => {
     const entries = [
-      // Cash sent from this branch's till to another's.
-      ...journal([["cash", -100], ["cash-b", 100, false]], "cash_transfer"),
-      // A customer's 100 paid partly into this branch's bank (60) and partly into another's (40).
-      ...journal([["bank", 60], ["cash-b", 40, false], ["ar", -100]], "receipt"),
+      ...journal([["cash", 700], ["opening-equity", -700]], "opening_balance"),
+      ...journal([["cash", -700], ["opening-equity", 700]], "reversal:opening_balance"),
+      ...journal([["cash", 650], ["opening-equity", -650]], "opening_balance"),
+      // A manual correction of the opening cash, against Opening balance equity.
+      ...journal([["cash", 50], ["opening-equity", -50]]),
     ];
-    const report = cashFlow(CHART, entries, d(500), d(460));
-    expect([report.flows.between, report.flows.customers, report.net, report.moved].map(money)).toEqual(["-100.00", "60.00", "-40.00", "-40.00"]);
-    expect(report.net.eq(report.closing.minus(report.opening))).toBe(true);
+    const report = cashFlow(CHART, entries, d(0), d(700));
+    expect([report.flows.opening, report.flows.owners, report.net].map(money)).toEqual(["700.00", "0.00", "700.00"]);
   });
 
   it("shares money out to the paisa and beyond, the shares adding up exactly", () => {

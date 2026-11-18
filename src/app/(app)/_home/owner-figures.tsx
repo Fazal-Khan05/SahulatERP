@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Field } from "@/components/field";
 import { requireTenant } from "@/lib/auth/session";
+import { logFailure } from "@/lib/errors";
 import { todayIso } from "@/lib/format";
 import { formatAmount } from "@/lib/money";
 import { formatIsoDate } from "@/modules/currencies/rules";
@@ -32,7 +33,19 @@ function Tile({ label, value, note, href, testId }: { label: string; value: stri
 export async function OwnerFigures({ session, raw }: { session: Session; raw: Record<string, string | string[] | undefined> }) {
   const today = todayIso(new Date());
   const filter = readFilter(raw, { yearStart: `${today.slice(0, 8)}01`, today });
-  const [figures, branches] = await Promise.all([getOwnerFigures(session, filter), listBranches(session)]);
+  let read: [Awaited<ReturnType<typeof getOwnerFigures>>, Awaited<ReturnType<typeof listBranches>>];
+  try {
+    read = await Promise.all([getOwnerFigures(session, filter), listBranches(session)]);
+  } catch (error) {
+    // The rest of Home stands without them.
+    logFailure("owner figures", error);
+    return (
+      <Card title="The business" className="mb-5">
+        <p className="text-sm text-muted-foreground">The figures could not be read just now. Reload the page to try again.</p>
+      </Card>
+    );
+  }
+  const [figures, branches] = read;
   const query = filterQuery(filter);
   const signed = (amount: Parameters<typeof formatAmount>[0]) => `${amount.isNegative() ? "less " : ""}${formatAmount(amount.abs())}`;
   return (

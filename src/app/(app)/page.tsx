@@ -45,7 +45,18 @@ async function Home({ searchParams }: { searchParams: Promise<Record<string, str
           )}
         </Card>
       ) : null}
-      {setup !== null && session.role === "owner" && can(session.role, "report.read") ? <OwnerFigures session={session} raw={raw} /> : null}
+      {setup !== null && session.role === "owner" && can(session.role, "report.read") ? (
+        // Its own wait: Home shows at once, and the figures follow when the books are read.
+        <Suspense
+          fallback={
+            <Card title="The business" className="mb-5">
+              <p className="text-sm text-muted-foreground">Reading the books…</p>
+            </Card>
+          }
+        >
+          <OwnerFigures session={session} raw={raw} />
+        </Suspense>
+      ) : null}
       <Card title="Needs attention">
         <Empty>Nothing needs your attention.</Empty>
         <p className="text-center text-sm">

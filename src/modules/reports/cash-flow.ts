@@ -14,7 +14,7 @@ import type { ReportAccount, ReportRow, ReportTable } from "./rules";
 const ZERO = new Decimal(0);
 
 /** Where money came from or went to. */
-export const FLOWS = ["customers", "suppliers", "staff", "taxes", "other", "assets", "loans", "owners", "opening", "between"] as const;
+export const FLOWS = ["customers", "suppliers", "staff", "taxes", "other", "assets", "loans", "owners", "opening"] as const;
 export type Flow = (typeof FLOWS)[number];
 
 const FLOW_LABELS: Record<Flow, string> = {
@@ -27,7 +27,6 @@ const FLOW_LABELS: Record<Flow, string> = {
   loans: "Loans taken and repaid",
   owners: "Owners' capital and drawings",
   opening: "Opening balances entered",
-  between: "Moved between branches",
 };
 
 /** The locked accounts whose money is a customer's, a supplier's, staff's or a tax. */
@@ -55,6 +54,8 @@ const BY_CONTROL: Record<string, Flow> = {
   wht_provincial_tax: "taxes",
   payroll_statutory_payable: "taxes",
   payroll_statutory_expense: "taxes",
+  // Cash put in against Opening balance equity is an opening balance, however it was entered.
+  opening_equity: "opening",
 };
 
 /** Cash and bank accounts: what the statement is about, never what money is set against. */
@@ -78,9 +79,12 @@ export function flowOf(account: ReportAccount, byId: ReadonlyMap<string, ReportA
 
 /**
  * One account's lines in one journal that moved cash or bank in the period: debits less credits.
- * `inScope` is false for lines of another branch than the one asked for.
+ * A journal is wholly in one branch (its lines take its branch), so a branch asked for takes whole
+ * journals. `sourceType` of a reversal is "reversal:" and what it reverses.
  */
-export type CashFlowEntry = { journalId: string; sourceType: string; accountId: string; net: Decimal; inScope: boolean };
+export type CashFlowEntry = { journalId: string; sourceType: string; accountId: string; net: Decimal };
+
+const OPENING_SOURCES = new Set(["opening_balance", "reversal:opening_balance"]);
 
 export type CashFlow = {
   flows: Record<Flow, Decimal>;
@@ -116,23 +120,26 @@ function shareOut(amount: Decimal, weights: ReadonlyMap<Flow, Decimal>, total: D
  * credited, money out to what was debited (so an expense paid less tax withheld is all of it paid
  * out on the expense: the tax is money out when it is paid to the government). Tax in a journal
  * with a customer's or a supplier's account is theirs (a cash sale's sales tax is money from the
- * customer). Several kinds share the money in proportion. An opening-balance journal is shown as
- * such; money set against nothing outside cash and bank in the branch asked for (moved from one
- * branch's cash to another's) is shown as moved between branches.
+ * customer). Several kinds share the money in proportion. An opening-balance journal, or its
+ * reversal, is shown as such. Money set against nothing on its side (a journal that should not
+ * exist: cash against cash on both sides) is other money, so the statement still adds up.
  */
 export function cashFlow(accounts: readonly ReportAccount[], entries: readonly CashFlowEntry[], opening: Decimal, closing: Decimal): CashFlow {
   const byId = new Map(accounts.map((account) => [account.id, account]));
   const flows = Object.fromEntries(FLOWS.map((flow) => [flow, ZERO])) as Record<Flow, Decimal>;
   const add = (flow: Flow, amount: Decimal) => (flows[flow] = flows[flow].plus(amount));
   const journals = new Map<string, CashFlowEntry[]>();
-  for (const entry of entries) journals.set(entry.journalId, [...(journals.get(entry.journalId) ?? []), entry]);
+  for (const entry of entries) {
+    const lines = journals.get(entry.journalId);
+    if (lines) lines.push(entry);
+    else journals.set(entry.journalId, [entry]);
+  }
   let moved = ZERO;
   for (const lines of journals.values()) {
-    const cash = lines.filter((line) => isCash(byId.get(line.accountId) ?? { controlType: null }));
-    const money = cash.filter((line) => line.inScope).reduce((t, line) => t.plus(line.net), ZERO);
+    const money = lines.filter((line) => isCash(byId.get(line.accountId) ?? { controlType: null })).reduce((t, line) => t.plus(line.net), ZERO);
     moved = moved.plus(money);
     if (money.isZero()) continue;
-    if (lines[0].sourceType === "opening_balance") {
+    if (OPENING_SOURCES.has(lines[0].sourceType)) {
       add("opening", money);
       continue;
     }
@@ -152,7 +159,7 @@ export function cashFlow(accounts: readonly ReportAccount[], entries: readonly C
     const sameSide = new Map([...weights].filter(([, weight]) => !weight.isZero() && weight.isNegative() === money.isNegative()));
     const total = [...sameSide.values()].reduce((t, w) => t.plus(w), ZERO);
     if (total.isZero()) {
-      add("between", money);
+      add("other", money);
     } else if (total.eq(money)) {
       for (const [flow, weight] of sameSide) add(flow, weight);
     } else {
@@ -162,7 +169,7 @@ export function cashFlow(accounts: readonly ReportAccount[], entries: readonly C
   const operating = flows.customers.plus(flows.suppliers).plus(flows.staff).plus(flows.taxes).plus(flows.other);
   const investing = flows.assets;
   const financing = flows.loans.plus(flows.owners);
-  const net = operating.plus(investing).plus(financing).plus(flows.opening).plus(flows.between);
+  const net = operating.plus(investing).plus(financing).plus(flows.opening);
   return { flows, operating, investing, financing, net, opening, closing, moved };
 }
 
@@ -189,7 +196,6 @@ export function cashFlowTable(report: CashFlow, filter: { from: string; to: stri
       ...line("owners"),
       { kind: "total", depth: 0, cells: ["Net cash from financing activities", report.financing] },
       ...(report.flows.opening.isZero() ? [] : [{ kind: "total", depth: 0, cells: [FLOW_LABELS.opening, report.flows.opening] } as ReportRow]),
-      ...(report.flows.between.isZero() ? [] : [{ kind: "total", depth: 0, cells: [FLOW_LABELS.between, report.flows.between] } as ReportRow]),
       { kind: "grand", depth: 0, cells: ["Net change in cash and bank", report.net] },
       { kind: "line", depth: 0, cells: ["Cash and bank at the start", report.opening] },
       { kind: "line", depth: 0, cells: ["Cash and bank at the end", report.closing] },

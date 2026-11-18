@@ -99,6 +99,9 @@ export const reports: readonly ReportSection[] = [
       // Step 41. The accountant approves and pays runs from here.
       { label: "Payroll runs", href: "/payroll/runs", about: "Each month's payroll: what was paid, the tax and EOBI deducted, the commission carried, and its journal. Approve and pay here.", permission: "payroll.read", module: "payroll" },
       { label: "Payslips", href: "/payroll/payslips", about: "Each person's payslip for a month, to print or download as a PDF.", permission: "payroll.read", module: "payroll" },
+      // Step 42.
+      { label: "Loans and advances", href: "/payroll/loans", about: "What the company has lent its people, the instalment taken from each month's pay, and what is still owed.", permission: "payroll.read", module: "payroll" },
+      { label: "Salary statement", href: "/payroll/annual", about: "The year's pay and the income tax deducted from it for each person (s.149), to download.", permission: "payroll.read", module: "payroll" },
     ],
   },
 ];

@@ -75,7 +75,7 @@ export async function listLoans(ctx: TenantContext, employeeId?: string): Promis
   });
 }
 
-export type BankFileOutcome = { fileName: string; csv: string } | { missing: { code: string; name: string }[] } | null;
+export type BankFileOutcome = { fileName: string; csv: string } | { missing: { id: string; code: string; name: string }[] } | null;
 
 /**
  * The bank file for an approved or paid run: one line for each person with something to take
@@ -89,14 +89,14 @@ export async function getBankFile(ctx: TenantContext, runId: string): Promise<Ba
     const [run] = await tx.execute<{ month: string; number: string | null; status: string }>(sql`
       select month::text, number, status from public.payroll_runs where tenant_id = ${ctx.tenantId} and id = ${runId}`);
     if (!run || (run.status !== "approved" && run.status !== "paid")) return null;
-    const rows = await tx.execute<{ code: string; name: string; net: string; iban: string | null; title: string | null }>(sql`
-      select e.code, e.name, p.net::text, b.iban, b.account_title as title
+    const rows = await tx.execute<{ id: string; code: string; name: string; net: string; iban: string | null; title: string | null }>(sql`
+      select e.id, e.code, e.name, p.net::text, b.iban, b.account_title as title
       from public.payslips p
       join public.employees e on e.tenant_id = p.tenant_id and e.id = p.employee_id
       left join public.employee_bank_accounts b on b.tenant_id = p.tenant_id and b.employee_id = p.employee_id
       where p.tenant_id = ${ctx.tenantId} and p.run_id = ${runId} and p.net > 0
       order by lower(e.code)`);
-    const missing = rows.filter((r) => r.iban === null).map((r) => ({ code: r.code, name: r.name }));
+    const missing = rows.filter((r) => r.iban === null).map((r) => ({ id: r.id, code: r.code, name: r.name }));
     if (missing.length > 0) return { missing };
     // Three letters, whatever the server's language data says (some write "Sept").
     const month = `${["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"][Number(run.month.slice(5, 7)) - 1]} ${run.month.slice(0, 4)}`;

@@ -11,6 +11,7 @@ import { formatAmount } from "@/lib/money";
 import { formatIsoDate } from "@/modules/currencies/rules";
 import { getPayslip, getRun, listPayingAccounts, listRuns, type PayslipRow, type RunDetail } from "@/modules/payroll-runs/queries";
 import { approvalJournal, monthEnd, RUN_STATUS_LABELS } from "@/modules/payroll-runs/rules";
+import { getBankFile } from "@/modules/staff-loans/queries";
 import { isMonth } from "@/modules/payroll/rules";
 import { can } from "@/modules/tenant/rules";
 import { approveRunAction, cancelRunAction, payRunAction, reviewRunAction, workOutRunAction } from "./run-actions";
@@ -133,6 +134,9 @@ export async function RunScreen({ params }: { params: Promise<{ id: string }> })
   const pay = can(session.role, "payroll_run.pay") && wide;
   const open = run.status === "draft" || run.status === "reviewed";
   const accounts = run.status === "approved" && pay ? await listPayingAccounts(session) : [];
+  // Step 42: the bank file is for whoever prepares or makes the payment, across the whole company.
+  const banker = (can(session.role, "payroll.manage") || pay) && wide;
+  const bankFile = (run.status === "approved" || run.status === "paid") && banker ? await getBankFile(session, run.id) : null;
   const journal = approvalJournal(run);
   return (
     <>
@@ -269,6 +273,31 @@ export async function RunScreen({ params }: { params: Promise<{ id: string }> })
                 </div>
               </div>
             </ActionForm>
+          </Card>
+        ) : null}
+        {bankFile ? (
+          <Card title="Bank file">
+            {"missing" in bankFile ? (
+              <p className="text-sm text-muted-foreground" data-testid="bank-file-missing">
+                The bank file pays each person to the IBAN on their page. None is on record for{" "}
+                {bankFile.missing.map((m, index) => (
+                  <span key={m.id}>
+                    {index > 0 ? ", " : ""}
+                    <Link href={`/payroll/employees/${m.id}`} className="underline underline-offset-4">
+                      {m.code} {m.name}
+                    </Link>
+                  </span>
+                ))}
+                .
+              </p>
+            ) : (
+              <>
+                <p className="mb-3 text-sm text-muted-foreground">One line for each person with pay to take home, to the IBAN on their page, to upload to the bank.</p>
+                <a href={`/payroll/runs/${run.id}/bank-file`} className={buttonVariants({ variant: "outline", size: "sm" })}>
+                  Download the bank file
+                </a>
+              </>
+            )}
           </Card>
         ) : null}
         {open && manage ? (

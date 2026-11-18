@@ -142,7 +142,7 @@ describe.skipIf(!hasDb)("loans to staff, the bank file and the year's statement"
 
   it("acceptance: the salary bank file validates, once everyone paid has an IBAN", async () => {
     const [september] = await admin<{ id: string }[]>`select id from public.payroll_runs where tenant_id = ${tenant} and month = '2026-09-01'`;
-    expect(await getBankFile(as.accountant, september.id)).toEqual({ missing: [{ code: "E-001", name: "Ali Raza" }, { code: "E-002", name: "Sara Khan" }] });
+    expect(await getBankFile(as.accountant, september.id)).toEqual({ missing: [{ id: ali, code: "E-001", name: "Ali Raza" }, { id: sara, code: "E-002", name: "Sara Khan" }] });
     expect(await messageOf(saveBankAccount(as.payroll_administrator, ali, { bankName: "Standard Chartered", accountTitle: "Ali Raza", iban: "PK36SCBL0000001123456703" }))).toMatch(/Enter the IBAN/);
     await saveBankAccount(as.payroll_administrator, ali, { bankName: "Standard Chartered", accountTitle: "Ali Raza", iban: "pk36 scbl 0000 0011 2345 6702" });
     await saveBankAccount(as.owner, sara, { bankName: "HBL", accountTitle: "Sara Khan", iban: "PK72HABB0012345678901234" });

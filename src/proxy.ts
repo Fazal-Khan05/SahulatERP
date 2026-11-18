@@ -1,11 +1,16 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { sessionCookieOptions } from "@/lib/supabase/cookie-options";
+import { idleTooLong, lastActiveFrom, nowInSeconds, proofsOf, sessionTooOld } from "@/lib/auth/rules";
+import { LAST_ACTIVE_COOKIE, sessionCookieOptions } from "@/lib/supabase/cookie-options";
 
 // Runs before every page request. It refreshes the Supabase session cookie when the access token
 // has expired (Server Components cannot write cookies) and sends signed-out visitors to the
 // sign-in page. This is a convenience, not the security boundary: every page, action and query
 // checks the session and the membership again.
+//
+// It also ends a session that has been left idle, or has run its full length (Step 47). The idle
+// time is kept in a cookie the server alone writes; the full length is read from the verified
+// token, so it holds even if that cookie is tampered with.
 
 const SIGNED_OUT_ONLY = new Set(["/sign-in", "/forgot-password"]);
 const OPEN_TO_ALL = new Set(["/auth/confirm"]);
@@ -31,18 +36,40 @@ export async function proxy(request: NextRequest) {
 
   // Verifies the token's signature and refreshes it if it has expired.
   const { data } = await supabase.auth.getClaims();
-  const signedIn = Boolean(data?.claims?.sub);
+  let signedIn = Boolean(data?.claims?.sub);
   const path = request.nextUrl.pathname;
+  const now = nowInSeconds();
+
+  let ended: "idle" | "limit" | null = null;
+  if (signedIn) {
+    if (sessionTooOld(proofsOf(data?.claims?.amr), now)) ended = "limit";
+    else if (idleTooLong(lastActiveFrom(request.cookies.get(LAST_ACTIVE_COOKIE)?.value), now)) ended = "idle";
+  }
+  if (ended) {
+    // Ends this browser's session (other devices keep theirs) and clears its cookies.
+    await supabase.auth.signOut({ scope: "local" });
+    signedIn = false;
+  }
 
   let destination: string | null = null;
-  if (!signedIn && !SIGNED_OUT_ONLY.has(path) && !OPEN_TO_ALL.has(path)) destination = "/sign-in";
-  if (signedIn && SIGNED_OUT_ONLY.has(path)) destination = "/";
-  if (!destination) return response;
+  if (ended) destination = `/sign-in?ended=${ended}`;
+  else if (!signedIn && !SIGNED_OUT_ONLY.has(path) && !OPEN_TO_ALL.has(path)) destination = "/sign-in";
+  else if (signedIn && SIGNED_OUT_ONLY.has(path)) destination = "/";
 
-  const redirect = NextResponse.redirect(new URL(destination, request.url));
-  // Keep any refreshed session cookies on the redirect.
-  for (const cookie of response.cookies.getAll()) redirect.cookies.set(cookie);
-  return redirect;
+  const reply = destination ? NextResponse.redirect(new URL(destination, request.url)) : response;
+  if (destination) {
+    // Keep any refreshed (or, when the session ended, cleared) session cookies on the redirect.
+    for (const cookie of response.cookies.getAll()) reply.cookies.set(cookie);
+  }
+  // The time is written at most once a minute, and never on a server action's reply: a cookie
+  // set there makes Next.js draw the page again inside the reply, which drops what the form was
+  // told to do next (go to another page, say). A page is always loaded around the actions.
+  const lastActive = lastActiveFrom(request.cookies.get(LAST_ACTIVE_COOKIE)?.value);
+  const isAction = request.headers.has("next-action");
+  if (signedIn && !isAction && (lastActive === null || now - lastActive >= 60)) {
+    reply.cookies.set(LAST_ACTIVE_COOKIE, String(now), sessionCookieOptions);
+  } else if (!signedIn && request.cookies.has(LAST_ACTIVE_COOKIE)) reply.cookies.delete(LAST_ACTIVE_COOKIE);
+  return reply;
 }
 
 export const config = {

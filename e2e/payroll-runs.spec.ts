@@ -88,7 +88,9 @@ test("the payroll administrator works the month out, is told who cannot be paid,
   await expect(page.getByRole("heading", { name: "Approve" })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Mark as reviewed" }).click();
-  await expect(page.getByText("Reviewed. The owner or an accountant approves it next.")).toBeVisible();
+  // The run's stage under its title moves on, and the Review card goes.
+  await expect(page.getByText("Reviewed", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Mark as reviewed" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Approve" })).toHaveCount(0);
 });
 
@@ -101,14 +103,14 @@ test("the accountant approves the month into the books and pays it from cash", a
   await expect(page.getByRole("heading", { name: "Work it out again" })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Approve", exact: true }).click();
-  await expect(page.getByText(/^Approved as PR-\d{4}-\d{5}, and in the books\.$/)).toBeVisible();
+  await expect(page.getByText(/^Approved, PR-\d{4}-\d{5}$/)).toBeVisible();
   const journal = page.getByRole("table", { name: "Journal" });
   await expect(journal.getByRole("row", { name: /Salaries and wages/ })).toContainText("1,66,000.00");
   await expect(journal.getByRole("row", { name: /Salaries payable/ })).toContainText("1,59,593.00");
 
   await shown(page.getByLabel("From", { exact: true })).selectOption({ label: "1111 Cash in hand" });
   await page.getByRole("button", { name: "Record the payment" }).click();
-  await expect(page.getByText("Paid.", { exact: true })).toBeVisible();
+  await expect(page.getByText(/^Paid, PR-\d{4}-\d{5}$/)).toBeVisible();
   await expect(page.getByText(/paid on .* from 1111 Cash in hand as SP-\d{4}-\d{5}/)).toBeVisible();
 
   const [run] = await sql<{ status: string; number: string; balanced: boolean }[]>`

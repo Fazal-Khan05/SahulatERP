@@ -1,4 +1,4 @@
--- Reverses drizzle/0032_payroll_employees.sql. Never run automatically. Run it by hand, as
+-- Reverses drizzle/0036_payroll_employees.sql. Never run automatically. Run it by hand, as
 -- postgres, only after showing it to the founder and getting a yes, and never once a real
 -- company has entered its employees. It DELETES every employee of every company, their pay,
 -- their attendance, and every company's statutory payroll tables.
@@ -14,5 +14,5 @@ DROP TABLE public.salary_tax_slabs;
 DROP TABLE public.statutory_rates;
 DROP FUNCTION app.check_payroll_row();
 DROP FUNCTION app.payroll_is_member(uuid);
-DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1794937976138;
+DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1795020266639;
 COMMIT;

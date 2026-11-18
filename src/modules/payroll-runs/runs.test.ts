@@ -204,8 +204,16 @@ describe.skipIf(!hasDb)("payroll runs", () => {
     expect([b.daysEmployed, b.daysWorked.toFixed(), money(b.earnings), money(b.tax), money(b.net)]).toEqual([22, "15", "30000.00", "0.00", "30000.00"]);
     expect([run.earnings, run.commission, run.tax, run.net].map(money)).toEqual(["195000.00", "100.00", "6001.22", "188691.78"]);
     // The payroll administrator, who reads no commission, cannot ask for anyone else's.
-    expect(await codeOf(as.payroll_administrator, sql`select app.payroll_commission_basis(${outsider}::uuid)`)).toBe("42501");
-    expect(await codeOf(as.accountant, sql`select app.payroll_commission_basis(${ali}::uuid)`)).toBe("42501");
+    expect(await codeOf(as.payroll_administrator, sql`select app.payroll_commission_basis(${outsider}::uuid, ${OCT}::date)`)).toBe("42501");
+    expect(await codeOf(as.accountant, sql`select app.payroll_commission_basis(${ali}::uuid, ${OCT}::date)`)).toBe("42501");
+    // Nor Ali's for a month before he was on the payroll; and a payslip keeps the totals and a fingerprint, not which sale earned what.
+    expect(await codeOf(as.payroll_administrator, sql`select app.payroll_commission_basis(${ali}::uuid, '2026-06-01'::date)`)).toBe("42501");
+    const [basis] = await admin<{ keys: string[] }[]>`select array(select jsonb_object_keys(commission_basis) order by 1) as keys from public.payslips where id = ${a.id}`;
+    expect(basis.keys).toEqual(["digest", "gross", "owed"]);
+    // A payroll administrator links an employee to their own login only; the owner links anyone's.
+    expect(await codeOf(as.payroll_administrator, sql`update public.employees set user_id = ${outsider} where tenant_id = ${tenant} and code = 'E-002'`)).toBe("SE358");
+    expect(await codeOf(as.payroll_administrator, sql`update public.employees set user_id = ${userIds.payroll_administrator} where tenant_id = ${tenant} and code = 'E-002'`)).toBeUndefined();
+    expect(await codeOf(as.payroll_administrator, sql`update public.employees set user_id = null where tenant_id = ${tenant} and code = 'E-002'`)).toBeUndefined();
   });
 
   it("keeps a draft the app's to write and nothing after it", async () => {
@@ -273,7 +281,7 @@ describe.skipIf(!hasDb)("payroll runs", () => {
     await reviewRun(as.payroll_administrator, november);
     // The 100 released in November is approved after the run was worked out.
     await approveAlisCommission();
-    expect(await messageOf(approveRun(as.owner, november))).toMatch(/commission has changed/);
+    expect(await messageOf(approveRun(as.owner, november))).toMatch(/^Someone's commission, or the login an employee signs in with, has changed since this run was worked out/);
     expect((await getRun(as.owner, november))!.status).toBe("reviewed");
     // Worked out again, it carries the commission, and is approved.
     await workOutRun(as.payroll_administrator, NOV);
@@ -311,6 +319,36 @@ describe.skipIf(!hasDb)("payroll runs", () => {
     expect((await getRun(as.owner, id))!.status).toBe("reviewed");
     const [extra] = await admin<{ n: number }[]>`select count(*)::int as n from public.payslip_lines where payslip_id = ${slip.id} and code = 'extra'`;
     expect(extra.n).toBe(0);
+  });
+
+  it("counts commission as at the run's day: what is released after the month waits for the next run", async () => {
+    // A sale in November, paid on the 6th: Ali's 2% is released and approved. July, worked out
+    // now, does not carry it, and is approved as ever.
+    const c = await sell("2026-11-05", "50");
+    await cashIn("2026-11-06", c, "5000");
+    await approveAlisCommission();
+    const { id } = (await workOutRun(as.payroll_administrator, "2026-07-01")) as { id: string };
+    const slip = (await getRun(as.owner, id))!.payslips.find((s) => s.code === "E-001")!;
+    expect(money(slip.commission)).toBe("0.00");
+    await reviewRun(as.payroll_administrator, id);
+    await approveRun(as.owner, id);
+    const [accrual] = await admin<{ approved: boolean; unpaid: string }[]>`
+      select approved_at is not null as approved, (released - paid)::numeric(20,2)::text as unpaid from public.commission_accruals where tenant_id = ${tenant} and invoice_id = ${c}`;
+    expect(accrual).toEqual({ approved: true, unpaid: "100.00" });
+  });
+
+  it("refuses a run whose people changed after it was worked out: a login, or the day they joined", async () => {
+    const { id } = (await workOutRun(as.payroll_administrator, "2026-09-01")) as { id: string };
+    await reviewRun(as.payroll_administrator, id);
+    // Ali's employee record loses its login after September was worked out.
+    await admin`update public.employees set user_id = null where tenant_id = ${tenant} and code = 'E-001'`;
+    expect(await messageOf(approveRun(as.owner, id))).toMatch(/login an employee signs in with, has changed/);
+    await admin`update public.employees set user_id = ${ali} where tenant_id = ${tenant} and code = 'E-001'`;
+    // His day of joining moves, which changes the months taken as paid before payroll was run here.
+    await admin`update public.employees set joined_on = '2026-08-01' where tenant_id = ${tenant} and code = 'E-001'`;
+    expect(await messageOf(approveRun(as.owner, id))).toMatch(/day of joining changed/);
+    await admin`update public.employees set joined_on = '2026-07-01' where tenant_id = ${tenant} and code = 'E-001'`;
+    expect((await getRun(as.owner, id))!.status).toBe("reviewed");
   });
 
   it("cancels a run before approval, saying why, and the month is worked out anew", async () => {

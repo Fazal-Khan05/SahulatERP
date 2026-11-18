@@ -71,18 +71,19 @@ export function monthsEmployedEarlier(month: string, joinedOn: string): number {
 
 /**
  * The commission a person's payslip carries, as the database gives it
- * (app.payroll_commission_basis): for each approved accrual, what is released and unpaid, and
- * for each overpaid one, what is owed back. Kept on the payslip as given: approval asks again
- * and refuses the run if anything differs.
+ * (app.payroll_commission_basis), as at the run's date: the approved commission released and
+ * unpaid, and what is owed back, in all, with a fingerprint of the accrual-by-accrual figures. Kept
+ * on the payslip as given: approval asks again and refuses the run if anything differs. Nothing
+ * ({}) for someone with no login.
  */
-export type CommissionBasis = { due: Record<string, string>; owed: Record<string, string> };
+export type CommissionBasis = { gross?: string; owed?: string; digest?: string };
 
-export const NO_COMMISSION: CommissionBasis = { due: {}, owed: {} };
+export const NO_COMMISSION: CommissionBasis = {};
 
 /** What the basis comes to: the approved commission, what is owed back from it, and the rest, which is paid. As app.pay_commission settles it. */
 export function commissionOf(basis: CommissionBasis): { gross: Decimal; owed: Decimal; recovered: Decimal; paid: Decimal } {
-  const gross = sum(Object.values(basis.due).map((amount) => new Decimal(amount)));
-  const owed = sum(Object.values(basis.owed).map((amount) => new Decimal(amount)));
+  const gross = new Decimal(basis.gross ?? "0");
+  const owed = new Decimal(basis.owed ?? "0");
   const recovered = Decimal.min(gross, owed);
   return { gross, owed, recovered, paid: gross.minus(recovered) };
 }
@@ -140,6 +141,8 @@ export type Payslip = {
   employerSocialSecurity: Decimal;
   taxableBefore: Decimal;
   taxBefore: Decimal;
+  /** How many months of the tax year before this one had an approved payslip: what taxableBefore and taxBefore add up. */
+  monthsBefore: number;
   /** Months of the tax year before this one in which they were employed and nothing was run here, and their pay and tax, assumed. */
   assumedMonths: number;
   assumedTaxable: Decimal;
@@ -309,6 +312,7 @@ export function workOutPayslip(input: PayslipInput): { ok: true; payslip: Paysli
       employerSocialSecurity,
       taxableBefore: input.before.taxable,
       taxBefore: input.before.tax,
+      monthsBefore: input.before.months,
       assumedMonths,
       assumedTaxable,
       assumedTax,

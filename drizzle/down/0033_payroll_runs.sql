@@ -68,13 +68,17 @@ DROP FUNCTION app.pay_payroll_run(uuid, uuid, date);
 DROP FUNCTION app.approve_payroll_run(uuid);
 DROP FUNCTION app.review_payroll_run(uuid);
 DROP FUNCTION app.hold_payroll_run(uuid);
-DROP FUNCTION app.payroll_commission_basis(uuid);
-DROP FUNCTION app.commission_basis_of(uuid, uuid);
+DROP TRIGGER employees_login_link ON public.employees;
+DROP FUNCTION app.check_employee_login();
+DROP FUNCTION app.payroll_commission_basis(uuid, date);
+DROP FUNCTION app.payroll_run_date(date);
+DROP FUNCTION app.commission_summary(jsonb);
+DROP FUNCTION app.commission_basis_of(uuid, uuid, date);
 DROP TABLE public.payslip_lines, public.payslips, public.payroll_runs;
 DROP FUNCTION app.check_payslip_row();
 DROP FUNCTION app.check_payroll_run_row();
 
 -- The row drizzle-kit wrote for 0033_payroll_runs (its "when" in drizzle/meta/_journal.json).
-DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1794939605226;
+DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1794973863838;
 
 COMMIT;

@@ -34,13 +34,12 @@ function refusal(error: unknown, date: string): UserError | null {
   if (closed) return new UserError(closed);
   if (code === "SE015") return new UserError("That date is before the day the books were opened.");
   if (code === "SE064") return new UserError("The chart of accounts is missing an account that payroll posts to. Set the company up first.");
-  if (code === "SE350") return new UserError("Someone's commission has changed since this run was worked out. Work the run out again, then review and approve it.");
+  if (code === "SE350") return new UserError("Someone's commission, or the login an employee signs in with, has changed since this run was worked out. Work the run out again, then review and approve it.");
   if (code === "SE353") return new UserError(NOT_HERE);
   if (code === "SE354") return new UserError("The run is not at that stage any more. Reload the page.");
   if (code === "SE355") return new UserError("That date cannot be used: a month is approved once it has begun, and salaries are paid on or after the day the run was approved, never on a day still to come.");
-  if (code === "SE356") return new UserError("The run is out of date: an earlier month was approved since, or its figures no longer add up. Work it out again.");
+  if (code === "SE356") return new UserError("The run is out of date: an earlier month was approved since, someone's day of joining changed, or its figures no longer add up. Work it out again.");
   if (code === "SE357") return new UserError("A receipt, a cheque or a return is being recorded on a salesperson's invoice right now. Try again in a moment.");
-  if (code === "SE358") return new UserError("Some of the commission was released after the run's date. Approve the run on or after that day.");
   if (code === "SE359") return new UserError("Choose a cash or bank account that is in use. An archived account cannot be used: restore it first under Chart of accounts.");
   if (code === "SE351" || code === "SE352" || code === "SE074") return new UserError("That could not be done as it stands. Reload the page and try again.");
   if (code === "42501") return new UserError("Your role does not permit this action.");
@@ -97,7 +96,7 @@ async function loadPayslips(tx: Tx, tenantId: string, month: string): Promise<{ 
   for (const employee of staff) {
     let commission: CommissionBasis = NO_COMMISSION;
     if (employee.userId) {
-      const [row] = await tx.execute<{ basis: CommissionBasis }>(sql`select app.payroll_commission_basis(${employee.userId}::uuid) as basis`);
+      const [row] = await tx.execute<{ basis: CommissionBasis }>(sql`select app.payroll_commission_basis(${employee.userId}::uuid, ${month}::date) as basis`);
       commission = row.basis;
     }
     const attendance = days.find((d) => d.employeeId === employee.id);
@@ -213,6 +212,7 @@ export async function workOutRun(ctx: TenantContext, rawMonth: unknown): Promise
           employerSocialSecurity: money(slip.employerSocialSecurity),
           taxableBefore: money(slip.taxableBefore),
           taxBefore: money(slip.taxBefore),
+          monthsBefore: slip.monthsBefore,
           assumedMonths: slip.assumedMonths,
           assumedTaxable: money(slip.assumedTaxable),
           assumedTax: money(slip.assumedTax),

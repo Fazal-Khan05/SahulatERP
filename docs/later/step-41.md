@@ -47,7 +47,10 @@ statement taught the run's number). Built on Step 40.
 - **Pay**: the pay in force on the last day the person was employed in the month. A monthly
   employee is paid each part for the days employed less unpaid days, over the days in the month;
   a daily employee the daily wage for each day worked.
-- **Commission**: what is approved and released, less what they owe back, as far as it goes.
+- **Commission**: what is approved and released, less what they owe back, as far as it goes,
+  counting only commission nothing has happened to after the run's day (the month's last day, or
+  today if sooner). Commission released after the month, or owed back from a payment undone after
+  it, waits for the next month's run.
 - **Income tax, s.149**: the year's taxable salary is what was paid earlier in the tax year, this
   month's, and this month's regular pay for each month left (none if they leave this month); the
   year's tax on that, less the tax already deducted, is spread over the months left, this one
@@ -90,13 +93,45 @@ Claude, not an accountant.**
 11. **Commission for someone with no employee record** is still paid with Step 38's commission
     payment; only commission of people on the payroll (an employee linked to their login) goes
     through the run. Commission paid through the run is taxed as salary.
-12. **The payroll administrator sees, on payslips, the commission due to each person on the
-    payroll**, which they need to pay it, though they read no commission otherwise.
+12. **The payroll administrator sees, on payslips, the commission paid to each person on the
+    payroll that month**, in all (never which sale earned what), which they need to pay it, though
+    they read no commission otherwise. To keep that to the people on the payroll, **a login is
+    linked to an employee by the owner**; a payroll administrator links an employee only to their
+    own login, as the employee's page already offered them (SE358).
 13. **CNICs are not printed on payslips.**
+14. **Take-home pay can carry fractions of a paisa** when commission does (commission is kept to
+    four places, as Step 38 pays it). The payment posts the figure as it is; if salaries must be
+    paid in whole paisa, the commission line would be rounded and the remainder carried.
 
 ## Review
 
-An independent review of the migration and the money rules is recorded below once done.
+An independent review (2026-11-18) found the commission settlement right (never expensed twice,
+the journal balancing in every case, the ledger kept as Step 38 keeps it) and these, all fixed:
+
+- **A month's run could be stuck.** Commission released after the month's end and approved
+  before its run was worked out was carried, and approval then refused it for good (SE358), since
+  a run is never dated after its month. Commission is now counted as at the run's day; the rest
+  waits for the next run.
+- **A payslip's login was not checked against its employee's**: a login changed after work-out
+  could settle someone else's commission, or carry commission without settling it. Approval now
+  refuses a run whose logins changed (SE350), and a payslip with no login can carry no commission
+  (a check on the table).
+- **The payroll administrator could read any member's commission** by linking their login to a
+  made-up employee. They now get, for people employed in that month only, the totals and a
+  fingerprint of the accrual-by-accrual figures, and only the owner links someone else's login
+  (decision 12).
+- **The months taken as paid before payroll was run here were not checked at approval**: a month
+  approved since with nothing in it, or a day of joining changed, left the tax wrong. The payslip
+  now keeps how many months were run here, and approval checks both.
+- **Two months approved at the same moment** could each miss the other's tax; approvals now take
+  turns within a company.
+- Take-home pay can carry fractions of a paisa (decision 14).
+
+Before the review, the guard on payslips and their lines was found reading its run's status
+without holding it (the pattern the Builder's reviewer found on supplier bills): a line written
+while the run was being reviewed went in unseen. The guard now holds the run while a payslip or
+line is written, and refuses one whose run or payslip is not there (a two-session test in
+`runs.test.ts` fails without the fix and passes with it).
 
 ## Tests
 

@@ -115,13 +115,16 @@ export const payslips = pgTable(
     // on it, assumed.
     taxableBefore: numeric("taxable_before", { precision: 20, scale: 4 }).notNull(),
     taxBefore: numeric("tax_before", { precision: 20, scale: 4 }).notNull(),
+    // How many months of the tax year before this one had an approved payslip: what taxable_before and tax_before add up.
+    monthsBefore: integer("months_before").notNull().default(0),
     assumedMonths: integer("assumed_months").notNull().default(0),
     assumedTaxable: numeric("assumed_taxable", { precision: 20, scale: 4 }).notNull().default("0"),
     assumedTax: numeric("assumed_tax", { precision: 20, scale: 4 }).notNull().default("0"),
     monthsLeft: integer("months_left").notNull(),
     annualTaxable: numeric("annual_taxable", { precision: 20, scale: 4 }).notNull(),
     annualTax: numeric("annual_tax", { precision: 20, scale: 4 }).notNull(),
-    // The commission it was worked out with: each accrual and what was due on it, and what was owed back.
+    // The commission it was worked out with: the approved commission and what is owed back, in all,
+    // and a fingerprint of the accrual-by-accrual figures (app.commission_summary); {} with no login.
     commissionBasis: jsonb("commission_basis").notNull().default(sql`'{}'::jsonb`),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     createdBy: uuid("created_by").notNull(),
@@ -133,6 +136,8 @@ export const payslips = pgTable(
     foreignKey({ name: "payslips_employee_fk", columns: [t.tenantId, t.employeeId], foreignColumns: [employees.tenantId, employees.id] }),
     index("payslips_tenant_employee_idx").on(t.tenantId, t.employeeId),
     check("payslips_pay_basis_known", sql`${t.payBasis} in ('monthly', 'daily')`),
+    // Commission is carried only for someone who signs in: it is that login's.
+    check("payslips_commission_needs_login", sql`${t.userId} is not null or (${t.commission} = 0 and ${t.commissionRecovered} = 0 and ${t.commissionBasis} = '{}'::jsonb)`),
     check(
       "payslips_figures_add_up",
       sql`${t.earnings} >= 0 and ${t.commission} >= 0 and ${t.commissionRecovered} >= 0 and ${t.tax} >= 0 and ${t.eobiEmployee} >= 0 and ${t.deductions} >= 0
@@ -142,7 +147,7 @@ export const payslips = pgTable(
     check(
       "payslips_days_sane",
       sql`${t.daysInMonth} between 28 and 31 and ${t.daysEmployed} between 1 and ${t.daysInMonth} and ${t.monthsLeft} between 1 and 12
-        and ${t.assumedMonths} between 0 and 11 and ${t.assumedMonths} + ${t.monthsLeft} <= 12 and ${t.assumedTaxable} >= 0 and ${t.assumedTax} >= 0`,
+        and ${t.assumedMonths} between 0 and 11 and ${t.monthsBefore} between 0 and 11 and ${t.assumedMonths} + ${t.monthsBefore} + ${t.monthsLeft} <= 12 and ${t.assumedTaxable} >= 0 and ${t.assumedTax} >= 0`,
     ),
   ],
 );

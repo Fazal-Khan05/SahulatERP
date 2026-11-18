@@ -84,7 +84,7 @@ const ayesha = () =>
       ["fixed_deduction", 5000],
     ]),
     attendance: { daysWorked: d(0), unpaidDays: d(3) },
-    commission: { due: { a1: "20000", a2: "5000" }, owed: { a3: "3000" } },
+    commission: { gross: "25000", owed: "3000", digest: "d" },
     before: { taxable: d(600000), tax: d(24000), months: 4 },
   });
 const bilal = () =>
@@ -111,10 +111,11 @@ describe("the tax year and the month", () => {
 
 describe("commission on a payslip", () => {
   it("is what is approved and released, less what is owed back, as far as it goes", () => {
-    const of = (due: Record<string, string>, owed: Record<string, string>) => Object.values(commissionOf({ due, owed })).map(money);
-    expect(of({ a: "20000", b: "5000" }, { c: "3000" })).toEqual(["25000.00", "3000.00", "3000.00", "22000.00"]);
-    expect(of({ a: "100" }, { c: "300" })).toEqual(["100.00", "300.00", "100.00", "0.00"]);
-    expect(of({}, { c: "300" })).toEqual(["0.00", "300.00", "0.00", "0.00"]);
+    const of = (gross: string, owed: string) => Object.values(commissionOf({ gross, owed, digest: "d" })).map(money);
+    expect(of("25000", "3000")).toEqual(["25000.00", "3000.00", "3000.00", "22000.00"]);
+    expect(of("100", "300")).toEqual(["100.00", "300.00", "100.00", "0.00"]);
+    expect(of("0", "300")).toEqual(["0.00", "300.00", "0.00", "0.00"]);
+    expect(Object.values(commissionOf(NO_COMMISSION)).map(money)).toEqual(["0.00", "0.00", "0.00", "0.00"]);
   });
 });
 

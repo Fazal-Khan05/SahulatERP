@@ -1,5 +1,5 @@
 {
-  "id": "d57aed34-61df-4ba0-b917-72cf8e099bfb",
+  "id": "4786ff42-0e7f-4979-821c-c57335e151b9",
   "prevId": "dc8a4a0b-c082-4b5b-8c3f-a9325b27c3bd",
   "version": "7",
   "dialect": "postgresql",
@@ -7910,6 +7910,13 @@
           "primaryKey": false,
           "notNull": true
         },
+        "months_before": {
+          "name": "months_before",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "assumed_months": {
           "name": "assumed_months",
           "type": "integer",
@@ -8064,13 +8071,17 @@
           "name": "payslips_pay_basis_known",
           "value": "\"payslips\".\"pay_basis\" in ('monthly', 'daily')"
         },
+        "payslips_commission_needs_login": {
+          "name": "payslips_commission_needs_login",
+          "value": "\"payslips\".\"user_id\" is not null or (\"payslips\".\"commission\" = 0 and \"payslips\".\"commission_recovered\" = 0 and \"payslips\".\"commission_basis\" = '{}'::jsonb)"
+        },
         "payslips_figures_add_up": {
           "name": "payslips_figures_add_up",
           "value": "\"payslips\".\"earnings\" >= 0 and \"payslips\".\"commission\" >= 0 and \"payslips\".\"commission_recovered\" >= 0 and \"payslips\".\"tax\" >= 0 and \"payslips\".\"eobi_employee\" >= 0 and \"payslips\".\"deductions\" >= 0\n        and \"payslips\".\"net\" >= 0 and \"payslips\".\"employer_eobi\" >= 0 and \"payslips\".\"employer_social_security\" >= 0\n        and \"payslips\".\"net\" = \"payslips\".\"earnings\" + \"payslips\".\"commission\" - \"payslips\".\"tax\" - \"payslips\".\"eobi_employee\" - \"payslips\".\"deductions\""
         },
         "payslips_days_sane": {
           "name": "payslips_days_sane",
-          "value": "\"payslips\".\"days_in_month\" between 28 and 31 and \"payslips\".\"days_employed\" between 1 and \"payslips\".\"days_in_month\" and \"payslips\".\"months_left\" between 1 and 12\n        and \"payslips\".\"assumed_months\" between 0 and 11 and \"payslips\".\"assumed_months\" + \"payslips\".\"months_left\" <= 12 and \"payslips\".\"assumed_taxable\" >= 0 and \"payslips\".\"assumed_tax\" >= 0"
+          "value": "\"payslips\".\"days_in_month\" between 28 and 31 and \"payslips\".\"days_employed\" between 1 and \"payslips\".\"days_in_month\" and \"payslips\".\"months_left\" between 1 and 12\n        and \"payslips\".\"assumed_months\" between 0 and 11 and \"payslips\".\"months_before\" between 0 and 11 and \"payslips\".\"assumed_months\" + \"payslips\".\"months_before\" + \"payslips\".\"months_left\" <= 12 and \"payslips\".\"assumed_taxable\" >= 0 and \"payslips\".\"assumed_tax\" >= 0"
         }
       },
       "isRLSEnabled": false

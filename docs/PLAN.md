@@ -140,7 +140,7 @@ Fifty-two steps in nine phases. Phases finish in order; steps inside a phase mos
 | 19 | Delivery note from order (partial, remaining qty tracked) with stock moves at weighted-average cost | Stock and COGS move; delivering more than ordered is refused | Done 2026-11-13 |
 | 20 | Sales invoice from delivery or order; posting: AR, revenue, output tax, further tax, COGS; buyer snapshot stored; FBR fields stored (module off, so not submitted) | Journal matches a hand-worked example for a registered buyer and an unregistered one | Done 2026-11-13 |
 | 21 | Credit note / sales return: restock (saleable or damaged), reversal postings, commission reversal hook | Returning more than invoiced refused; partial return posts partial reversal | Done 2026-11-15 (the commission reversal comes with Step 38) |
-| 22 | Walk-in customer, multi-currency sale with FX gain/loss on settlement, customer advances with own control account | Advance applied to an invoice clears both correctly | |
+| 22 | Walk-in customer, multi-currency sale with FX gain/loss on settlement, customer advances with own control account | Advance applied to an invoice clears both correctly | Done 2026-11-18 (walk-in counter sales; customer advances were Step 32's; foreign-currency sales left for later, by the founder's choice) |
 | 23 | Print and PDF for all sales documents; email sending with PDF; document timeline | Email arrives with the PDF; print header uses the tenant logo | Done 2026-11-14, except the send itself: no email service chosen yet (docs/later/step-23.md) |
 
 ### Phase 4: Purchasing, imports, withholding
@@ -149,8 +149,8 @@ Fifty-two steps in nine phases. Phases finish in order; steps inside a phase mos
 | --- | --- | --- | --- |
 | 24 | Purchase order and GRN (partial), goods-received-not-billed accrual | GRN without bill shows in the GRNI report at cost | Done 2026-11-15 |
 | 25 | Supplier bill: match to GRNs, input tax by supplier STRN, s.153 income-tax withholding by supplier type and ATL, Eleventh Schedule sales-tax withholding, provincial services tax on service bills; `withholding_entries` | A Rs 100,000 goods bill from a non-ATL company withholds 10% and posts to the withholding payable account | Done 2026-11-17 |
-| 26 | Supplier payments with withholding deducted, challan recording, supplier advances in foreign currency with revaluation | Payment of a bill with an advance applied nets correctly | |
-| 27 | Supplier returns (debit notes) | Reverses GRNI or AP as appropriate | |
+| 26 | Supplier payments with withholding deducted, challan recording, supplier advances in foreign currency with revaluation | Payment of a bill with an advance applied nets correctly | Done 2026-11-18 |
+| 27 | Supplier returns (debit notes) | Reverses GRNI or AP as appropriate | Done 2026-11-18 |
 | 28 | Shipments: status flow, GD number/date, port, container, LC number; shipment charges with the five classes; landed-cost allocation by value/qty/weight/volume; late charges re-allocate and adjust inventory and COGS | Port the old allocation tests; a late freight bill adjusts remaining stock and COGS of sold units | |
 | 29 | Reports: aged payables, supplier statement, withholding register, s.165 quarterly export, GRNI | Withholding register totals equal withholding payable | |
 

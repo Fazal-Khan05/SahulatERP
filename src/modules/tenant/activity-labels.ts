@@ -9,6 +9,7 @@ export const ACTION_LABELS: Record<string, string> = {
   "auth.two_step_failed": "Gave a wrong two-step code",
   "auth.two_step_on": "Turned two-step sign-in on",
   "auth.two_step_off": "Turned two-step sign-in off",
+  "auth.two_step_reset": "Had two-step sign-in removed by support",
   "tenant.create": "Created the company",
   "branch.create": "Added a branch",
   "member.invite": "Invited a member",

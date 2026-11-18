@@ -23,6 +23,7 @@
     "db:runtime-password": "node --env-file-if-exists=.env.local scripts/db-runtime-password.mjs",
     "db:identity": "node --env-file-if-exists=.env.local scripts/identity-key.mjs",
     "owner:create": "node --env-file-if-exists=.env.local scripts/owner-create.mjs",
+    "two-step:remove": "node --env-file-if-exists=.env.local scripts/two-step-remove.mjs",
     "invites:send": "node --env-file-if-exists=.env.local scripts/invites-send.mjs",
     "worker": "node --env-file-if-exists=.env.local scripts/worker.mjs",
     "demo:seed": "DEMO_ACTION=seed vitest run --config vitest.demo.config.ts",

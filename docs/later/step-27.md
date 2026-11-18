@@ -1,9 +1,10 @@
 # Step 27: supplier returns (debit notes)
 
 Built in track B (stock and buying) by the Builder, on Step 26's supplier payments. Migration
-`0033_supplier_returns`. Built while the founder was away (2026-11-17): nothing here was asked
-of him, and **the migration is not on the shared development database** (his yes of 2026-11-15
-covered Steps 24 to 26 only).
+`0034_supplier_returns` (renumbered from 0033 on 2026-11-18, after the joint line-guards fix
+0033_line_guards). Built while the founder was away (2026-11-17): nothing here was asked of him.
+He said yes on 2026-11-18 (in the coordinator's chat) to every finished step going on the shared
+development database after its review and tests; the coordinator applies it.
 
 ## What was built
 
@@ -104,10 +105,10 @@ with the coordinator:
   real bills, and an allocation to a posted payment. It needs an owner or an accountant running
   their own SQL in two sessions at once; it cannot be done from the screens.
   **Fixed in this migration**: a line is never written into a return its check has not seen and
-  held; it is refused there instead. A test now runs the race and expects the refusal. The
-  same change is needed in the guards of earlier steps (track B's: stock documents, purchase
-  orders and goods received, bills, payments; and other tracks' receipts and sales documents):
-  reported to the coordinator on 2026-11-17, who decides how they are fixed.
+  held as one the member may write; it is refused there, in the policy's words. A test now runs
+  the race and expects the refusal. The guards of earlier steps were fixed the same way in the
+  joint migration `0033_line_guards` (`docs/later/line-guards.md`), which also took over this
+  step's change to `app.apply_supplier_advance`.
 
 Three smaller things, all put right:
 

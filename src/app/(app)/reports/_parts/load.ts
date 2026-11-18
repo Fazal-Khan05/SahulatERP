@@ -1,6 +1,6 @@
 import "server-only";
 import { todayIso } from "@/lib/format";
-import { getBalanceSheet, getGeneralLedger, getProfitAndLoss, getTrialBalance, getYearStart } from "@/modules/reports/queries";
+import { getBalanceSheet, getCashFlow, getGeneralLedger, getProfitAndLoss, getTrialBalance, getYearStart } from "@/modules/reports/queries";
 import { readFilter, type ReportFilter, type ReportKey, type ReportTable } from "@/modules/reports/rules";
 import type { TenantContext } from "@/modules/tenant/rules";
 
@@ -28,5 +28,7 @@ export async function loadReport(session: TenantContext, report: ReportKey, filt
       return getBalanceSheet(session, filter);
     case "general-ledger":
       return getGeneralLedger(session, filter, ledgerLimit);
+    case "cash-flow":
+      return getCashFlow(session, filter);
   }
 }

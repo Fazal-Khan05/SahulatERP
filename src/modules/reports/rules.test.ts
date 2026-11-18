@@ -267,9 +267,9 @@ describe("what a report was asked for", () => {
     expect(filterQuery({ from: "2026-08-01", to: "2026-08-31", branchId: id, accountId: null }, { format: "csv" })).toBe(`from=2026-08-01&to=2026-08-31&branch=${id}&format=csv`);
   });
 
-  it("knows the four reports", () => {
-    for (const key of ["trial-balance", "general-ledger", "balance-sheet", "profit-and-loss"]) expect(isReportKey(key)).toBe(true);
-    for (const not of ["cash-flow", "", null, "constructor"]) expect(isReportKey(not), String(not)).toBe(false);
+  it("knows the five reports", () => {
+    for (const key of ["trial-balance", "general-ledger", "balance-sheet", "profit-and-loss", "cash-flow"]) expect(isReportKey(key)).toBe(true);
+    for (const not of ["cash-flow-statement", "", null, "constructor"]) expect(isReportKey(not), String(not)).toBe(false);
   });
 });
 

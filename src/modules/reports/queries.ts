@@ -24,7 +24,9 @@ import {
   type ReportFilter,
   type ReportTable,
   type Totals,
+  REPORTS,
 } from "./rules";
+import { cashFlow, cashFlowTable, isCash, type CashFlowEntry } from "./cash-flow";
 
 // The ledger reports, read straight from posted journal lines. Row-level security decides what
 // the reader may see: a member limited to some branches gets the books of those branches only.
@@ -103,6 +105,45 @@ export async function getBalanceSheet(ctx: TenantContext, filter: ReportFilter):
     const yearStart = await selectYearStart(tx, ctx.tenantId, filter.to);
     const [chart, totals] = [await reportAccounts(tx, ctx.tenantId), await selectTotals(tx, ctx.tenantId, { from: yearStart, to: filter.to, branchId: filter.branchId })];
     return balanceSheetTable(balanceSheet(chart, totals), filter.to);
+  });
+}
+
+/**
+ * The cash-flow statement for a period (Step 36): every journal that moved money in or out of a
+ * cash or bank account in the period, line by line, and what those accounts held before it and
+ * at its end; one branch's, when asked.
+ */
+export async function getCashFlow(ctx: TenantContext, filter: ReportFilter): Promise<ReportTable> {
+  requireReportAccess(ctx);
+  return withTenant(ctx.userId, ctx.tenantId, async (tx) => {
+    const chart = await reportAccounts(tx, ctx.tenantId);
+    const cashIds = chart.filter((account) => !account.isGroup && isCash(account)).map((account) => account.id);
+    const totals = await selectTotals(tx, ctx.tenantId, filter);
+    let opening = new Decimal(0);
+    let closing = new Decimal(0);
+    for (const id of cashIds) {
+      const total = totals.get(id);
+      if (!total) continue;
+      opening = opening.plus(total.before);
+      closing = closing.plus(total.before).plus(total.debit).minus(total.credit);
+    }
+    const rows =
+      cashIds.length === 0
+        ? []
+        : await tx.execute<{ journal_id: string; source_type: string; account_id: string; in_scope: boolean; net: string }>(sql`
+            select l.journal_id, j.source_type, l.account_id,
+              (${filter.branchId}::uuid is null or l.branch_id = ${filter.branchId}::uuid) as in_scope,
+              sum(l.debit - l.credit)::text as net
+            from public.journal_lines l
+            join public.journals j on j.tenant_id = l.tenant_id and j.id = l.journal_id
+            where l.tenant_id = ${ctx.tenantId} and j.journal_date between ${filter.from}::date and ${filter.to}::date
+              and l.journal_id in (
+                select c.journal_id from public.journal_lines c
+                where c.tenant_id = ${ctx.tenantId} and c.account_id = any(${`{${cashIds.join(",")}}`}::uuid[])
+                  and (${filter.branchId}::uuid is null or c.branch_id = ${filter.branchId}::uuid))
+            group by 1, 2, 3, 4`);
+    const entries = rows.map((row): CashFlowEntry => ({ journalId: row.journal_id, sourceType: row.source_type, accountId: row.account_id, net: new Decimal(row.net), inScope: row.in_scope }));
+    return cashFlowTable(cashFlow(chart, entries, opening, closing), filter, REPORTS["cash-flow"].title);
   });
 }
 

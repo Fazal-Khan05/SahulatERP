@@ -84,7 +84,6 @@ CREATE TABLE "bank_statements" (
 --> statement-breakpoint
 ALTER TABLE "bank_match_journal_lines" ADD CONSTRAINT "bank_match_journal_lines_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "bank_match_journal_lines" ADD CONSTRAINT "bank_match_journal_lines_match_fk" FOREIGN KEY ("tenant_id","match_id") REFERENCES "public"."bank_matches"("tenant_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "bank_match_journal_lines" ADD CONSTRAINT "bank_match_journal_lines_line_fk" FOREIGN KEY ("tenant_id","journal_line_id") REFERENCES "public"."journal_lines"("tenant_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "bank_matches" ADD CONSTRAINT "bank_matches_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "bank_matches" ADD CONSTRAINT "bank_matches_account_fk" FOREIGN KEY ("tenant_id","account_id") REFERENCES "public"."accounts"("tenant_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "bank_statement_lines" ADD CONSTRAINT "bank_statement_lines_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint

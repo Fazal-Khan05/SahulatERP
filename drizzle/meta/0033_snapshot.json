@@ -112,21 +112,6 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
-        },
-        "bank_match_journal_lines_line_fk": {
-          "name": "bank_match_journal_lines_line_fk",
-          "tableFrom": "bank_match_journal_lines",
-          "tableTo": "journal_lines",
-          "columnsFrom": [
-            "tenant_id",
-            "journal_line_id"
-          ],
-          "columnsTo": [
-            "tenant_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},

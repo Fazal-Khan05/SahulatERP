@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, date, foreignKey, index, integer, numeric, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
-import { accounts, journalLines } from "../ledger/schema";
+import { accounts } from "../ledger/schema";
 import { tenants } from "../tenant/schema";
 
 // Step 35: a bank's statements, imported from the file the bank gives, and the matching of what
@@ -113,7 +113,8 @@ export const bankMatchJournalLines = pgTable(
   (t) => [
     uniqueIndex("bank_match_journal_lines_line_key").on(t.tenantId, t.journalLineId),
     foreignKey({ name: "bank_match_journal_lines_match_fk", columns: [t.tenantId, t.matchId], foreignColumns: [bankMatches.tenantId, bankMatches.id] }),
-    foreignKey({ name: "bank_match_journal_lines_line_fk", columns: [t.tenantId, t.journalLineId], foreignColumns: [journalLines.tenantId, journalLines.id] }),
+    // No foreign key to journal_lines: a posted journal line is never removed, and app.match_bank_lines
+    // checks each is this account's; a key would only stand in the ledger's own refusal of a TRUNCATE.
     index("bank_match_journal_lines_match_idx").on(t.tenantId, t.matchId),
   ],
 );

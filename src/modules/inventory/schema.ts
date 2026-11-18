@@ -22,7 +22,8 @@ export const stockMoves = pgTable(
     itemId: uuid("item_id").notNull(),
     warehouseId: uuid("warehouse_id").notNull(),
     moveDate: date("move_date", { mode: "string" }).notNull(),
-    // Above zero for goods coming in, below zero for goods leaving.
+    // Above zero for goods coming in, below zero for goods leaving; nothing for a move that
+    // only changes what the goods held are worth.
     quantity: numeric({ precision: 20, scale: 4 }).notNull(),
     // What the goods were worth, with the same sign as the quantity.
     value: numeric({ precision: 20, scale: 4 }).notNull(),
@@ -55,9 +56,10 @@ export const stockMoves = pgTable(
     index("stock_moves_tenant_item_idx").on(t.tenantId, t.itemId, t.warehouseId, t.createdAt),
     index("stock_moves_tenant_source_idx").on(t.tenantId, t.sourceType, t.sourceId),
     check("stock_moves_source_type_format", sql`${t.sourceType} ~ '^[a-z_]{2,40}$'`),
-    // "Not a number" passes ">= 0"; the bounds refuse it.
-    check("stock_moves_quantity_sane", sql`${t.quantity} <> 0 and ${t.quantity} > -1e12 and ${t.quantity} < 1e12`),
-    check("stock_moves_value_sane", sql`${t.value} > -1e16 and ${t.value} < 1e16 and (${t.value} = 0 or sign(${t.value}) = sign(${t.quantity}))`),
+    // "Not a number" passes ">= 0"; the bounds refuse it. A move with no quantity changes only
+    // what the goods held are worth: import charges spread over a shipment's goods (Step 28).
+    check("stock_moves_quantity_sane", sql`${t.quantity} > -1e12 and ${t.quantity} < 1e12 and (${t.quantity} <> 0 or ${t.value} <> 0)`),
+    check("stock_moves_value_sane", sql`${t.value} > -1e16 and ${t.value} < 1e16 and (${t.value} = 0 or ${t.quantity} = 0 or sign(${t.value}) = sign(${t.quantity}))`),
     check("stock_moves_after_sane", sql`${t.quantityAfter} >= 0 and ${t.quantityAfter} < 1e12 and ${t.valueAfter} >= 0 and ${t.valueAfter} < 1e16 and (${t.quantityAfter} > 0 or ${t.valueAfter} = 0)`),
     check("stock_moves_no_batches_yet", sql`${t.batchId} is null and ${t.serialId} is null`),
     check("stock_moves_not_own_reversal", sql`${t.reversesMoveId} is distinct from ${t.id}`),

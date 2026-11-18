@@ -253,6 +253,13 @@
       "when": 1795018242585,
       "tag": "0035_counter_sales",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1795020343324,
+      "tag": "0036_shipments",
+      "breakpoints": true
     }
   ]
 }

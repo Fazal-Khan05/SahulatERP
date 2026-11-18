@@ -502,7 +502,7 @@ describe.skipIf(!hasDb)("supplier returns", { timeout: 600_000 }, () => {
         await tx.execute(sql`select pg_sleep(1)`);
       });
       await waiting;
-      expect(await codeOf(as.owner, line(2, elsewhere.lineId, 5)), `round ${round}`).toBe("23503");
+      expect(await codeOf(as.owner, line(2, elsewhere.lineId, 5)), `round ${round}`).toBe("42501");
       await swap;
       const done = await getReturn(as.auditor, id);
       expect([done!.status, done!.lines.length], `round ${round}`).toEqual(["posted", 1]);

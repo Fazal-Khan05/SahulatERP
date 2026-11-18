@@ -24,11 +24,11 @@ const SELECT = "h-8 w-full min-w-0 rounded-lg border border-input bg-card px-2 t
 
 type Accounts = Awaited<ReturnType<typeof listPayingAccounts>>;
 
-function AccountSelect({ accounts, label }: { accounts: Accounts; label: string }) {
+function AccountSelect({ accounts, label, id = "accountId" }: { accounts: Accounts; label: string; id?: string }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <Label htmlFor="accountId">{label}</Label>
-      <select id="accountId" name="accountId" required defaultValue="" className={SELECT}>
+      <Label htmlFor={id}>{label}</Label>
+      <select id={id} name="accountId" required defaultValue="" className={SELECT}>
         <option value="" disabled>
           Choose a cash or bank account
         </option>
@@ -46,9 +46,9 @@ function RepayForm({ loan, accounts }: { loan: LoanRow; accounts: Accounts }) {
   return (
     <ActionForm action={repayLoanAction.bind(null, loan.id)} submitLabel="Record the repayment">
       <div className="grid gap-3 sm:grid-cols-3">
-        <Field label="Repaid on" name="date" type="date" defaultValue={todayIso(new Date())} max={todayIso(new Date())} required />
-        <Field label="Amount" name="amount" inputMode="decimal" defaultValue={loan.owed.toFixed(2)} required />
-        <AccountSelect accounts={accounts} label="Into" />
+        <Field label="Repaid on" name="date" id={`repaid-on-${loan.id}`} type="date" defaultValue={todayIso(new Date())} max={todayIso(new Date())} required />
+        <Field label="Amount" name="amount" id={`repaid-${loan.id}`} inputMode="decimal" defaultValue={loan.owed.toFixed(2)} required />
+        <AccountSelect accounts={accounts} label="Into" id={`into-${loan.id}`} />
       </div>
     </ActionForm>
   );

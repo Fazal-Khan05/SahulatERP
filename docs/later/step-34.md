@@ -61,6 +61,17 @@ twice (the form now sends one key, and the second is the first). Not fixed here,
 code: the chart of accounts screen says only "That did not work" when it is refused archiving a
 cash or bank account that holds money; the Cash and bank screen says it in words.
 
+A second look (2026-11-17) found three more, fixed: a form sent again with other figures under the
+same key is refused (SE342), not taken as the first; the check that an archived account is
+restored first reads and holds it in one statement; and the repeat check comes after every other
+check. On 2026-11-18 the guard on a bank account's details was found reading its account without
+holding it, the pattern the Builder's reviewer found on supplier bills: an unused bank account
+removed and put back under its id as another account meanwhile was refused only by the foreign
+key's timing. It now holds the account until the transaction ends and refuses details for one that
+is not there (two-session test in `cash-bank.test.ts`). Expense lines, withholdings and transfers
+have no such guard to fool: the app's role cannot write them; only the database's own functions
+do, and they hold what they write against.
+
 ## For other steps
 
 - **Step 29 (the withholding register, track B):** tax withheld from expenses is kept in

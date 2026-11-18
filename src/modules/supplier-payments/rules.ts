@@ -102,14 +102,19 @@ export type BillOwed = { billId: string; number: string; supplierInvoiceNo: stri
 /**
  * What a sum of money settles: each amount against a bill that is still owed at least that
  * much, dated on or before the day; in all no more than the money there is. What is left over
- * is an advance (of a payment) or stays an advance (of one being set against bills).
+ * is an advance (of a payment), stays an advance (of one being set against bills), or stays a
+ * credit with the supplier (of goods sent back, Step 27).
  */
-export function settle(available: Decimal, on: string, allocations: readonly Allocation[], owed: readonly BillOwed[], what: "the payment" | "what is left of the advance"): { ok: true; settled: Decimal; left: Decimal } | { ok: false; reason: string } {
+export function settle(available: Decimal, on: string, allocations: readonly Allocation[], owed: readonly BillOwed[], what: "the payment" | "what is left of the advance" | "what is left of the credit"): { ok: true; settled: Decimal; left: Decimal } | { ok: false; reason: string } {
   let settled = NIL;
   for (const wanted of allocations) {
     const bill = owed.find((row) => row.billId === wanted.billId);
     if (!bill) return { ok: false, reason: "A bill on the payment is not an unpaid bill of this supplier in this branch. Reload the page." };
-    if (bill.date > on) return { ok: false, reason: `${bill.number} is dated ${bill.date.split("-").reverse().join("-")}, after this day. Money paid before a bill is an advance: leave the bill out, and set the advance against it once the bill's day has come.` };
+    if (bill.date > on) {
+      const dated = `${bill.number} is dated ${bill.date.split("-").reverse().join("-")}, after this day.`;
+      if (what === "what is left of the credit") return { ok: false, reason: `${dated} A credit is set against a bill on or after the bill's day.` };
+      return { ok: false, reason: `${dated} Money paid before a bill is an advance: leave the bill out, and set the advance against it once the bill's day has come.` };
+    }
     if (wanted.amount.gt(bill.owed)) return { ok: false, reason: `${bill.number}: ${bill.owed.toFixed(2)} is still owed on it, so ${wanted.amount.toFixed(2)} cannot be set against it.` };
     settled = settled.plus(wanted.amount);
   }

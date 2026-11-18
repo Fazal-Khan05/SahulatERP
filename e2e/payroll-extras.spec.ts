@@ -150,7 +150,7 @@ test("the accountant approves it, downloads the bank file and takes the rest of 
   await page.goto(`/payroll/employees/${saraId}`);
   await expect(page.getByRole("heading", { name: "Final settlement" })).toBeVisible();
   await expect(page.getByTestId("final-settlement")).toContainText("is still owed, to be repaid in cash.");
-  const [owed] = await sql<{ owed: string }[]>`select (amount - recovered)::text as owed from public.staff_loans where employee_id = ${saraId}`;
+  const [owed] = await sql<{ owed: string }[]>`select (amount - recovered)::numeric(20,2)::text as owed from public.staff_loans where employee_id = ${saraId}`;
   await shown(page.getByLabel("Amount", { exact: true })).fill(owed.owed);
   await shown(page.getByLabel("Into")).selectOption({ label: "1111 Cash in hand" });
   await page.getByRole("button", { name: "Record the repayment" }).click();

@@ -9,7 +9,7 @@ import { openFiscalYear } from "@/modules/numbering/commands";
 import type { TenantContext } from "@/modules/tenant/rules";
 import { adminSql, deleteTenants, hasAdminDb, type AdminSql } from "../../../tests/support/admin-db";
 import { postBacked } from "../../../tests/support/journal";
-import { getCashFlow, getTrialBalance } from "./queries";
+import { getCashFlow, getOwnerFigures, getTrialBalance } from "./queries";
 import type { ReportFilter, ReportTable } from "./rules";
 
 // Step 36's cash-flow statement against a real database, through the app's own path: its net
@@ -112,6 +112,16 @@ describe.skipIf(!hasDb)("the cash-flow statement", () => {
     // A later period starts where this one ended.
     const later = await getCashFlow(as.owner, { ...HALF, from: "2027-01-01", to: "2027-01-31" });
     expect([cell(later, "Cash and bank at the start"), cell(later, "Net change in cash and bank")]).toEqual(["845000.00", "0.00"]);
+  });
+
+  it("gives the owner's figures as the reports show them, for the company and for a branch", async () => {
+    const money = (value: Decimal) => value.toFixed(2);
+    const all = await getOwnerFigures(as.owner, HALF);
+    // Cash and bank as the cash flow ends; sales 200,000; profit nil: 200,000 less rent 30,000, repairs 50,000 and cost of sales 120,000.
+    expect([all.cash, all.cashChange, all.sales, all.profit, all.receivables, all.payables].map(money)).toEqual(["845000.00", "845000.00", "200000.00", "0.00", "0.00", "0.00"]);
+    const city = await getOwnerFigures(as.owner, { ...HALF, branchId: cityBranch });
+    expect([city.cash, city.sales, city.profit].map(money)).toEqual(["170000.00", "200000.00", "170000.00"]);
+    await expect(getOwnerFigures(as.salesperson, HALF)).rejects.toThrow("Only an owner, an accountant or an auditor can see the ledger reports.");
   });
 
   it("is read by the owner, an accountant and the auditor only", async () => {

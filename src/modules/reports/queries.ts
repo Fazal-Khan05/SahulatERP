@@ -26,7 +26,7 @@ import {
   type Totals,
   REPORTS,
 } from "./rules";
-import { cashFlow, cashFlowTable, isCash, type CashFlowEntry } from "./cash-flow";
+import { cashFlow, cashFlowTable, isCash, ownerFigures, type CashFlowEntry, type OwnerFigures } from "./cash-flow";
 
 // The ledger reports, read straight from posted journal lines. Row-level security decides what
 // the reader may see: a member limited to some branches gets the books of those branches only.
@@ -145,6 +145,16 @@ export async function getCashFlow(ctx: TenantContext, filter: ReportFilter): Pro
     const entries = rows.map((row): CashFlowEntry => ({ journalId: row.journal_id, sourceType: row.source_type, accountId: row.account_id, net: new Decimal(row.net), inScope: row.in_scope }));
     return cashFlowTable(cashFlow(chart, entries, opening, closing), filter, REPORTS["cash-flow"].title);
   });
+}
+
+/**
+ * The owner's figures for a period and a branch (Step 36): what cash and bank hold at its end and
+ * how much that moved, sales, profit, and what customers and suppliers owe at its end. One read of
+ * the books; each figure is what the reports show.
+ */
+export async function getOwnerFigures(ctx: TenantContext, filter: ReportFilter): Promise<OwnerFigures> {
+  requireReportAccess(ctx);
+  return withTenant(ctx.userId, ctx.tenantId, async (tx) => ownerFigures(await reportAccounts(tx, ctx.tenantId), await selectTotals(tx, ctx.tenantId, filter)));
 }
 
 /** How many entries of one account a page of the general ledger shows. */

@@ -9,14 +9,14 @@ import { Label } from "@/components/ui/label";
 import { formatAmount } from "@/lib/money";
 
 type Choice = { id: string; label: string };
-type BillRow = { billId: string; number: string; supplierInvoiceNo: string; date: string; owed: string; amount: string };
+export type BillRow = { billId: string; number: string; supplierInvoiceNo: string; date: string; owed: string; amount: string };
 
 const SELECT = "h-8 w-full min-w-0 rounded-lg border border-input bg-card px-2 text-sm";
 const PLAIN = /^\d+(\.\d+)?$/;
 const money = (typed: string) => (PLAIN.test(typed.trim()) ? new Decimal(typed.trim()) : new Decimal(0));
 
-/** The supplier's unpaid bills, each with a box for how much of the money is set against it. */
-function BillsTable({ bills, onChange }: { bills: BillRow[]; onChange: (billId: string, amount: string) => void }) {
+/** The supplier's unpaid bills, each with a box for how much of the money (or of a return's credit) is set against it. */
+export function BillsTable({ bills, onChange, heading = "Paid now" }: { bills: BillRow[]; onChange: (billId: string, amount: string) => void; heading?: string }) {
   return (
     <div className="overflow-x-auto">
       <table aria-label="Bills to pay" className="w-full min-w-[640px] text-left text-sm">
@@ -26,7 +26,7 @@ function BillsTable({ bills, onChange }: { bills: BillRow[]; onChange: (billId: 
             <th className="py-2 pr-4 font-medium">Their invoice</th>
             <th className="py-2 pr-4 font-medium">Date</th>
             <th className="py-2 pr-4 text-right font-medium">Still owed</th>
-            <th className="w-36 py-2 text-right font-medium">Paid now</th>
+            <th className="w-36 py-2 text-right font-medium">{heading}</th>
           </tr>
         </thead>
         <tbody className="divide-y">
@@ -40,7 +40,7 @@ function BillsTable({ bills, onChange }: { bills: BillRow[]; onChange: (billId: 
               </td>
               <td className="py-1">
                 <input type="hidden" name="billId" value={bill.billId} />
-                <Input name="billAmount" aria-label={`Paid now, bill ${index + 1}`} value={bill.amount} onChange={(event) => onChange(bill.billId, event.target.value)} inputMode="decimal" autoComplete="off" className="text-right tabular-nums" />
+                <Input name="billAmount" aria-label={`${heading}, bill ${index + 1}`} value={bill.amount} onChange={(event) => onChange(bill.billId, event.target.value)} inputMode="decimal" autoComplete="off" className="text-right tabular-nums" />
               </td>
             </tr>
           ))}

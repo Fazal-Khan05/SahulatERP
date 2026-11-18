@@ -33,6 +33,9 @@ export const permissions = {
   // Step 26. Paying suppliers, their advances, and the challans tax withheld is paid under.
   "supplier_payment.read": ["owner", "accountant", "auditor"],
   "supplier_payment.manage": ["owner", "accountant"],
+  // Step 27. Goods sent back to a supplier, and what the supplier owes back for them.
+  "supplier_return.read": ["owner", "accountant", "auditor"],
+  "supplier_return.manage": ["owner", "accountant"],
 } as const satisfies TrackPermissions;
 
 /**

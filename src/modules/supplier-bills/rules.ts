@@ -155,13 +155,15 @@ export type ReceiptLineToBill = {
   unitCode: string;
   received: Decimal;
   billed: Decimal;
+  /** Sent back to the supplier before it was billed (Step 27); nothing where the field is left out. */
+  returned?: Decimal;
   orderCost: Decimal;
   taxCategoryId: string | null;
 };
 
-/** How much of a received line is still to be billed; never below nothing. */
-export function stillToBill(line: Pick<ReceiptLineToBill, "received" | "billed">): Decimal {
-  return Decimal.max(line.received.minus(line.billed), 0);
+/** How much of a received line is still to be billed: what arrived, less what was billed or sent back unbilled; never below nothing. */
+export function stillToBill(line: Pick<ReceiptLineToBill, "received" | "billed" | "returned">): Decimal {
+  return Decimal.max(line.received.minus(line.billed).minus(line.returned ?? 0), 0);
 }
 
 export type BillTaxTables = {
@@ -209,7 +211,9 @@ export function figureLines(draft: BillDraft, toBill: readonly ReceiptLineToBill
     if (!from) return { ok: false, reason: `${at}: these goods were not received from this supplier into this branch, or have been billed since. Reload the page.` };
     const left = stillToBill(from);
     if (wanted.quantity.gt(left)) {
-      return { ok: false, reason: from.billed.isZero() ? `${from.itemCode}: ${from.received.toFixed()} arrived on ${from.receiptNumber}, so ${wanted.quantity.toFixed()} cannot be billed.` : `${from.itemCode}: ${from.received.toFixed()} arrived on ${from.receiptNumber} and ${from.billed.toFixed()} has been billed, so only ${left.toFixed()} more can be billed.` };
+      const taken = from.billed.plus(from.returned ?? 0);
+      const how = from.returned?.gt(0) ? (from.billed.isZero() ? `${taken.toFixed()} has been sent back` : `${taken.toFixed()} has been billed or sent back`) : `${from.billed.toFixed()} has been billed`;
+      return { ok: false, reason: taken.isZero() ? `${from.itemCode}: ${from.received.toFixed()} arrived on ${from.receiptNumber}, so ${wanted.quantity.toFixed()} cannot be billed.` : `${from.itemCode}: ${from.received.toFixed()} arrived on ${from.receiptNumber} and ${how}, so only ${left.toFixed()} more can be billed.` };
     }
     const amount = paisa(wanted.quantity.times(wanted.unitPrice));
     const tax = lineTax(amount, wanted.taxCategoryId, draft.date, tables, at);

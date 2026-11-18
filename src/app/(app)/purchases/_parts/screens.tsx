@@ -40,6 +40,7 @@ const SECTIONS: readonly { href: string; label: string; permission: Permission }
   { href: "/purchases/receive", label: "Receive goods", permission: "goods_receipt.read" },
   { href: "/purchases/bills", label: "Supplier bills", permission: "supplier_bill.read" },
   { href: "/purchases/payments", label: "Supplier payments", permission: "supplier_payment.read" },
+  { href: "/purchases/returns", label: "Supplier returns", permission: "supplier_return.read" },
   { href: "/purchases/grni", label: "Goods received, not yet billed", permission: "purchase_order.read" },
   { href: "/purchases/withholding", label: "Withholding tax", permission: "supplier_bill.read" },
 ];
@@ -602,6 +603,13 @@ export async function ReceiptScreen({ params, searchParams }: { params: Promise<
             </tbody>
           </table>
         </div>
+        {receipt.status === "posted" && can(session.role, "supplier_return.manage") ? (
+          <p className="mt-4 text-sm">
+            <Link href={`/purchases/returns/new?receipt=${receipt.id}`} className="underline-offset-4 hover:underline">
+              Send goods from this note back to the supplier
+            </Link>
+          </p>
+        ) : null}
       </Card>
     </>
   );

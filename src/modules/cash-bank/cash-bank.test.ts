@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { setTimeout as sleep } from "node:timers/promises";
 import { sql } from "drizzle-orm";
+import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb, withTenant } from "@/db";
 import { setBaseCurrency } from "@/modules/currencies/commands";
@@ -9,6 +11,7 @@ import { createParty } from "@/modules/parties/commands";
 import { setWithholding } from "@/modules/supplier-bills/commands";
 import type { TenantContext } from "@/modules/tenant/rules";
 import { adminSql, deleteTenants, hasAdminDb, type AdminSql } from "../../../tests/support/admin-db";
+import { enterAs } from "../../../tests/support/identity";
 import { addCashBankAccount, archiveCashBankAccount, cancelExpense, cancelTransfer, recordExpense, recordTransfer, saveBankDetails } from "./commands";
 import { getExpense, getExpenseChoices, listCashBankAccounts, listExpenses, listTransfers } from "./queries";
 
@@ -56,6 +59,20 @@ const journal = async (number: string) =>
       where j.tenant_id = ${tenantA} and j.document_number = ${number} order by l.line_no`
   ).map((r) => r.line);
 const balanceOf = async (account: string) => (await listCashBankAccounts(as.owner)).find((a) => a.id === account)!.balance!.toFixed(2);
+/** A session of the app's own role, signed in as someone, inside a transaction left open: for two at once. */
+async function appSession(userId: string) {
+  const client = postgres(process.env.DATABASE_URL!, { max: 1, onnotice: () => {} });
+  const tx = await client.reserve();
+  await tx`begin`;
+  await enterAs(tx, userId, tenantA);
+  return {
+    tx,
+    end: async () => {
+      tx.release();
+      await client.end();
+    },
+  };
+}
 const account = async (code: string) => (await admin<{ id: string }[]>`select id from public.accounts where tenant_id = ${tenantA} and code = ${code}`)[0].id;
 
 describe.skipIf(!hasDb)("cash and bank: accounts, transfers and expenses", () => {
@@ -97,6 +114,35 @@ describe.skipIf(!hasDb)("cash and bank: accounts, transfers and expenses", () =>
     expect((await listCashBankAccounts(as.owner)).find((a) => a.id === bank)?.bankName).toBe("HBL");
     await expect(saveBankDetails(as.owner, cash, { bankName: "HBL" })).rejects.toThrow("Bank details belong to a bank account");
     await expect(addCashBankAccount(as.owner, { kind: "cash", name: "Till", bankName: "HBL" })).rejects.toThrow("A cash account has no bank");
+  });
+
+  it("holds the bank account while its details are written, so one removed and put back under its id meanwhile is refused", async () => {
+    const meezan = (await addCashBankAccount(as.owner, { kind: "bank", name: "Meezan current account" })).id;
+    const heading = (await admin<{ id: string }[]>`select id from public.accounts where tenant_id = ${tenantA} and code = '5200'`)[0].id;
+    // The owner removes the new bank account and puts an expense account in under its id, and has
+    // not committed yet; an accountant, in a session of their own, gives it bank details meanwhile.
+    const swapper = await appSession(userIds.owner);
+    const writer = await appSession(userIds.accountant);
+    try {
+      await swapper.tx`delete from public.accounts where id = ${meezan}`;
+      await swapper.tx`insert into public.accounts (id, tenant_id, parent_id, code, name, type, is_group, is_control, created_by)
+        values (${meezan}, ${tenantA}, ${heading}, '5299', 'Not a bank', 'expense', false, false, ${userIds.owner})`;
+      const details = writer.tx`insert into public.cash_bank_accounts (tenant_id, account_id, bank_name, created_by, updated_by)
+        values (${tenantA}, ${meezan}, 'Meezan Bank', ${userIds.accountant}, ${userIds.accountant})`.then(
+        () => "written",
+        (error: unknown) => (error as { code?: string }).code ?? "unknown",
+      );
+      expect(await Promise.race([details, sleep(500).then(() => "waiting")])).toBe("waiting");
+      await swapper.tx`commit`;
+      // The guard itself refuses, having found no bank account: it does not leave it to the foreign key.
+      expect(await details).toBe("SE330");
+      await writer.tx`rollback`;
+    } finally {
+      await swapper.end();
+      await writer.end();
+    }
+    const [row] = await admin<{ n: number }[]>`select count(*)::int as n from public.cash_bank_accounts where account_id = ${meezan}`;
+    expect(row.n).toBe(0);
   });
 
   it("moves money between two accounts, and takes a transfer back by a reversal", async () => {

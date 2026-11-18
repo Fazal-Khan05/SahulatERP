@@ -259,9 +259,10 @@ BEGIN
   END IF;
   NEW.updated_at := clock_timestamp();
   NEW.updated_by := app.current_user_id();
-  IF NOT EXISTS (
-    SELECT 1 FROM public.accounts a WHERE a.tenant_id = NEW.tenant_id AND a.id = NEW.account_id AND a.control_type = 'bank' AND NOT a.is_group
-  ) THEN
+  -- Held until the transaction ends, so the account is not removed (and another put in under its
+  -- id) meanwhile: a removal that comes first is waited for, and then the details are refused.
+  PERFORM 1 FROM public.accounts a WHERE a.tenant_id = NEW.tenant_id AND a.id = NEW.account_id AND a.control_type = 'bank' AND NOT a.is_group FOR SHARE;
+  IF NOT FOUND THEN
     RAISE EXCEPTION 'bank details belong to a bank account' USING ERRCODE = 'SE330';
   END IF;
   RETURN NEW;

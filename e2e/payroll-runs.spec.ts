@@ -42,7 +42,9 @@ test.afterAll(async () => {
   await sql.end();
 });
 
-test("the payroll administrator works the month out, is told who cannot be paid, and reviews it", async ({ page }) => {
+let rashidId: string;
+
+test("the owner sets the company up, with two people on the payroll", async ({ page }) => {
   await signIn(page, owner);
   await createCompany(page, "E2E Payroll Runs Traders");
   tenantId = (await sql<{ id: string }[]>`select id from public.tenants where created_by = ${owner.id}`)[0].id;
@@ -58,7 +60,10 @@ test("the payroll administrator works the month out, is told who cannot be paid,
   await sql`insert into public.employee_pay (tenant_id, employee_id, component, amount, effective_from, created_by, updated_by) values (${tenantId}, ${imran.id}, 'basic', 150000, ${taxYearStart()}, ${owner.id}, ${owner.id})`;
   const [rashid] = await sql<{ id: string }[]>`insert into public.employees (tenant_id, code, name, province, pay_basis, joined_on, created_by, updated_by)
     values (${tenantId}, 'D-001', 'Rashid Khan', 'sindh', 'daily', ${`${thisMonth()}-01`}, ${owner.id}, ${owner.id}) returning id`;
+  rashidId = rashid.id;
+});
 
+test("the payroll administrator works the month out, is told who cannot be paid, and reviews it", async ({ page }) => {
   await signIn(page, clerk);
   await rail(page).getByRole("link", { name: "Payroll runs", exact: true }).click();
   await expect(page).toHaveURL(/\/payroll\/runs$/);
@@ -68,8 +73,8 @@ test("the payroll administrator works the month out, is told who cannot be paid,
   await expect(shown(page.getByTestId("form-error"))).toHaveText("Nothing was worked out. One person needs putting right first: D-001 Rashid Khan has no daily wage on record for this month.");
 
   // Rashid's wage, and ten days worked this month.
-  await sql`insert into public.employee_pay (tenant_id, employee_id, component, amount, effective_from, created_by, updated_by) values (${tenantId}, ${rashid.id}, 'daily_wage', 1600, ${`${thisMonth()}-01`}, ${owner.id}, ${owner.id})`;
-  await sql`insert into public.employee_attendance (tenant_id, employee_id, month, days_worked, unpaid_days, created_by, updated_by) values (${tenantId}, ${rashid.id}, ${`${thisMonth()}-01`}, 10, 0, ${owner.id}, ${owner.id})`;
+  await sql`insert into public.employee_pay (tenant_id, employee_id, component, amount, effective_from, created_by, updated_by) values (${tenantId}, ${rashidId}, 'daily_wage', 1600, ${`${thisMonth()}-01`}, ${owner.id}, ${owner.id})`;
+  await sql`insert into public.employee_attendance (tenant_id, employee_id, month, days_worked, unpaid_days, created_by, updated_by) values (${tenantId}, ${rashidId}, ${`${thisMonth()}-01`}, 10, 0, ${owner.id}, ${owner.id})`;
   await page.getByRole("button", { name: "Work out", exact: true }).click();
   await expect(page.getByRole("heading", { name: `Payroll for ${monthName()}` })).toBeVisible();
   runId = page.url().split("/").pop()!;

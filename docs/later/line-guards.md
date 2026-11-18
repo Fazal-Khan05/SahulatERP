@@ -1,8 +1,9 @@
 # The line guards (joint migration 0033_line_guards)
 
 Written by the Builder on 2026-11-18, at the coordinator's request, while the founder was away.
-**Not on the shared development database and not merged**: it replaces functions that other
-steps and tracks wrote, so it needs the founder's own yes.
+It replaces functions that other steps and tracks wrote, so it waited for the founder's own yes.
+He gave it on 2026-11-18 (relayed by the coordinator), and the coordinator applied it to the
+shared development database that day.
 
 ## The hole
 

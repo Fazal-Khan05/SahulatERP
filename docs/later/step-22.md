@@ -136,3 +136,10 @@ triggers always on, as their neighbours are. Opening balances can still name the
   module is shared code and does not put that refusal into words. A shared change.
 - **Opening balances naming the walk-in customer** are not refused (the opening module is shared
   code); a walk-in buyer's debt from before the books opened would sit there uncollected.
+
+## On top of this step: Stock in the accountant's menu
+
+The founder's decision of 2026-11-18, relayed by the coordinator: the accountant's menu gets
+**Stock**, between Suppliers and Items (the accountant already reads stock, `stock.read`). A small
+change of its own in `src/modules/tenant/rules.ts`, with its unit test and a browser test in
+`e2e/shell.spec.ts` (an accountant signs in, sees the menu, and reaches the stock from it).

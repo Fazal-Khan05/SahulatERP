@@ -354,6 +354,8 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
         ["Price lists", "sales", "/price-lists"],
         ["Bills and payments", "purchasing", LINKS.billsAndPayments],
         ["Suppliers", "purchasing", "/suppliers"],
+        // The founder's decision of 2026-11-18: the accountant sees the stock the books value.
+        ["Stock", "inventory", LINKS.stock],
         ["Items", "inventory", "/items"],
         ["Bank and cash", "cash_bank", LINKS.cashAndBank],
         ["Chart of accounts", null, "/settings/accounts"],

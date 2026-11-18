@@ -168,6 +168,7 @@ describe("the worked example: November 2026", () => {
       tax: "6096.25",
       eobiEmployee: "407.00",
       deductions: "5000.00",
+      loanRecovery: "0.00",
       net: "388996.75",
       employerEobi: "2035.00",
       employerSocialSecurity: "4980.00",

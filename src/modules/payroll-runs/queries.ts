@@ -21,6 +21,7 @@ export type RunFigures = {
   tax: Decimal;
   eobiEmployee: Decimal;
   deductions: Decimal;
+  loanRecovery: Decimal;
   net: Decimal;
   employerEobi: Decimal;
   employerSocialSecurity: Decimal;
@@ -34,6 +35,7 @@ const figures = (row: typeof payrollRuns.$inferSelect): RunFigures => ({
   tax: exact(row.tax),
   eobiEmployee: exact(row.eobiEmployee),
   deductions: exact(row.deductions),
+  loanRecovery: exact(row.loanRecovery),
   net: exact(row.net),
   employerEobi: exact(row.employerEobi),
   employerSocialSecurity: exact(row.employerSocialSecurity),

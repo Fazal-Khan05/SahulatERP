@@ -91,7 +91,10 @@ export function commissionOf(basis: CommissionBasis): { gross: Decimal; owed: De
 // ── The payslip ─────────────────────────────────────────────────────────────────────────────────
 
 export type LineKind = "earning" | "deduction" | "employer";
-export type PayslipLine = { kind: LineKind; code: string; label: string; amount: Decimal };
+export type PayslipLine = { kind: LineKind; code: string; label: string; amount: Decimal; loanId?: string };
+
+/** A loan to the person still owed on, oldest first (Step 42): what comes off each month, and what is left. */
+export type OpenLoan = { id: string; number: string; instalment: Decimal; owed: Decimal };
 
 export type PayslipEmployee = {
   id: string;
@@ -116,6 +119,8 @@ export type PayslipInput = {
   rates: readonly StatutoryRow[];
   /** The commission due to the person's login; NO_COMMISSION for someone with no login. */
   commission: CommissionBasis;
+  /** Their loans still owed on (Step 42); none when left out. */
+  loans?: readonly OpenLoan[];
   /** What their approved payslips earlier in the tax year came to: taxable pay, the tax deducted from it, and how many months they cover. */
   before: { taxable: Decimal; tax: Decimal; months: number };
 };
@@ -136,6 +141,8 @@ export type Payslip = {
   tax: Decimal;
   eobiEmployee: Decimal;
   deductions: Decimal;
+  /** Of the deductions, what comes back on loans (Step 42). */
+  loanRecovery: Decimal;
   net: Decimal;
   employerEobi: Decimal;
   employerSocialSecurity: Decimal;
@@ -279,14 +286,27 @@ export function workOutPayslip(input: PayslipInput): { ok: true; payslip: Paysli
   const eobiEmployee = Decimal.min(eobiDue, left);
   left = left.minus(eobiEmployee);
   const fixed = employee.payBasis === "monthly" ? (pay.get("fixed_deduction") ?? NIL) : NIL;
-  const deductions = Decimal.min(fixed, left);
-  left = left.minus(deductions);
+  const fixedTaken = Decimal.min(fixed, left);
+  left = left.minus(fixedTaken);
+  // Loans last, oldest first: each month's instalment, or all that is owed when they leave this
+  // month (final settlement), as far as the pay goes. What the pay cannot cover stays owed.
+  const loanLines: PayslipLine[] = [];
+  for (const loan of input.loans ?? []) {
+    const due = Decimal.min(leaving ? loan.owed : loan.instalment, loan.owed);
+    const take = Decimal.min(due, left);
+    if (take.lte(0)) continue;
+    loanLines.push({ kind: "deduction", code: "loan", label: take.lt(due) ? `Loan ${loan.number}, ${take.toFixed(2)} of ${due.toFixed(2)}` : `Loan ${loan.number}`, amount: take, loanId: loan.id });
+    left = left.minus(take);
+  }
+  const loanRecovery = loanLines.reduce((t, line) => t.plus(line.amount), NIL);
+  const deductions = fixedTaken.plus(loanRecovery);
 
   if (tax.gt(0)) lines.push({ kind: "deduction", code: "income_tax", label: "Income tax (s.149)", amount: tax });
   if (eobiEmployee.gt(0)) lines.push({ kind: "deduction", code: "eobi_employee", label: "EOBI, employee's share", amount: eobiEmployee });
-  if (deductions.gt(0)) {
-    lines.push({ kind: "deduction", code: "fixed_deduction", label: deductions.lt(fixed) ? `Fixed deduction, ${deductions.toFixed(2)} of ${fixed.toFixed(2)}` : "Fixed deduction", amount: deductions });
+  if (fixedTaken.gt(0)) {
+    lines.push({ kind: "deduction", code: "fixed_deduction", label: fixedTaken.lt(fixed) ? `Fixed deduction, ${fixedTaken.toFixed(2)} of ${fixed.toFixed(2)}` : "Fixed deduction", amount: fixedTaken });
   }
+  lines.push(...loanLines);
   if (employerEobi.gt(0)) lines.push({ kind: "employer", code: "eobi_employer", label: "EOBI, employer's share", amount: employerEobi });
   if (employerSocialSecurity.gt(0)) lines.push({ kind: "employer", code: "social_security_employer", label: "Social security, employer's share", amount: employerSocialSecurity });
 
@@ -307,6 +327,7 @@ export function workOutPayslip(input: PayslipInput): { ok: true; payslip: Paysli
       tax,
       eobiEmployee,
       deductions,
+      loanRecovery,
       net: left,
       employerEobi,
       employerSocialSecurity,
@@ -334,6 +355,7 @@ export function runTotals(payslips: readonly Payslip[]) {
     tax: total((p) => p.tax),
     eobiEmployee: total((p) => p.eobiEmployee),
     deductions: total((p) => p.deductions),
+    loanRecovery: total((p) => p.loanRecovery),
     net: total((p) => p.net),
     employerEobi: total((p) => p.employerEobi),
     employerSocialSecurity: total((p) => p.employerSocialSecurity),
@@ -346,13 +368,15 @@ export function runTotals(payslips: readonly Payslip[]) {
  * comes out of Commission payable, where it was expensed when earned; what the people take home,
  * the tax and the EOBI and social security are owed.
  */
-export function approvalJournal(totals: ReturnType<typeof runTotals>): { account: string; debit: Decimal; credit: Decimal }[] {
-  const salaries = totals.earnings.minus(totals.deductions);
+export function approvalJournal(totals: Omit<ReturnType<typeof runTotals>, "loanRecovery"> & { loanRecovery?: Decimal }): { account: string; debit: Decimal; credit: Decimal }[] {
+  // Instalments on loans go back to the loans, not off the salaries' cost (Step 42).
+  const salaries = totals.earnings.minus(totals.deductions.minus(totals.loanRecovery ?? NIL));
   const employer = totals.employerEobi.plus(totals.employerSocialSecurity);
   const lines = [
     { account: "Salaries and wages", debit: Decimal.max(salaries, NIL), credit: Decimal.max(salaries.neg(), NIL) },
     { account: "Employer EOBI and social security", debit: employer, credit: NIL },
     { account: "Commission payable", debit: totals.commission, credit: NIL },
+    { account: "Loans and advances to staff", debit: NIL, credit: totals.loanRecovery ?? NIL },
     { account: "Salaries payable", debit: NIL, credit: totals.net },
     { account: "Income tax withheld payable", debit: NIL, credit: totals.tax },
     { account: "EOBI and social security payable", debit: NIL, credit: totals.eobiEmployee.plus(employer) },

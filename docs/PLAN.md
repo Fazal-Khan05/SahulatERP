@@ -150,7 +150,7 @@ Fifty-two steps in nine phases. Phases finish in order; steps inside a phase mos
 | 24 | Purchase order and GRN (partial), goods-received-not-billed accrual | GRN without bill shows in the GRNI report at cost | Done 2026-11-15 |
 | 25 | Supplier bill: match to GRNs, input tax by supplier STRN, s.153 income-tax withholding by supplier type and ATL, Eleventh Schedule sales-tax withholding, provincial services tax on service bills; `withholding_entries` | A Rs 100,000 goods bill from a non-ATL company withholds 10% and posts to the withholding payable account | Done 2026-11-17 |
 | 26 | Supplier payments with withholding deducted, challan recording, supplier advances in foreign currency with revaluation | Payment of a bill with an advance applied nets correctly | Done 2026-11-18 |
-| 27 | Supplier returns (debit notes) | Reverses GRNI or AP as appropriate | |
+| 27 | Supplier returns (debit notes) | Reverses GRNI or AP as appropriate | Done 2026-11-18 |
 | 28 | Shipments: status flow, GD number/date, port, container, LC number; shipment charges with the five classes; landed-cost allocation by value/qty/weight/volume; late charges re-allocate and adjust inventory and COGS | Port the old allocation tests; a late freight bill adjusts remaining stock and COGS of sold units | |
 | 29 | Reports: aged payables, supplier statement, withholding register, s.165 quarterly export, GRNI | Withholding register totals equal withholding payable | |
 

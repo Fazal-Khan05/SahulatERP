@@ -95,6 +95,9 @@ async function TopBar() {
             New company
           </Link>
         ) : null}
+        <Link href="/account" className="text-sm text-muted-foreground underline underline-offset-4 max-md:hidden">
+          Your account
+        </Link>
         <ActionForm action={signOutAction} submitLabel="Sign out" compact />
       </div>
     </>

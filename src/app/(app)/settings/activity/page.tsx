@@ -4,57 +4,11 @@ import { PageLoading } from "@/components/page-loading";
 import { Card } from "@/components/page-parts";
 import { requireTenant } from "@/lib/auth/session";
 import { formatDateTime } from "@/lib/format";
+import { ACTION_LABELS } from "@/modules/tenant/activity-labels";
 import { listActivity } from "@/modules/tenant/queries";
 import { ROLE_LABELS, can } from "@/modules/tenant/rules";
 
 export const metadata: Metadata = { title: "Activity — SahulatERP" };
-
-const ACTION_LABELS: Record<string, string> = {
-  "auth.sign_in": "Signed in",
-  "auth.sign_out": "Signed out",
-  "auth.password_set": "Set a new password",
-  "tenant.create": "Created the company",
-  "branch.create": "Added a branch",
-  "member.invite": "Invited a member",
-  "member.add": "Was added as a member",
-  "settings.update": "Changed the product name or logo",
-  "module.update": "Switched a module",
-  "file.upload": "Added a file",
-  "currency.set_base": "Chose the base currency",
-  "currency.add": "Added a currency",
-  "exchange_rate.set": "Set an exchange rate",
-  "tax_category.add": "Added a tax category",
-  "tax_rate.set": "Set a sales tax rate",
-  "withholding_rule.set": "Set a withholding rate",
-  "customer.create": "Added a customer",
-  "customer.update": "Changed a customer",
-  "customer.archive": "Archived a customer",
-  "customer.restore": "Restored a customer",
-  "customer.import": "Imported customers",
-  "supplier.create": "Added a supplier",
-  "supplier.update": "Changed a supplier",
-  "supplier.archive": "Archived a supplier",
-  "supplier.restore": "Restored a supplier",
-  "supplier.import": "Imported suppliers",
-  "unit.add": "Added a unit",
-  "item_category.add": "Added an item category",
-  "item.create": "Added an item",
-  "item.update": "Changed an item",
-  "item.archive": "Archived an item",
-  "item.restore": "Restored an item",
-  "item.import": "Imported items",
-  "item_unit.set": "Set an item's other unit",
-  "item_unit.remove": "Removed an item's other unit",
-  "price_list.create": "Added a price list",
-  "price_list.set_default": "Chose the default price list",
-  "price.set": "Set a price",
-  "warehouse.create": "Added a warehouse",
-  "fiscal_year.open": "Opened a fiscal year",
-  "fiscal_period.lock": "Locked a period",
-  "fiscal_period.unlock": "Unlocked a period",
-  "company.setup": "Finished setting up the company",
-  "job.enqueue": "Queued background work",
-};
 
 function details(after: unknown): string {
   if (!after || typeof after !== "object") return "";

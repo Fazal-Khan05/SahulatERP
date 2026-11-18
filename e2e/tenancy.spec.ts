@@ -2,7 +2,7 @@ import { expect, type Page } from "@playwright/test";
 import { sendPendingInvitations } from "../scripts/lib/invitations.mjs";
 import { adminSql, type AdminSql } from "../tests/support/admin-db";
 import { createUser, emailFor, emailLink, hasE2EEnv, randomPassword, type TestUser } from "./support/admin";
-import { isServerAction, signIn, test } from "./support/ui";
+import { giveCode, isServerAction, signIn, test } from "./support/ui";
 
 // Step 2 acceptance: two companies with one owner each cannot see each other's rows through the
 // screens or through any server action, and signing in writes an audit row. The tests run in
@@ -144,6 +144,8 @@ test("a second person signing in on the same tab sees nothing of the first", asy
   await page.getByLabel("Email").fill(ownerB.email);
   await page.getByLabel("Password").fill(ownerB.password);
   await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(/\/two-step$/);
+  await giveCode(page, ownerB);
   await expect(page.getByTestId("company-name")).toHaveText(BETA);
 
   await page.getByRole("link", { name: "Settings" }).click();
@@ -355,6 +357,9 @@ test("a reset link sets a new password, works once, and the old password stops w
   await page.goto(link.url);
   await expect(page.getByText(`This link signs you in as ${ownerB.email}.`)).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
+  // The link alone is not enough for an account with an authenticator app: its code comes first.
+  await expect(page).toHaveURL(/\/two-step\?next=%2Freset-password$/);
+  await giveCode(page, ownerB);
   await expect(page).toHaveURL(/\/reset-password$/);
   await expect(page.getByText(`For ${ownerB.email}`)).toBeVisible();
 
@@ -383,6 +388,6 @@ test("a reset link sets a new password, works once, and the old password stops w
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByTestId("form-error")).toHaveText("The email or password is not right.");
 
-  await signIn(page, { email: ownerB.email, password: newPassword });
+  await signIn(page, { ...ownerB, password: newPassword });
   await expect(page.getByTestId("company-name")).toHaveText(BETA);
 });

@@ -6,3 +6,6 @@ export const sessionCookieOptions = {
   secure: process.env.NODE_ENV === "production",
   path: "/",
 } as const;
+
+/** When this browser last made a request while signed in (seconds since 1970); see src/proxy.ts. */
+export const LAST_ACTIVE_COOKIE = "last_active";

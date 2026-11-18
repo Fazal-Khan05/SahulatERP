@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, like, sql } from "drizzle-orm";
 import { enterTenant, isUuid, withTenant, type Tx } from "@/db";
 import { UserError } from "@/lib/errors";
 import {
@@ -193,6 +193,15 @@ export async function listPendingInvitations(ctx: TenantContext) {
 
 /** The most recent audit rows, with the actor's email where the reader may see it. */
 export async function listActivity(ctx: TenantContext, limit = 100) {
+  return selectActivity(ctx, limit, false);
+}
+
+/** The most recent sign-ins, sign-outs, password and two-step changes of the company's members. */
+export async function listSignIns(ctx: TenantContext, limit = 200) {
+  return selectActivity(ctx, limit, true);
+}
+
+async function selectActivity(ctx: TenantContext, limit: number, signInsOnly: boolean) {
   if (!can(ctx.role, "audit.read")) throw new UserError("Only an owner or an auditor can see the activity log.");
   return withTenant(ctx.userId, ctx.tenantId, (tx) =>
     tx
@@ -211,7 +220,11 @@ export async function listActivity(ctx: TenantContext, limit = 100) {
         memberships,
         and(eq(memberships.tenantId, auditLog.tenantId), eq(memberships.userId, auditLog.actorUserId)),
       )
-      .where(eq(auditLog.tenantId, ctx.tenantId))
+      .where(
+        signInsOnly
+          ? and(eq(auditLog.tenantId, ctx.tenantId), like(auditLog.action, "auth.%"))
+          : eq(auditLog.tenantId, ctx.tenantId),
+      )
       .orderBy(desc(auditLog.at))
       .limit(limit),
   );

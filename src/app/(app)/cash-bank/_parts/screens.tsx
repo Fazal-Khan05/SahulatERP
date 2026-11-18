@@ -19,10 +19,10 @@ const SELECT = "h-8 w-full min-w-0 rounded-lg border border-input bg-card px-2 t
 const EXPENSE_ROWS = 5;
 
 /** Why this member cannot open the cash and bank screens, or null. */
-const closed = (session: Session) =>
+export const closed = (session: Session) =>
   !session.modules.cash_bank ? "Cash and bank is switched off for this company." : !can(session.role, "cash_bank.read") ? "Your role does not include cash and bank." : null;
 
-function Shut({ title, why }: { title: string; why: string }) {
+export function Shut({ title, why }: { title: string; why: string }) {
   return (
     <>
       <PageHead title={title} />
@@ -31,7 +31,7 @@ function Shut({ title, why }: { title: string; why: string }) {
   );
 }
 
-function CashNav({ here }: { here: "accounts" | "transfers" | "expenses" }) {
+export function CashNav({ here }: { here: "accounts" | "transfers" | "expenses" | "reconcile" }) {
   const tab = (key: typeof here, href: string, label: string) => (
     <Link
       href={href}
@@ -46,6 +46,7 @@ function CashNav({ here }: { here: "accounts" | "transfers" | "expenses" }) {
       {tab("accounts", "/cash-bank", "Accounts")}
       {tab("transfers", "/cash-bank/transfers", "Transfers")}
       {tab("expenses", "/cash-bank/expenses", "Expenses")}
+      {tab("reconcile", "/cash-bank/reconcile", "Reconcile")}
     </nav>
   );
 }

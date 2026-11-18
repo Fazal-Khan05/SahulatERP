@@ -63,6 +63,13 @@ export const documents = {
 /** This track's reports, listed on the Reports page under headings of its own. */
 export const reports: readonly ReportSection[] = [
   {
+    title: "Cash and bank",
+    reports: [
+      // Step 35. Each bank account's statements matched with the books.
+      { label: "Bank reconciliation", href: "/cash-bank/reconcile", about: "Each bank account's statements from the bank, matched with the books: what is still to come through, and whether the books agree with the bank.", permission: "cash_bank.read", module: "cash_bank" },
+    ],
+  },
+  {
     title: "Commissions",
     reports: [
       // The accountant's menu has no Commissions entry; this is how an accountant reaches the plans.

@@ -49,6 +49,7 @@ import {
   type Totals,
 } from "./rules";
 import { salesDocumentLinks, salesDocuments, salesLineSalespeople, salesLines } from "./schema";
+import { WALK_IN_AT_COUNTER, isWalkInCustomer } from "@/modules/counter-sales/queries";
 
 function requireManager(ctx: TenantContext): void {
   if (!can(ctx.role, "sales.manage")) throw new UserError("Your role cannot write sales documents.");
@@ -217,39 +218,45 @@ export async function saveSalesDraft(ctx: TenantContext, id: unknown, raw: RawDo
   if (!read.ok) throw new UserError(read.reason);
   const draft = read.draft;
   return withTenant(ctx.userId, ctx.tenantId, async (tx) => {
-    const existing = id === null || id === undefined || id === "" ? null : await lockDocument(tx, ctx, id, loadedAt);
-    if (existing && existing.status !== "draft") {
-      throw new UserError(existing.status === "on_hold" ? "This order is waiting for approval. Take it back to a draft to change it." : "This document is submitted and cannot be changed. Cancel it and write a new one.");
-    }
-    if (existing && existing.kind !== draft.kind) throw new UserError(`This is a ${KIND_LABELS[existing.kind].toLowerCase()}; what a document is never changes.`);
-    // A salesperson sees a document they wrote or one filed under them; giving away one they
-    // did not write would take it out of their own sight halfway through the save.
-    if (existing && ctx.role === "salesperson" && existing.createdBy !== ctx.userId && leadSalesperson(draft.shares) !== ctx.userId) {
-      throw new UserError("Salespeople: this sale was written for you by someone else, so the largest share stays yours. A sales manager can give it to someone else.");
-    }
-    const worked = await workOut(tx, ctx, draft);
-    await requireSalesPeople(tx, draft.shares);
-    const changes = priceChanges(worked.lines);
-    const after = { ...describe(draft.kind, worked.customer.name, draft.date, worked.lines.length, worked.totals.total), ...(changes.length > 0 ? { priceChanges: changes } : {}) };
-    if (!existing) {
-      const [row] = await tx
-        .insert(salesDocuments)
-        .values({ tenantId: ctx.tenantId, kind: draft.kind, ...header(draft, worked, draft.shares), createdBy: ctx.userId, updatedBy: ctx.userId })
-        .returning({ id: salesDocuments.id, updatedAt: salesDocuments.updatedAt });
-      await writeLines(tx, ctx, row.id, worked.lines, draft.shares);
-      await audit(tx, ctx, { action: `sales_${draft.kind}.create`, entity: "sales_document", entityId: row.id, after });
-      return row;
-    }
-    // The lines first: the header's row is held, and its totals must describe the lines it ends with.
-    await writeLines(tx, ctx, existing.id, worked.lines, draft.shares);
-    const [saved] = await tx
-      .update(salesDocuments)
-      .set({ ...header(draft, worked, draft.shares), updatedAt: sql`now()`, updatedBy: ctx.userId })
-      .where(and(eq(salesDocuments.tenantId, ctx.tenantId), eq(salesDocuments.id, existing.id)))
-      .returning({ id: salesDocuments.id, updatedAt: salesDocuments.updatedAt });
-    await audit(tx, ctx, { action: `sales_${draft.kind}.update`, entity: "sales_document", entityId: existing.id, before: describeStored(existing), after });
-    return saved;
+    if (await isWalkInCustomer(tx, ctx.tenantId, draft.customerId)) throw new UserError(WALK_IN_AT_COUNTER);
+    return saveSalesDraftIn(tx, ctx, id, draft, loadedAt);
   });
+}
+
+/** The work of saveSalesDraft, in the caller's transaction. A counter sale (Step 22) writes its order with it. */
+export async function saveSalesDraftIn(tx: Tx, ctx: TenantContext, id: unknown, draft: Draft, loadedAt?: unknown): Promise<{ id: string; updatedAt: Date }> {
+  const existing = id === null || id === undefined || id === "" ? null : await lockDocument(tx, ctx, id, loadedAt);
+  if (existing && existing.status !== "draft") {
+    throw new UserError(existing.status === "on_hold" ? "This order is waiting for approval. Take it back to a draft to change it." : "This document is submitted and cannot be changed. Cancel it and write a new one.");
+  }
+  if (existing && existing.kind !== draft.kind) throw new UserError(`This is a ${KIND_LABELS[existing.kind].toLowerCase()}; what a document is never changes.`);
+  // A salesperson sees a document they wrote or one filed under them; giving away one they
+  // did not write would take it out of their own sight halfway through the save.
+  if (existing && ctx.role === "salesperson" && existing.createdBy !== ctx.userId && leadSalesperson(draft.shares) !== ctx.userId) {
+    throw new UserError("Salespeople: this sale was written for you by someone else, so the largest share stays yours. A sales manager can give it to someone else.");
+  }
+  const worked = await workOut(tx, ctx, draft);
+  await requireSalesPeople(tx, draft.shares);
+  const changes = priceChanges(worked.lines);
+  const after = { ...describe(draft.kind, worked.customer.name, draft.date, worked.lines.length, worked.totals.total), ...(changes.length > 0 ? { priceChanges: changes } : {}) };
+  if (!existing) {
+    const [row] = await tx
+      .insert(salesDocuments)
+      .values({ tenantId: ctx.tenantId, kind: draft.kind, ...header(draft, worked, draft.shares), createdBy: ctx.userId, updatedBy: ctx.userId })
+      .returning({ id: salesDocuments.id, updatedAt: salesDocuments.updatedAt });
+    await writeLines(tx, ctx, row.id, worked.lines, draft.shares);
+    await audit(tx, ctx, { action: `sales_${draft.kind}.create`, entity: "sales_document", entityId: row.id, after });
+    return row;
+  }
+  // The lines first: the header's row is held, and its totals must describe the lines it ends with.
+  await writeLines(tx, ctx, existing.id, worked.lines, draft.shares);
+  const [saved] = await tx
+    .update(salesDocuments)
+    .set({ ...header(draft, worked, draft.shares), updatedAt: sql`now()`, updatedBy: ctx.userId })
+    .where(and(eq(salesDocuments.tenantId, ctx.tenantId), eq(salesDocuments.id, existing.id)))
+    .returning({ id: salesDocuments.id, updatedAt: salesDocuments.updatedAt });
+  await audit(tx, ctx, { action: `sales_${draft.kind}.update`, entity: "sales_document", entityId: existing.id, before: describeStored(existing), after });
+  return saved;
 }
 
 /** Throws a draft away. A submitted document is never removed. */
@@ -274,7 +281,7 @@ export class NeedsReason extends UserError {}
 export type SubmitResult = { status: "submitted"; number: string } | { status: "on_hold"; message: string };
 
 /** What the database's own refusals mean, for the few that can still happen after the checks here. */
-function submitRefusal(error: unknown): UserError | null {
+export function submitRefusal(error: unknown): UserError | null {
   const code = pgCode(error);
   if (code === "SE051") return new UserError("This order takes the customer over the credit limit. Only the owner can approve it.");
   if (code === "SE053") return new UserError("Give the reason for approving this order over the credit limit.");
@@ -326,7 +333,7 @@ export async function submitProblem(ctx: TenantContext, id: unknown): Promise<{ 
   return null;
 }
 
-async function submitIn(tx: Tx, ctx: TenantContext, id: unknown, loadedAt: unknown, raw: { reason?: unknown }): Promise<SubmitResult> {
+export async function submitIn(tx: Tx, ctx: TenantContext, id: unknown, loadedAt: unknown, raw: { reason?: unknown }): Promise<SubmitResult> {
   const document = await lockDocument(tx, ctx, id, loadedAt);
   const label = KIND_LABELS[document.kind];
   if (document.kind === "delivery") throw new UserError("A delivery note is posted from its own page, which takes its goods out of stock.");
@@ -670,48 +677,54 @@ const invoiceHeader = (worked: Worked) => ({
 export async function startInvoice(ctx: TenantContext, sourceId: unknown): Promise<{ id: string }> {
   requireManager(ctx);
   if (!isUuid(sourceId)) throw new UserError(NOT_HERE);
-  return withTenant(ctx.userId, ctx.tenantId, async (tx) => {
-    const basis = await invoiceBasis(tx, ctx, sourceId);
-    const { source, order } = basis;
-    if (source.status !== "submitted") throw new UserError(source.kind === "order" ? (source.status === "cancelled" ? "This order is cancelled." : "Submit the order before invoicing it.") : source.status === "cancelled" ? "This delivery note is cancelled." : "Post the delivery note before invoicing it.");
-    if (!basis.direct) {
-      const existing = await selectInvoicesOf(tx, ctx.tenantId, source.id);
-      const posted = existing.find((invoice) => invoice.status === "submitted");
-      if (posted) throw new UserError(`This delivery note has already been invoiced (${posted.number}).`);
-      const draft = existing.find((invoice) => invoice.status === "draft");
-      if (draft) return { id: draft.id };
-    }
-    const billed = basis.billable.filter((line) => line.left.gt(0));
-    if (billed.length === 0) throw new UserError("Everything on this order has left the warehouse. Invoice its delivery notes instead.");
-    const today = todayIso(new Date());
-    const date = today < source.date ? source.date : today;
-    const worked = await workOutInvoice(tx, ctx, basis, date, billed);
-    const [row] = await tx
-      .insert(salesDocuments)
-      .values({
-        tenantId: ctx.tenantId,
-        kind: "invoice",
-        documentDate: date,
-        customerId: source.customerId,
-        warehouseId: source.warehouseId,
-        branchId: worked.branchId,
-        currency: worked.currency,
-        exchangeRate: "1",
-        furtherTaxExcluded: order.furtherTaxExcluded,
-        customerReference: order.customerReference,
-        sourceDocumentId: source.id,
-        ...invoiceHeader(worked),
-        createdBy: ctx.userId,
-        updatedBy: ctx.userId,
-      })
-      .returning({ id: salesDocuments.id });
-    // The salespeople of the order are the salespeople of its invoices: commission follows the
-    // invoice. They are shown on the draft here; the database writes them itself when it posts.
-    await writeLines(tx, ctx, row.id, worked.lines, order.shares);
-    await tx.insert(salesDocumentLinks).values({ tenantId: ctx.tenantId, fromDocumentId: source.id, toDocumentId: row.id, createdBy: ctx.userId });
-    await audit(tx, ctx, { action: "sales_invoice.create", entity: "sales_document", entityId: row.id, after: { from: source.number, customer: worked.customer.name, lines: worked.lines.length, total: money(worked.totals.total) } });
-    return row;
-  });
+  return withTenant(ctx.userId, ctx.tenantId, (tx) => startInvoiceIn(tx, ctx, sourceId));
+}
+
+/**
+ * The work of startInvoice, in the caller's transaction. `onDate` dates the invoice (a counter
+ * sale's invoice has the sale's own date); without it the invoice is dated today.
+ */
+export async function startInvoiceIn(tx: Tx, ctx: TenantContext, sourceId: string, onDate?: string): Promise<{ id: string }> {
+  const basis = await invoiceBasis(tx, ctx, sourceId);
+  const { source, order } = basis;
+  if (source.status !== "submitted") throw new UserError(source.kind === "order" ? (source.status === "cancelled" ? "This order is cancelled." : "Submit the order before invoicing it.") : source.status === "cancelled" ? "This delivery note is cancelled." : "Post the delivery note before invoicing it.");
+  if (!basis.direct) {
+    const existing = await selectInvoicesOf(tx, ctx.tenantId, source.id);
+    const posted = existing.find((invoice) => invoice.status === "submitted");
+    if (posted) throw new UserError(`This delivery note has already been invoiced (${posted.number}).`);
+    const draft = existing.find((invoice) => invoice.status === "draft");
+    if (draft) return { id: draft.id };
+  }
+  const billed = basis.billable.filter((line) => line.left.gt(0));
+  if (billed.length === 0) throw new UserError("Everything on this order has left the warehouse. Invoice its delivery notes instead.");
+  const today = onDate ?? todayIso(new Date());
+  const date = today < source.date ? source.date : today;
+  const worked = await workOutInvoice(tx, ctx, basis, date, billed);
+  const [row] = await tx
+    .insert(salesDocuments)
+    .values({
+      tenantId: ctx.tenantId,
+      kind: "invoice",
+      documentDate: date,
+      customerId: source.customerId,
+      warehouseId: source.warehouseId,
+      branchId: worked.branchId,
+      currency: worked.currency,
+      exchangeRate: "1",
+      furtherTaxExcluded: order.furtherTaxExcluded,
+      customerReference: order.customerReference,
+      sourceDocumentId: source.id,
+      ...invoiceHeader(worked),
+      createdBy: ctx.userId,
+      updatedBy: ctx.userId,
+    })
+    .returning({ id: salesDocuments.id });
+  // The salespeople of the order are the salespeople of its invoices: commission follows the
+  // invoice. They are shown on the draft here; the database writes them itself when it posts.
+  await writeLines(tx, ctx, row.id, worked.lines, order.shares);
+  await tx.insert(salesDocumentLinks).values({ tenantId: ctx.tenantId, fromDocumentId: source.id, toDocumentId: row.id, createdBy: ctx.userId });
+  await audit(tx, ctx, { action: "sales_invoice.create", entity: "sales_document", entityId: row.id, after: { from: source.number, customer: worked.customer.name, lines: worked.lines.length, total: money(worked.totals.total) } });
+  return row;
 }
 
 /**
@@ -758,7 +771,7 @@ export async function saveInvoiceDraft(ctx: TenantContext, id: unknown, raw: Raw
 }
 
 /** What the database's refusals of an invoice mean, for the few that can still happen after the checks here. */
-function invoiceRefusal(error: unknown, date: string): UserError | null {
+export function invoiceRefusal(error: unknown, date: string): UserError | null {
   const code = pgCode(error);
   const closed = periodRefusal(code, date);
   if (closed) return new UserError(closed);
@@ -783,43 +796,46 @@ function invoiceRefusal(error: unknown, date: string): UserError | null {
  */
 export async function postInvoice(ctx: TenantContext, id: unknown, loadedAt?: unknown): Promise<{ number: string; dueDate: string }> {
   requireManager(ctx);
-  return withTenant(ctx.userId, ctx.tenantId, async (tx) => {
-    const document = await lockDocument(tx, ctx, id, loadedAt);
-    if (document.kind !== "invoice" || !document.source) throw new UserError("That is not a sales invoice.");
-    if (document.status !== "draft") throw new UserError("This invoice is already posted.");
-    if (document.lines.length === 0) throw new UserError("Enter how much of at least one line to invoice.");
-    const basis = await invoiceBasis(tx, ctx, document.source.id);
-    const billed: Billed[] = [];
-    for (const line of document.lines) {
-      const from = basis.billable.find((candidate) => candidate.sourceLineId === line.sourceLineId);
-      if (!from) throw new UserError("A line on the invoice is not a line of what it was made from. Throw the draft away and make the invoice again.");
-      if (basis.direct && line.quantity.gt(from.left)) throw new UserError(`${from.itemCode}: the order has ${from.left.toFixed()} still to deliver, not ${line.quantity.toFixed()}.`);
-      if (!basis.direct && !line.quantity.eq(from.left)) throw new UserError("This invoice no longer matches its delivery note. Throw the draft away and make the invoice again.");
-      billed.push({ ...from, line: asDraftLine(line) });
+  return withTenant(ctx.userId, ctx.tenantId, (tx) => postInvoiceIn(tx, ctx, id, loadedAt));
+}
+
+/** The work of postInvoice, in the caller's transaction. */
+export async function postInvoiceIn(tx: Tx, ctx: TenantContext, id: unknown, loadedAt?: unknown): Promise<{ number: string; dueDate: string }> {
+  const document = await lockDocument(tx, ctx, id, loadedAt);
+  if (document.kind !== "invoice" || !document.source) throw new UserError("That is not a sales invoice.");
+  if (document.status !== "draft") throw new UserError("This invoice is already posted.");
+  if (document.lines.length === 0) throw new UserError("Enter how much of at least one line to invoice.");
+  const basis = await invoiceBasis(tx, ctx, document.source.id);
+  const billed: Billed[] = [];
+  for (const line of document.lines) {
+    const from = basis.billable.find((candidate) => candidate.sourceLineId === line.sourceLineId);
+    if (!from) throw new UserError("A line on the invoice is not a line of what it was made from. Throw the draft away and make the invoice again.");
+    if (basis.direct && line.quantity.gt(from.left)) throw new UserError(`${from.itemCode}: the order has ${from.left.toFixed()} still to deliver, not ${line.quantity.toFixed()}.`);
+    if (!basis.direct && !line.quantity.eq(from.left)) throw new UserError("This invoice no longer matches its delivery note. Throw the draft away and make the invoice again.");
+    billed.push({ ...from, line: asDraftLine(line) });
+  }
+  if (!basis.direct) {
+    if (billed.length !== basis.billable.length) throw new UserError("This invoice no longer matches its delivery note. Throw the draft away and make the invoice again.");
+    const posted = (await selectInvoicesOf(tx, ctx.tenantId, basis.source.id)).find((invoice) => invoice.status === "submitted");
+    if (posted) throw new UserError(`This delivery note has already been invoiced (${posted.number}).`);
+  }
+  const worked = await workOutInvoice(tx, ctx, basis, document.date, billed);
+  if (worked.taxed !== document.taxed || worked.pricesIncludeTax !== document.pricesIncludeTax || document.lines.some((line, index) => line.taxKind !== worked.lines[index].taxKind || !sameFigures(line, worked.lines[index]))) {
+    throw new UserError("A tax rate or the customer's tax status has changed since this invoice was saved. Check it and save it again.");
+  }
+  if (basis.direct) {
+    const onHand = await selectStockOnHand(tx, ctx.tenantId, document.warehouseId, document.lines.map((line) => line.itemId));
+    const short = stockShortfall(document.lines, onHand);
+    if (short) {
+      throw new UserError(`Not enough ${short.itemCode} in stock at ${document.warehouseName}: ${short.onHand.toFixed()} on hand, ${short.needed.toFixed()} needed. Stock is entered first; a sale never takes it below zero.`);
     }
-    if (!basis.direct) {
-      if (billed.length !== basis.billable.length) throw new UserError("This invoice no longer matches its delivery note. Throw the draft away and make the invoice again.");
-      const posted = (await selectInvoicesOf(tx, ctx.tenantId, basis.source.id)).find((invoice) => invoice.status === "submitted");
-      if (posted) throw new UserError(`This delivery note has already been invoiced (${posted.number}).`);
-    }
-    const worked = await workOutInvoice(tx, ctx, basis, document.date, billed);
-    if (worked.taxed !== document.taxed || worked.pricesIncludeTax !== document.pricesIncludeTax || document.lines.some((line, index) => line.taxKind !== worked.lines[index].taxKind || !sameFigures(line, worked.lines[index]))) {
-      throw new UserError("A tax rate or the customer's tax status has changed since this invoice was saved. Check it and save it again.");
-    }
-    if (basis.direct) {
-      const onHand = await selectStockOnHand(tx, ctx.tenantId, document.warehouseId, document.lines.map((line) => line.itemId));
-      const short = stockShortfall(document.lines, onHand);
-      if (short) {
-        throw new UserError(`Not enough ${short.itemCode} in stock at ${document.warehouseName}: ${short.onHand.toFixed()} on hand, ${short.needed.toFixed()} needed. Stock is entered first; a sale never takes it below zero.`);
-      }
-    }
-    try {
-      const rows = await tx.execute<{ number: string }>(sql`select number from app.post_sales_invoice(${document.id}::uuid)`);
-      // The day it falls due is the database's own answer, from the customer's credit days as it posted.
-      const [posted] = await tx.select({ dueDate: salesDocuments.dueDate }).from(salesDocuments).where(and(eq(salesDocuments.tenantId, ctx.tenantId), eq(salesDocuments.id, document.id)));
-      return { number: rows[0].number, dueDate: posted?.dueDate ?? document.date };
-    } catch (error) {
-      throw invoiceRefusal(error, document.date) ?? error;
-    }
-  });
+  }
+  try {
+    const rows = await tx.execute<{ number: string }>(sql`select number from app.post_sales_invoice(${document.id}::uuid)`);
+    // The day it falls due is the database's own answer, from the customer's credit days as it posted.
+    const [posted] = await tx.select({ dueDate: salesDocuments.dueDate }).from(salesDocuments).where(and(eq(salesDocuments.tenantId, ctx.tenantId), eq(salesDocuments.id, document.id)));
+    return { number: rows[0].number, dueDate: posted?.dueDate ?? document.date };
+  } catch (error) {
+    throw invoiceRefusal(error, document.date) ?? error;
+  }
 }

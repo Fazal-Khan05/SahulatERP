@@ -12,7 +12,7 @@ import { formatIsoDate } from "@/modules/currencies/rules";
 import { formatQuantity } from "@/modules/inventory/rules";
 import { getGrni, getOrder, getOrderChoices, getOrderToReceive, getReceipt, listOrders, listOrdersToReceive, listReceipts } from "@/modules/purchasing/queries";
 import { ORDER_STATUS_LABELS, RECEIPT_STATUS_LABELS, UNIT_COST_SCALE, stillToReceive, type OrderLineToReceive } from "@/modules/purchasing/rules";
-import { can, type Permission } from "@/modules/tenant/rules";
+import { can, type ModuleKey, type Permission } from "@/modules/tenant/rules";
 import { cancelOrderAction, discardOrderAction, discardReceiptAction, saveOrderAction, saveReceiptAction } from "./actions";
 import { OrderForm } from "./order-form";
 import { ReceiptForm } from "./receipt-form";
@@ -35,18 +35,20 @@ export function Refused({ title, children }: { title: string; children: React.Re
   );
 }
 
-const SECTIONS: readonly { href: string; label: string; permission: Permission }[] = [
+const SECTIONS: readonly { href: string; label: string; permission: Permission; module?: ModuleKey }[] = [
   { href: "/purchases", label: "Purchase orders", permission: "purchase_order.read" },
   { href: "/purchases/receive", label: "Receive goods", permission: "goods_receipt.read" },
   { href: "/purchases/bills", label: "Supplier bills", permission: "supplier_bill.read" },
   { href: "/purchases/payments", label: "Supplier payments", permission: "supplier_payment.read" },
+  { href: "/purchases/returns", label: "Supplier returns", permission: "supplier_return.read" },
+  { href: "/purchases/shipments", label: "Shipments", permission: "shipment.read", module: "imports" },
   { href: "/purchases/grni", label: "Goods received, not yet billed", permission: "purchase_order.read" },
   { href: "/purchases/withholding", label: "Withholding tax", permission: "supplier_bill.read" },
 ];
 
 /** The buying screens this role may open, as a row of links above each of them. */
 export function Sections({ session, current }: { session: TenantSession; current: string }) {
-  const open = SECTIONS.filter((section) => can(session.role, section.permission));
+  const open = SECTIONS.filter((section) => can(session.role, section.permission) && (!section.module || session.modules[section.module]));
   if (open.length < 2) return null;
   return (
     <nav aria-label="Purchases" className="mb-4 flex flex-wrap gap-x-5 gap-y-1 border-b pb-2 text-sm">
@@ -602,6 +604,13 @@ export async function ReceiptScreen({ params, searchParams }: { params: Promise<
             </tbody>
           </table>
         </div>
+        {receipt.status === "posted" && can(session.role, "supplier_return.manage") ? (
+          <p className="mt-4 text-sm">
+            <Link href={`/purchases/returns/new?receipt=${receipt.id}`} className="underline-offset-4 hover:underline">
+              Send goods from this note back to the supplier
+            </Link>
+          </p>
+        ) : null}
       </Card>
     </>
   );

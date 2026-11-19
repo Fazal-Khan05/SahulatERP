@@ -22,13 +22,17 @@ type OwedRow = { bill_id: string; number: string; supplier_invoice_no: string; b
 export async function selectBillsOwed(tx: Tx, tenantId: string, supplierId: string, branchId: string): Promise<BillOwed[]> {
   if (!isUuid(supplierId) || !isUuid(branchId)) return [];
   const rows = await tx.execute<OwedRow>(sql`
-    select b.id as bill_id, b.number, b.supplier_invoice_no, b.bill_date::text, b.due_date::text, b.payable::text, (b.payable - paid.amount)::text as owed
+    select b.id as bill_id, b.number, b.supplier_invoice_no, b.bill_date::text, b.due_date::text, b.payable::text, (b.payable - paid.amount - back.amount)::text as owed
     from supplier_bills b
     cross join lateral (
       select coalesce(sum(a.amount), 0) as amount from supplier_payment_allocations a
       join supplier_payments p on p.tenant_id = a.tenant_id and p.id = a.payment_id
       where a.tenant_id = b.tenant_id and a.bill_id = b.id and p.status = 'posted') paid
-    where b.tenant_id = ${tenantId}::uuid and b.status = 'posted' and b.supplier_id = ${supplierId}::uuid and b.branch_id = ${branchId}::uuid and b.payable > paid.amount
+    -- What goods sent back (Step 27) have taken off the bill.
+    cross join lateral (
+      select coalesce(sum(r.amount), 0) as amount from supplier_return_allocations r
+      where r.tenant_id = b.tenant_id and r.bill_id = b.id) back
+    where b.tenant_id = ${tenantId}::uuid and b.status = 'posted' and b.supplier_id = ${supplierId}::uuid and b.branch_id = ${branchId}::uuid and b.payable > paid.amount + back.amount
     order by b.bill_date, b.number`);
   return rows.map((row) => ({ billId: row.bill_id, number: row.number, supplierInvoiceNo: row.supplier_invoice_no, date: row.bill_date, dueDate: row.due_date, payable: d(row.payable), owed: d(row.owed) }));
 }

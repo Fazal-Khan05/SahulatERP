@@ -30,7 +30,10 @@ type Credit = { limit: string | null; receivable: string; openOrders: string };
 
 export type SalesFormProps = {
   action: FormAction<SalesFormState>;
-  kind: "quotation" | "order";
+  /** "counter": a sale to a walk-in buyer, who pays at once (Step 22). */
+  kind: "quotation" | "order" | "counter";
+  /** For a counter sale: the cash and bank accounts the buyer's money can go into. */
+  moneyAccounts?: { id: string; code: string; name: string; kind: "cash" | "bank" }[];
   /** Whether the company charges sales tax, and whether its prices already hold it. */
   taxed: boolean;
   pricesIncludeTax: boolean;
@@ -89,7 +92,7 @@ type LineDefaults = { itemId: string; code: string; name: string; units: Unit[];
  * is found by typing its code or name; its price comes from the customer's price lists and can
  * be typed over. The amounts here are a guide: the server works every line out again, with tax.
  */
-export function SalesForm({ action, kind, taxed, pricesIncludeTax, warehouses, salesPeople, documentId, initial, credit: initialCredit, refused, needsReason }: SalesFormProps) {
+export function SalesForm({ action, kind, moneyAccounts = [], taxed, pricesIncludeTax, warehouses, salesPeople, documentId, initial, credit: initialCredit, refused, needsReason }: SalesFormProps) {
   const { state, ready, busy, run } = useFormAction(action);
   const nextKey = useRef(initial.lines.length + 10);
   const empty = (): Row => ({ key: (nextKey.current += 1), item: null, name: "", units: [], unitId: "", quantity: "", unitPrice: "", priceTyped: false, listPrice: null, discountPercent: "" });
@@ -102,7 +105,12 @@ export function SalesForm({ action, kind, taxed, pricesIncludeTax, warehouses, s
   const total = rows.reduce((sum, row) => sum.plus(rowAmount(row)), NIL);
   const askReason = state.needsReason ?? needsReason ?? false;
   const error = state.error ?? (state.message ? undefined : refused);
-  const word = kind === "order" ? "order" : "quotation";
+  const counter = kind === "counter";
+  const word = kind === "order" ? "order" : kind === "counter" ? "sale" : "quotation";
+  const [method, setMethod] = useState<"cash" | "bank">("cash");
+  // One key for this sale, however many times it is sent: the server records it once.
+  const [clientKey] = useState(() => crypto.randomUUID());
+  const payInto = moneyAccounts.filter((account) => account.kind === method);
 
   /** The price of one of a unit, from the price of one of the item's own unit. */
   const priceFor = (listPrice: string | null, units: Unit[], unitId: string) => {
@@ -154,11 +162,12 @@ export function SalesForm({ action, kind, taxed, pricesIncludeTax, warehouses, s
         const submitter = (event.nativeEvent as SubmitEvent).submitter;
         const data = new FormData();
         const typed = new FormData(event.currentTarget);
-        for (const name of ["date", "validUntil", "warehouseId", "customerReference", "notes", "furtherTaxExcluded", "reason"]) {
+        for (const name of ["date", "validUntil", "warehouseId", "customerReference", "notes", "furtherTaxExcluded", "reason", "buyerName", "buyerPhone", "method", "accountId", "reference"]) {
           const value = typed.get(name);
           if (typeof value === "string") data.set(name, value);
         }
         data.set("customerId", customer?.id ?? "");
+        if (counter) data.set("clientKey", clientKey);
         data.set("intent", submitter instanceof HTMLButtonElement && submitter.value === "submit" ? "submit" : "save");
         // Rows with nothing in them are not sent, so "Line 2" in a message is the second line on the screen.
         const filled = rows.filter((row) => row.item !== null || row.quantity.trim() !== "" || row.unitPrice.trim() !== "" || row.discountPercent.trim() !== "");
@@ -180,6 +189,18 @@ export function SalesForm({ action, kind, taxed, pricesIncludeTax, warehouses, s
       className="flex flex-col gap-4"
     >
       <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_10rem_10rem]">
+        {counter ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="buyerName">Buyer&apos;s name</Label>
+              <Input id="buyerName" name="buyerName" maxLength={120} autoComplete="off" required />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="buyerPhone">Phone (if they give it)</Label>
+              <Input id="buyerPhone" name="buyerPhone" maxLength={20} inputMode="tel" autoComplete="off" />
+            </div>
+          </div>
+        ) : (
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="customer">Customer</Label>
           <Picker id="customer" what="customers" label="Customer" value={customer} onPick={pickCustomer} placeholder="Type a name or code" />
@@ -191,6 +212,7 @@ export function SalesForm({ action, kind, taxed, pricesIncludeTax, warehouses, s
             </p>
           ) : null}
         </div>
+        )}
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="date">Date</Label>
           <Input
@@ -201,12 +223,14 @@ export function SalesForm({ action, kind, taxed, pricesIncludeTax, warehouses, s
             onChange={(event) => {
               setDate(event.target.value);
               // Prices are dated: lines whose price was not typed are priced for the new date.
-              for (const row of rows) if (row.item && !row.priceTyped && customer) void loadLine(row.key, row.item, customer, event.target.value);
+              for (const row of rows) if (row.item && !row.priceTyped && (customer || counter)) void loadLine(row.key, row.item, customer, event.target.value);
             }}
             required
           />
         </div>
-        {kind === "quotation" ? (
+        {counter ? (
+          <div />
+        ) : kind === "quotation" ? (
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="validUntil">Valid until</Label>
             <Input id="validUntil" name="validUntil" type="date" defaultValue={initial.validUntil} min={date} />
@@ -329,7 +353,40 @@ export function SalesForm({ action, kind, taxed, pricesIncludeTax, warehouses, s
           </tfoot>
         </table>
       </div>
-      {taxed ? <p className="text-sm text-muted-foreground">Sales tax is worked out line by line when the {word} is saved.</p> : null}
+      {taxed ? <p className="text-sm text-muted-foreground">Sales tax is worked out line by line when the {word} is {counter ? "recorded" : "saved"}.</p> : null}
+
+      {counter ? (
+        <fieldset className="flex flex-col gap-3 rounded-lg border px-3 py-3">
+          <legend className="px-1 text-sm font-medium">Paid now, in full</legend>
+          <div className="flex flex-wrap gap-4 text-sm">
+            <label className="flex items-center gap-2">
+              <input type="radio" name="method" value="cash" checked={method === "cash"} onChange={() => setMethod("cash")} />
+              Cash
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="radio" name="method" value="bank" checked={method === "bank"} onChange={() => setMethod("bank")} />
+              Into a bank account (transfer or card)
+            </label>
+          </div>
+          <div className="grid max-w-2xl gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="accountId">{method === "cash" ? "Cash account" : "Bank account"}</Label>
+              <select id="accountId" name="accountId" key={method} defaultValue={payInto[0]?.id ?? ""} required className={SELECT}>
+                {payInto.length === 0 ? <option value="">No {method === "cash" ? "cash" : "bank"} account yet</option> : null}
+                {payInto.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.code} {account.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="reference">Reference (slip or card receipt no.)</Label>
+              <Input id="reference" name="reference" maxLength={60} autoComplete="off" />
+            </div>
+          </div>
+        </fieldset>
+      ) : null}
 
       <details className="rounded-lg border px-3 py-2" open={initial.notes !== "" || initial.furtherTaxExcluded || shares.length > 1}>
         <summary className="cursor-pointer text-sm font-medium">More: notes and salespeople</summary>
@@ -396,6 +453,13 @@ export function SalesForm({ action, kind, taxed, pricesIncludeTax, warehouses, s
         </p>
       ) : null}
       {/* Saving comes first in the page, so pressing Enter in a field saves the draft and never submits. */}
+      {counter ? (
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" name="intent" value="submit" disabled={!ready || busy}>
+            {busy ? "Working…" : "Record the sale and the payment"}
+          </Button>
+        </div>
+      ) : (
       <div className="flex flex-wrap gap-2">
         <Button type="submit" name="intent" value="save" variant="outline" disabled={!ready || busy} className="order-2">
           Save as draft
@@ -404,6 +468,7 @@ export function SalesForm({ action, kind, taxed, pricesIncludeTax, warehouses, s
           {busy ? "Working…" : askReason ? `Approve and submit ${word}` : `Submit ${word}`}
         </Button>
       </div>
+      )}
     </form>
   );
 }

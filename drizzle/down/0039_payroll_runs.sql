@@ -1,4 +1,4 @@
--- Reverses drizzle/0033_payroll_runs.sql. Never run automatically. Run it by hand, as postgres,
+-- Reverses drizzle/0039_payroll_runs.sql. Never run automatically. Run it by hand, as postgres,
 -- only after showing it to the founder and getting a yes. It refuses to run once any run has been
 -- approved: its journal and the commission it settled cannot be taken back, and without this
 -- migration nothing would say where they came from. It DELETES every draft, reviewed and
@@ -78,7 +78,7 @@ DROP TABLE public.payslip_lines, public.payslips, public.payroll_runs;
 DROP FUNCTION app.check_payslip_row();
 DROP FUNCTION app.check_payroll_run_row();
 
--- The row drizzle-kit wrote for 0033_payroll_runs (its "when" in drizzle/meta/_journal.json).
-DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1794973863838;
+-- The row drizzle-kit wrote for 0039_payroll_runs (its "when" in drizzle/meta/_journal.json).
+DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1795371970559;
 
 COMMIT;

@@ -17,7 +17,7 @@ import { payrollRuns, payslipLines, payslips } from "./schema";
 
 // The commands behind the payroll run screens (Step 41). The app works a run out and writes it
 // as a draft; reviewing, approving, paying and cancelling are the database's own acts
-// (drizzle/0033_payroll_runs.sql), which put the run in the books and settle its commission.
+// (drizzle/0039_payroll_runs.sql), which put the run in the books and settle its commission.
 
 const money = (value: Decimal) => value.toFixed(AMOUNT_SCALE);
 const exact = (value: string) => new Decimal(value);

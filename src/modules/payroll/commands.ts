@@ -43,7 +43,7 @@ function employeeRefusal(error: unknown): UserError | null {
   if (code === "SE320") return new UserError("How this employee is paid cannot change: they have pay on record. Record them as having left, and add them again paid the other way.");
   if (code === "SE321") return new UserError("Choose a login of someone in this company, or none.");
   if (code === "SE322") return new UserError("A daily employee is paid a daily wage, and a monthly employee basic pay and allowances.");
-  // Step 41's guard (drizzle/0033_payroll_runs.sql): whose commission a payroll run carries.
+  // Step 41's guard (drizzle/0039_payroll_runs.sql): whose commission a payroll run carries.
   if (code === "SE358") return new UserError("Only the owner links an employee to someone else's login.");
   return null;
 }

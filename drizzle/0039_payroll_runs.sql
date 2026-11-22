@@ -391,7 +391,7 @@ GRANT EXECUTE ON FUNCTION app.payroll_commission_basis(uuid, date) TO app_runtim
 -- Whose commission a payroll run carries is whose login an employee has: so a login is linked by
 -- the owner, and a payroll administrator links an employee only to their own (as the employee's
 -- page offers them). Unlinking is anyone's who keeps payroll. A trigger of its own beside Step 40's
--- guard (drizzle/0032_payroll_employees.sql), which it leaves as it is.
+-- guard (drizzle/0037_payroll_employees.sql), which it leaves as it is.
 CREATE FUNCTION app.check_employee_login() RETURNS trigger
   LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp
   AS $$

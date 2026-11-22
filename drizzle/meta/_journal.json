@@ -225,6 +225,55 @@
       "when": 1794917214189,
       "tag": "0031_identity_proof",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1794921736535,
+      "tag": "0032_supplier_payments",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1795005633279,
+      "tag": "0033_line_guards",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1795006247028,
+      "tag": "0034_supplier_returns",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1795018242585,
+      "tag": "0035_counter_sales",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1795020343324,
+      "tag": "0036_shipments",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1795021439529,
+      "tag": "0037_payroll_employees",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1795355759127,
+      "tag": "0038_cash_bank",
+      "breakpoints": true
     }
   ]
 }

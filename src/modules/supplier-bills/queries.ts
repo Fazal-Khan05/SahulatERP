@@ -60,7 +60,7 @@ export async function selectBillTables(tx: Tx, tenantId: string): Promise<{ sale
   };
 }
 
-type ToBillRow = { receipt_line_id: string; receipt_number: string; receipt_date: string; order_number: string; item_id: string; item_code: string; description: string; unit_code: string; received: string; billed: string; order_cost: string; tax_category_id: string | null };
+type ToBillRow = { receipt_line_id: string; receipt_number: string; receipt_date: string; order_number: string; item_id: string; item_code: string; description: string; unit_code: string; received: string; billed: string; returned: string; order_cost: string; tax_category_id: string | null };
 
 /**
  * The lines of posted goods received from a supplier into a branch, with what posted bills
@@ -72,7 +72,10 @@ export async function selectReceiptLinesToBill(tx: Tx, tenantId: string, supplie
     select g.id as receipt_line_id, r.number as receipt_number, r.receipt_date::text, o.number as order_number, g.item_id, i.code as item_code,
            ol.description, u.code as unit_code, g.quantity::text as received, ol.unit_cost::text as order_cost, i.tax_category_id,
            coalesce((select sum(bl.quantity) from supplier_bill_lines bl join supplier_bills b on b.tenant_id = bl.tenant_id and b.id = bl.bill_id
-                     where bl.tenant_id = g.tenant_id and bl.receipt_line_id = g.id and b.status = 'posted'), 0)::text as billed
+                     where bl.tenant_id = g.tenant_id and bl.receipt_line_id = g.id and b.status = 'posted'), 0)::text as billed,
+           -- Goods sent back to the supplier before they were billed (Step 27) are not billed.
+           coalesce((select sum(x.quantity) from supplier_return_lines x join supplier_returns d on d.tenant_id = x.tenant_id and d.id = x.return_id
+                     where x.tenant_id = g.tenant_id and x.receipt_line_id = g.id and x.bill_line_id is null and d.status = 'posted'), 0)::text as returned
     from goods_receipts r
     join goods_receipt_lines g on g.tenant_id = r.tenant_id and g.receipt_id = r.id
     join warehouses w on w.tenant_id = r.tenant_id and w.id = r.warehouse_id
@@ -93,10 +96,11 @@ export async function selectReceiptLinesToBill(tx: Tx, tenantId: string, supplie
     unitCode: row.unit_code,
     received: d(row.received),
     billed: d(row.billed),
+    returned: d(row.returned),
     orderCost: d(row.order_cost),
     taxCategoryId: row.tax_category_id,
   }));
-  return open ? lines.filter((line) => line.received.gt(line.billed)) : lines;
+  return open ? lines.filter((line) => line.received.gt(line.billed.plus(line.returned))) : lines;
 }
 
 // ── One bill ────────────────────────────────────────────────────────────────────────────────────
@@ -312,7 +316,9 @@ export async function getBillChoices(ctx: TenantContext, on: string): Promise<Bi
       tx.execute<{ id: string; name: string }>(sql`select id, name from branches where tenant_id = ${ctx.tenantId}::uuid order by created_at`),
       tx.execute<{ id: string; code: string; name: string }>(sql`
         select id, code, name from accounts
-        where tenant_id = ${ctx.tenantId}::uuid and not is_group and not is_control and archived_at is null and type in ('expense', 'asset')
+        where tenant_id = ${ctx.tenantId}::uuid and not is_group and archived_at is null
+          -- Or Goods in transit (Step 28), where import charges wait to be spread over a shipment.
+          and ((not is_control and type in ('expense', 'asset')) or (is_control and control_type = 'goods_in_transit'))
         order by code`),
       selectBillTables(tx, ctx.tenantId),
       selectWithholdingOn(tx, ctx.tenantId),

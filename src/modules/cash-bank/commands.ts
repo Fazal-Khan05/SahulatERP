@@ -15,7 +15,7 @@ import { readBankDetails, readCancel, readExpense, readNewAccount, readTransfer,
 // The commands behind the cash and bank screens (Step 34). A bank account's details are written
 // by the app under row-level security. Transfers and expenses are not: each command only asks the
 // database's own function, which writes the document and its journal in one act, or refuses
-// (drizzle/0032_cash_bank.sql).
+// (drizzle/0038_cash_bank.sql).
 
 function requireManager(ctx: TenantContext): void {
   if (!can(ctx.role, "cash_bank.manage")) throw new UserError("Only the owner or an accountant moves or spends the company's money.");

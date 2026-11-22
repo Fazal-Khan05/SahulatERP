@@ -3,6 +3,7 @@ import Decimal from "decimal.js";
 import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { isUuid, withTenant, type Tx } from "@/db";
 import { UserError } from "@/lib/errors";
+import { notWalkIn } from "@/modules/counter-sales/queries";
 import { customers } from "@/modules/parties/schema";
 import { can, type TenantContext } from "@/modules/tenant/rules";
 import type { ChequeStage, OpenItem, ReceiptMethod, ReceiptStatus } from "./rules";
@@ -56,7 +57,7 @@ export async function findCustomers(ctx: TenantContext, typed: string): Promise<
     tx
       .select({ id: customers.id, code: customers.code, name: customers.name, archivedAt: customers.archivedAt })
       .from(customers)
-      .where(and(eq(customers.tenantId, ctx.tenantId), or(sql`${customers.name} ilike ${pattern}`, sql`${customers.code} ilike ${pattern}`)))
+      .where(and(eq(customers.tenantId, ctx.tenantId), notWalkIn, or(sql`${customers.name} ilike ${pattern}`, sql`${customers.code} ilike ${pattern}`)))
       .orderBy(asc(sql`lower(${customers.name})`))
       .limit(25),
   );

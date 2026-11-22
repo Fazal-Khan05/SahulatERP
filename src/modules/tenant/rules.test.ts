@@ -311,7 +311,7 @@ describe("navigation", () => {
     ]);
   });
 
-  it("gives the accountant the books, the exchange rates and the tax rates", () => {
+  it("gives the accountant the books, the stock, the exchange rates and the tax rates", () => {
     const menu = navFor("accountant", state());
     expect(labels(menu)).toEqual([
       "Home",
@@ -321,6 +321,7 @@ describe("navigation", () => {
       "Price lists",
       "Bills and payments",
       "Suppliers",
+      "Stock",
       "Items",
       "Bank and cash",
       "Chart of accounts",
@@ -333,6 +334,9 @@ describe("navigation", () => {
     ]);
     expect(menu.find((e) => e.label === "Exchange rates")?.href).toBe("/settings/currencies");
     expect(menu.find((e) => e.label === "Tax rates")?.href).toBe("/settings/tax");
+    expect(menu.find((e) => e.label === "Stock")?.href).toBe("/stock");
+    // Without inventory, no Stock.
+    expect(labels(navFor("accountant", state({ inventory: false })))).not.toContain("Stock");
   });
 
   it("removes a module's entries when the module is off", () => {

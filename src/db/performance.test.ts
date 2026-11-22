@@ -11,13 +11,14 @@ import { openFiscalYear } from "@/modules/numbering/commands";
 import { createParty } from "@/modules/parties/commands";
 import { postReceipt, saveReceiptDraft } from "@/modules/receipts/commands";
 import { listCustomerAgeing } from "@/modules/recovery/queries";
+import { getTrialBalance } from "@/modules/reports/queries";
 import { postDelivery, postInvoice, saveDeliveryDraft, saveInvoiceDraft, saveSalesDraft, startDelivery, startInvoice, submitSalesDocument } from "@/modules/sales/commands";
 import { getCustomerCredit, getSalesDocument, listOrdersToDeliver } from "@/modules/sales/queries";
 import { getStockReport } from "@/modules/stock-reports/queries";
 import type { TenantContext } from "@/modules/tenant/rules";
 import { adminSql, deleteTenants, hasAdminDb, type AdminSql } from "../../tests/support/admin-db";
 
-// Step 50, the performance pass, changed how six questions are asked of the database, never
+// Step 50, the performance pass, changed how seven questions are asked of the database, never
 // what they answer. Each is set here beside the way it was asked before (written out below as
 // it stood), for members of several kinds, on a small company with every case in it: an order
 // part delivered, one invoiced straight from the order, one invoiced from its delivery note,
@@ -160,6 +161,21 @@ const itemProfitBefore = (tenantId: string, from: string, to: string, branchId: 
   select sold.item_id::text, sum(sold.quantity)::text as quantity, round(sum(sold.sales), 4)::text as sales, sum(sold.cost)::text as cost
   from sold group by sold.item_id order by sold.item_id`;
 
+/** The ledger's totals as the reports asked for them: every account, or (the owner's figures) only some before the period. */
+const ledgerTotalsBefore = (tenantId: string, from: string, to: string, branchId: string | null, mode: "all" | "movements" | "owner") => sql`
+  select l.account_id::text,
+    coalesce(sum(l.debit - l.credit) filter (where j.journal_date < ${from}::date), 0)::text as before,
+    coalesce(sum(l.debit) filter (where j.journal_date >= ${from}::date), 0)::text as debit,
+    coalesce(sum(l.credit) filter (where j.journal_date >= ${from}::date), 0)::text as credit
+  from public.journal_lines l
+  join public.journals j on j.tenant_id = l.tenant_id and j.id = l.journal_id
+  join public.accounts a on a.tenant_id = l.tenant_id and a.id = l.account_id
+  where l.tenant_id = ${tenantId} and j.journal_date <= ${to}::date
+    and (${branchId}::uuid is null or l.branch_id = ${branchId}::uuid)
+    and (${mode}::text <> 'movements' or j.journal_date >= ${from}::date)
+    and (${mode}::text <> 'owner' or j.journal_date >= ${from}::date or a.control_type in ('cash', 'bank', 'ar', 'ap'))
+  group by l.account_id order by l.account_id`;
+
 const receivablesBefore = (tenantId: string) => sql`
   select c.id::text as customer_id, r.kind, r.id::text as item_id, r.number, r.document_date::text, r.due_date::text, r.total::text, r.settled::text, r.outstanding::text
   from public.customers c cross join lateral app.receivables_open(c.id) r
@@ -300,6 +316,32 @@ describe.skipIf(!hasDb)("the performance pass answers as before", { timeout: 600
       expect(await refusal(() => read(who, sql`select * from app.item_profit('2026-11-01', ${TO}::date)`)), who.email).toContain("not allowed to see what stock cost");
     }
     expect(await read(other, sql`select * from app.item_profit('2026-11-01', ${TO}::date)`)).toEqual([]);
+  });
+
+  it("the ledger's totals by account: for the trial balance, the profit and loss and the owner's figures, as before", async () => {
+    const BEFORE = { all: sql`null::text[]`, movements: sql`'{}'::text[]`, owner: sql`'{cash,bank,ar,ap}'::text[]` };
+    for (const who of [as.owner, as.accountant, as.auditor, north]) {
+      for (const branchId of [null, mainBranch, northBranch]) {
+        for (const [from, to] of [["2026-11-01", TO], ["2026-11-07", "2026-11-09"], ["2026-11-11", TO], ["2026-07-01", "2026-11-06"]]) {
+          for (const mode of ["all", "movements", "owner"] as const) {
+            const before = await read(who, ledgerTotalsBefore(tenantA, from, to, branchId, mode));
+            const now = await read(who, sql`select account_id::text, before::text, debit::text, credit::text from app.ledger_totals(${from}::date, ${to}::date, ${branchId}::uuid, ${BEFORE[mode]}) order by account_id`);
+            expect(now, `${who.email} ${branchId} ${from} ${mode}`).toEqual(before);
+          }
+        }
+      }
+    }
+    // The books balance, and there is something in them.
+    const [sum] = await read(as.owner, sql`select count(*)::int as accounts, sum(before + debit - credit)::text as net from app.ledger_totals('2026-11-07', ${TO}::date)`);
+    expect(Number(sum.accounts)).toBeGreaterThan(4);
+    expect(Number(sum.net)).toBe(0);
+    // The trial balance reads it.
+    const table = await getTrialBalance(as.auditor, { from: "2026-11-01", to: TO, branchId: null, accountId: null });
+    expect(table.rows.length).toBeGreaterThan(4);
+    // Those who do not read the ledger are told nothing, as the tables' policies told them nothing.
+    for (const who of [as.salesperson, as.sales_manager, as.warehouse_manager, as.recovery_officer, other]) {
+      expect(await read(who, sql`select * from app.ledger_totals('2026-11-01', ${TO}::date)`), who.email).toEqual([]);
+    }
   });
 
   it("aged receivables: every customer's unpaid invoices, as asking customer by customer gave them", async () => {

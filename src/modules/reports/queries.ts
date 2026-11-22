@@ -41,18 +41,11 @@ export function requireReportAccess(ctx: TenantContext): void {
  * With `movementsOnly`, nothing before `from` is read and `before` is nil.
  */
 export async function selectTotals(tx: Tx, tenantId: string, range: { from: string; to: string; branchId: string | null; movementsOnly?: boolean }): Promise<Totals> {
+  // Added up in the database in one pass (app.ledger_totals). A report of movements alone asks for no balance
+  // before its period, and so reads nothing of the years before it.
   const rows = await tx.execute<{ account_id: string; before: string; debit: string; credit: string }>(sql`
-    select l.account_id,
-      coalesce(sum(l.debit - l.credit) filter (where j.journal_date < ${range.from}::date), 0)::text as before,
-      coalesce(sum(l.debit) filter (where j.journal_date >= ${range.from}::date), 0)::text as debit,
-      coalesce(sum(l.credit) filter (where j.journal_date >= ${range.from}::date), 0)::text as credit
-    from public.journal_lines l
-    join public.journals j on j.tenant_id = l.tenant_id and j.id = l.journal_id
-    where l.tenant_id = ${tenantId} and j.journal_date <= ${range.to}::date
-      and (${range.branchId}::uuid is null or l.branch_id = ${range.branchId}::uuid)
-      -- A report of movements alone need not read the years before its period.
-      and (${range.movementsOnly ?? false}::boolean is false or j.journal_date >= ${range.from}::date)
-    group by l.account_id`);
+    select account_id, before::text, debit::text, credit::text
+    from app.ledger_totals(${range.from}::date, ${range.to}::date, ${range.branchId}::uuid, ${range.movementsOnly ? sql`'{}'::text[]` : sql`null::text[]`})`);
   return new Map(rows.map((row): [string, AccountTotal] => [row.account_id, { before: new Decimal(row.before), debit: new Decimal(row.debit), credit: new Decimal(row.credit) }]));
 }
 
@@ -163,17 +156,8 @@ export async function getOwnerFigures(ctx: TenantContext, filter: ReportFilter):
     // In one statement: the period's movements in every account, and before it only the accounts
     // whose balance is shown (cash and bank, what customers and suppliers owe), not all history.
     const rows = await tx.execute<{ account_id: string; before: string; debit: string; credit: string }>(sql`
-      select l.account_id,
-        coalesce(sum(l.debit - l.credit) filter (where j.journal_date < ${filter.from}::date), 0)::text as before,
-        coalesce(sum(l.debit) filter (where j.journal_date >= ${filter.from}::date), 0)::text as debit,
-        coalesce(sum(l.credit) filter (where j.journal_date >= ${filter.from}::date), 0)::text as credit
-      from public.journal_lines l
-      join public.journals j on j.tenant_id = l.tenant_id and j.id = l.journal_id
-      join public.accounts a on a.tenant_id = l.tenant_id and a.id = l.account_id
-      where l.tenant_id = ${ctx.tenantId} and j.journal_date <= ${filter.to}::date
-        and (${filter.branchId}::uuid is null or l.branch_id = ${filter.branchId}::uuid)
-        and (j.journal_date >= ${filter.from}::date or a.control_type in ('cash', 'bank', 'ar', 'ap'))
-      group by l.account_id`);
+      select account_id, before::text, debit::text, credit::text
+      from app.ledger_totals(${filter.from}::date, ${filter.to}::date, ${filter.branchId}::uuid, '{cash,bank,ar,ap}'::text[])`);
     const totals = new Map(rows.map((row): [string, AccountTotal] => [row.account_id, { before: new Decimal(row.before), debit: new Decimal(row.debit), credit: new Decimal(row.credit) }]));
     return ownerFigures(await reportAccounts(tx, ctx.tenantId), totals);
   });

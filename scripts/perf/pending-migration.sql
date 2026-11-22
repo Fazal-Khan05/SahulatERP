@@ -316,3 +316,46 @@ END $$;
 REVOKE ALL ON FUNCTION app.receivables_open_all() FROM PUBLIC;
 --> statement-breakpoint
 GRANT EXECUTE ON FUNCTION app.receivables_open_all() TO app_runtime;
+--> statement-breakpoint
+
+-- ── the ledger's totals by account ──────────────────────────────────────────────────────────────
+-- For the trial balance, the profit and loss, the balance sheet and the owner's figures: for
+-- every account, debits less credits before a day, and the debits and the credits from that
+-- day to another. Asked through the tables' policies, the journal of every line was looked up
+-- one line at a time; here the lines and the journals are read once and matched. The same
+-- members are answered (those who read the ledger), and a member limited to some branches is
+-- given those branches' lines of those branches' journals, as the policies had it.
+--
+--   p_before  whose balance before p_from is wanted: NULL for every account, '{}' for none
+--             (a report of movements alone), or the kinds of locked account ('cash', 'bank', ...).
+CREATE FUNCTION app.ledger_totals(p_from date, p_to date, p_branch uuid DEFAULT NULL, p_before text[] DEFAULT NULL)
+  RETURNS TABLE (account_id uuid, before numeric, debit numeric, credit numeric)
+  LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+  AS $$
+#variable_conflict use_column
+DECLARE
+  v_tenant uuid := app.tenant_id();
+  v_role public.member_role := app.tenant_role();
+  v_scope uuid[] := app.tenant_branch_ids();
+BEGIN
+  IF v_tenant IS NULL OR v_role IS NULL OR v_role NOT IN ('owner', 'accountant', 'auditor') THEN
+    RETURN;
+  END IF;
+  RETURN QUERY
+    SELECT l.account_id,
+      coalesce(sum(l.debit - l.credit) FILTER (WHERE j.journal_date < p_from), 0),
+      coalesce(sum(l.debit) FILTER (WHERE j.journal_date >= p_from), 0),
+      coalesce(sum(l.credit) FILTER (WHERE j.journal_date >= p_from), 0)
+    FROM public.journal_lines l
+    JOIN public.journals j ON j.tenant_id = l.tenant_id AND j.id = l.journal_id
+    JOIN public.accounts a ON a.tenant_id = l.tenant_id AND a.id = l.account_id
+    WHERE l.tenant_id = v_tenant AND j.journal_date <= p_to
+      AND (p_branch IS NULL OR l.branch_id = p_branch)
+      AND (v_scope IS NULL OR (l.branch_id = ANY (v_scope) AND j.branch_id = ANY (v_scope)))
+      AND (j.journal_date >= p_from OR p_before IS NULL OR a.control_type = ANY (p_before))
+    GROUP BY l.account_id;
+END $$;
+--> statement-breakpoint
+REVOKE ALL ON FUNCTION app.ledger_totals(date, date, uuid, text[]) FROM PUBLIC;
+--> statement-breakpoint
+GRANT EXECUTE ON FUNCTION app.ledger_totals(date, date, uuid, text[]) TO app_runtime;

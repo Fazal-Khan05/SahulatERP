@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { isUuid } from "@/db";
-import { getSessionUser } from "@/lib/auth/session";
+import { getSessionUser, needsCodeFor } from "@/lib/auth/session";
 import { getLogo } from "@/modules/tenant/queries";
 
 // A company's logo: /branding/logo?t=<company>&v=<version>. Served only to a signed-in member of
@@ -11,7 +11,9 @@ export async function GET(request: NextRequest) {
   const tenantId = request.nextUrl.searchParams.get("t");
   const version = request.nextUrl.searchParams.get("v");
   const user = await getSessionUser();
-  const logo = user && isUuid(tenantId) ? await getLogo(user.id, tenantId) : null;
+  // A member whose role in that company needs two-step sign-in sees its logo only after the code.
+  const blocked = user && isUuid(tenantId) && (await needsCodeFor(user.id, tenantId));
+  const logo = user && isUuid(tenantId) && !blocked ? await getLogo(user.id, tenantId) : null;
   if (!logo) return new Response(null, { status: 404, headers: { "Cache-Control": "no-store" } });
 
   return new Response(new Uint8Array(logo.bytes), {

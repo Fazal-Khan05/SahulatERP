@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { adminSql, deleteTenants } from "../../tests/support/admin-db";
+import { freshCode } from "./two-step";
 
 // Test support only. Everything here works on synthetic accounts whose address ends in
 // @sahulaterp.test (a reserved domain that can never receive mail) and on the companies those
@@ -11,7 +12,8 @@ const DOMAIN = "sahulaterp.test";
 
 export const emailFor = (name: string) => `e2e-${name}@${DOMAIN}`;
 
-export type TestUser = { id: string; email: string; password: string };
+/** `totp` is the key of the account's authenticator app, when it has one (in memory only). */
+export type TestUser = { id: string; email: string; password: string; totp?: string };
 
 export function hasE2EEnv(): boolean {
   return Boolean(
@@ -30,7 +32,14 @@ export function randomPassword(): string {
   return `${randomBytes(18).toString("base64url")}aA1`;
 }
 
-export async function createUser(name: string, options: { canCreateCompany: boolean }): Promise<TestUser> {
+/**
+ * A confirmed synthetic account. It has an authenticator app (two-step sign-in, Step 47) unless
+ * `twoStep: false`, set up the way the app's setup page does it, through Supabase Auth.
+ */
+export async function createUser(
+  name: string,
+  options: { canCreateCompany: boolean; twoStep?: boolean },
+): Promise<TestUser> {
   const email = emailFor(name);
   const password = randomPassword();
   const { data, error } = await supabaseAdmin().auth.admin.createUser({
@@ -40,7 +49,26 @@ export async function createUser(name: string, options: { canCreateCompany: bool
     app_metadata: options.canCreateCompany ? { can_create_company: true } : {},
   });
   if (error || !data.user) throw new Error(`could not create ${email}: ${error?.message}`);
-  return { id: data.user.id, email, password };
+  const user: TestUser = { id: data.user.id, email, password };
+  if (options.twoStep !== false) user.totp = await addAuthenticator(user);
+  return user;
+}
+
+/** Sets up an authenticator app for the account and returns its key. */
+export async function addAuthenticator(user: Pick<TestUser, "email" | "password">): Promise<string> {
+  const client = await directClient(user);
+  try {
+    const { data, error } = await client.auth.mfa.enroll({ factorType: "totp", friendlyName: "e2e" });
+    if (error || !data) throw new Error(`could not set up two-step sign-in for ${user.email}: ${error?.message}`);
+    const { error: verifyError } = await client.auth.mfa.challengeAndVerify({
+      factorId: data.id,
+      code: await freshCode(data.totp.secret),
+    });
+    if (verifyError) throw new Error(`could not turn on two-step sign-in for ${user.email}: ${verifyError.message}`);
+    return data.totp.secret;
+  } finally {
+    await client.auth.signOut({ scope: "local" });
+  }
 }
 
 /**

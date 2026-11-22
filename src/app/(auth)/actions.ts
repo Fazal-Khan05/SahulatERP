@@ -1,12 +1,14 @@
 "use server";
 
 import { appUrl } from "@/lib/app-url";
-import { getSessionUser } from "@/lib/auth/session";
+import { requestDetail } from "@/lib/auth/request";
+import { provedRecently } from "@/lib/auth/rules";
+import { getSignedInAccount } from "@/lib/auth/session";
 import { logFailure } from "@/lib/errors";
 import type { FormState } from "@/lib/form-state";
 import { createSupabaseEmailClient, createSupabaseServerClient } from "@/lib/supabase/server";
 import { recordAuthEvent } from "@/modules/tenant/commands";
-import { emailSchema, firstIssue, newPasswordSchema, signInSchema } from "@/modules/tenant/rules";
+import { emailSchema, firstIssue, newPasswordSchema, passwordUsesEmail, signInSchema } from "@/modules/tenant/rules";
 
 const TRY_AGAIN = "We could not sign you in just now. Please try again.";
 
@@ -18,16 +20,19 @@ export async function signInAction(_: FormState, formData: FormData): Promise<Fo
   const { data, error } = await supabase.auth.signInWithPassword(input.data);
   if (error || !data.user) return { error: "The email or password is not right." };
 
-  let companies: number;
   try {
-    companies = (await recordAuthEvent(data.user.id, "auth.sign_in", { method: "password" })).length;
+    await recordAuthEvent(data.user.id, "auth.sign_in", { method: "password", ...(await requestDetail()) });
   } catch (failure) {
     // No sign-in without its audit row.
     logFailure("sign-in audit", failure);
     await supabase.auth.signOut({ scope: "local" });
     return { error: TRY_AGAIN };
   }
-  return { location: companies > 0 ? "/" : "/create-company" };
+  // Next the code from the authenticator app; or, for an account without one, the offer to set
+  // one up (which an owner or accountant cannot pass by). The account comes fresh from Supabase
+  // Auth here, not from a cookie.
+  const hasApp = (data.user.factors ?? []).some((f) => f.factor_type === "totp" && f.status === "verified");
+  return { location: hasApp ? "/two-step" : "/two-step/setup" };
 }
 
 export async function forgotPasswordAction(_: FormState, formData: FormData): Promise<FormState> {
@@ -85,6 +90,7 @@ export async function confirmSessionAction(_: FormState, formData: FormData): Pr
   try {
     await recordAuthEvent(data.user.id, "auth.sign_in", {
       method: formData.get("type") === "invite" ? "invite" : "recovery",
+      ...(await requestDetail()),
     });
   } catch (failure) {
     logFailure("link sign-in audit", failure);
@@ -98,8 +104,24 @@ export async function setPasswordAction(_: FormState, formData: FormData): Promi
   const input = newPasswordSchema.safeParse({ password: formData.get("password"), confirm: formData.get("confirm") });
   if (!input.success) return { error: firstIssue(input.error) };
 
-  const user = await getSessionUser();
-  if (!user) return { error: "Your link has expired. Ask for a new one." };
+  const account = await getSignedInAccount();
+  if (!account) return { error: "Your link has expired. Ask for a new one." };
+  if (account.gate === "code") return { location: "/two-step?next=/reset-password" };
+  if (passwordUsesEmail(input.data.password, account.email)) {
+    return { error: "Do not use your email address in the password." };
+  }
+  // A session left open is not enough to change the password: it needs a sign-in (or an email
+  // link) from the last few minutes, or the current password.
+  if (!provedRecently(account.proofs)) {
+    const current = formData.get("current");
+    if (typeof current !== "string" || !current) return { error: "Enter your current password." };
+    const check = createSupabaseEmailClient();
+    const { error: wrong } = await check.auth.signInWithPassword({ email: account.email, password: current });
+    if (wrong) return { error: "The current password is not right." };
+    // That check made a session of its own; end it at once.
+    await check.auth.signOut({ scope: "local" });
+  }
+  const user = account;
 
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.auth.updateUser({ password: input.data.password });

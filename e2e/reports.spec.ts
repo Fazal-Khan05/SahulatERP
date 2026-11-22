@@ -54,7 +54,7 @@ test("an owner reads the books: trial balance, balance sheet, profit and loss, a
   await post("1111", "4100", "12500.50", "JV-2627-00003", "Cash sale");
 
   await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Reports" }).click();
-  await expect(page.getByRole("list", { name: "Ledger reports" }).getByRole("link")).toHaveText(["Trial balance", "General ledger", "Balance sheet", "Profit and loss"]);
+  await expect(page.getByRole("list", { name: "Ledger reports" }).getByRole("link")).toHaveText(["Trial balance", "General ledger", "Balance sheet", "Profit and loss", "Cash flow"]);
 
   // Trial balance: the fiscal year so far, and totals that agree.
   await page.getByRole("link", { name: "Trial balance" }).click();
@@ -138,7 +138,7 @@ test("a report downloads as Excel and as CSV, and prints on the company's letter
   expect(bytes.subarray(0, 2).toString("latin1")).toBe("PK");
   expect(bytes.length).toBeGreaterThan(2000);
   // Anything else asked of the address is simply not found.
-  expect((await page.request.get("/reports/export?report=cash-flow&format=csv")).status()).toBe(404);
+  expect((await page.request.get("/reports/export?report=no-such-report&format=csv")).status()).toBe(404);
   expect((await page.request.get("/reports/export?report=trial-balance&format=pdf")).status()).toBe(404);
 
   await page.getByRole("link", { name: "Print" }).click();

@@ -27,6 +27,14 @@ export const permissions = {
   // functions in drizzle/0032_cash_bank.sql name the same roles.
   "cash_bank.read": ["owner", "accountant", "auditor"],
   "cash_bank.manage": ["owner", "accountant"],
+  // Step 40. Employees and what they are paid are read by the owner, the payroll administrator,
+  // the accountant and the auditor (the founder's decision, 2026-11-15), and kept by the owner
+  // and the payroll administrator. The statutory tables are the law: every member reads them;
+  // the owner, the accountant and the payroll administrator keep them, as tax rates are kept.
+  // The policies in drizzle/0037_payroll_employees.sql name the same roles.
+  "payroll.read": ["owner", "payroll_administrator", "accountant", "auditor"],
+  "payroll.manage": ["owner", "payroll_administrator"],
+  "statutory_rate.manage": ["owner", "accountant", "payroll_administrator"],
 } as const satisfies TrackPermissions;
 
 /**
@@ -37,8 +45,8 @@ export const links = {
   cashAndBank: "/cash-bank",
   commissions: "/commissions",
   myCommission: "/commissions/earned",
-  payroll: null,
-  employees: null,
+  payroll: "/payroll",
+  employees: "/payroll/employees",
   payrollRuns: null,
   payslips: null,
 } as const satisfies TrackLinks;

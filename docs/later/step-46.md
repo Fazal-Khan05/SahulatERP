@@ -139,5 +139,6 @@ medium and five low findings, all put right and tested:
 - The return does not work out the **tax payable** (STR-7's own figures): IRIS does that from
   the annexes. "Beside the ledger" gives the figures to check it against.
 - A debit note for goods that were **not yet billed** carries no tax and is not on Annex-A.
-- The activity log shows `tax_return.province` by its name until Step 47 (which moves the list of
-  labels) is merged; a label is added then.
+- The activity log shows `tax_return.province` by its name, like every action added since the
+  tracks began: the list of labels (`src/modules/tenant/activity-labels.ts`) is shared, and a
+  track does not edit it (docs/PARALLEL.md). Labels for all of them are one joint change.

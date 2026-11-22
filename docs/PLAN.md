@@ -164,7 +164,7 @@ Fifty-two steps in nine phases. Phases finish in order; steps inside a phase mos
 | 33 | Recovery: follow-ups, promise-to-pay with broken-promise list, customer statement print and email, aged receivables | Overdue list matches ageing report | Done 2026-11-15, except emailing the statement: no email service chosen yet (docs/later/step-33.md) |
 | 34 | Bank and cash accounts, transfers, expenses, petty cash; archive only at zero balance | Expense with provincial services tax withholding posts correctly | |
 | 35 | Bank statement import (CSV/Excel from HBL, Meezan, UBL formats; generic column mapper), matching rules, reconciliation screen, unreconcile | 90% of a sample statement auto-matches; reconciled balance equals ledger | |
-| 36 | Cash-flow statement; owner dashboard with date and branch filters | Cash-flow net equals change in bank and cash | |
+| 36 | Cash-flow statement; owner dashboard with date and branch filters | Cash-flow net equals change in bank and cash | Done 2026-11-18 (the cash-flow statement by the direct method, and the owner's figures on Home) |
 
 ### Phase 6: Commissions and payroll
 
@@ -173,7 +173,7 @@ Fifty-two steps in nine phases. Phases finish in order; steps inside a phase mos
 | 37 | Commission plans and rules (flat, category, class, per-unit, tiered with targets), non-overlapping dates, sales hierarchy with cycle check. Port rules from `reference/` | Old unit tests pass against the new `rules.ts` | Done 2026-11-15 |
 | 38 | Accrual on invoice, release on collection (partial), reversal on bounce/return, approval, payment, recovery from later pay; immutable movements | Port the old workflow tests; every movement sums to the accrual | Done 2026-11-15 |
 | 39 | Commission statements per salesperson (print/PDF), approval screen, manager override percentage | Statement equals movements for the period | Done 2026-11-15 |
-| 40 | Employees, pay components, attendance (CSV), statutory rate tables seeded (TY2027 slabs, EOBI on minimum wage by province, social security) with effective dates | Tax on a Rs 150,000/month salary matches the slab calculation by hand | |
+| 40 | Employees, pay components, attendance (CSV), statutory rate tables seeded (TY2027 slabs, EOBI on minimum wage by province, social security) with effective dates | Tax on a Rs 150,000/month salary matches the slab calculation by hand | Done 2026-11-18 (employees, pay, attendance and the statutory tables; payroll runs are Step 41's) |
 | 41 | Payroll runs draft → reviewed → approved → paid, cancel; commission settlement without double expensing; payslips PDF and email | Approving a run after a commission changed is refused | |
 | 42 | Salary bank-transfer file (per-bank layout, starts with one bank), s.149 annual statement export, loans/advances with instalments, final settlement | Bank file validates against the bank's sample | |
 

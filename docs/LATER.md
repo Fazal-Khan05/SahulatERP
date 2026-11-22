@@ -41,11 +41,13 @@ Things noticed while building a step that belong to a later one, or to nobody ye
   tables independent of Supabase's schema for exports and restores. Revisit with Step 48.
 - **Dates are shown in Pakistan time** (`src/lib/format.ts`) until a tenant can choose a time zone.
 - **Choosing a new password does not ask for the old one** when already signed in. Step 47
-  (password policy, session timeout, 2FA) should require a recent sign-in.
+  (password policy, session timeout, 2FA) should require a recent sign-in. *Done in Step 47: a
+  proof from the last 10 minutes, or the current password (docs/later/step-47.md).*
 - **A session that was ended elsewhere keeps working until its token expires** (up to an hour):
   requests verify the token's signature, not whether Supabase still lists the session.
   Deactivating a membership takes effect at once, because the database checks it on every query.
-  Also for Step 47.
+  Also for Step 47. *Step 47 narrowed it: a session without a code asks Supabase Auth on every
+  page; one with a code still runs until its token expires (docs/later/step-47.md).*
 - **The forgot-password form has no limit of its own.** Supabase limits reset emails per address
   and per project; on the free sender a few requests use up the hour's quota for everyone.
 

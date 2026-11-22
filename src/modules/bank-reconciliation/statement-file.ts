@@ -117,6 +117,8 @@ export async function readSheet(bytes: Uint8Array): Promise<SheetRows> {
   } catch {
     return { ok: false, reason: UNREADABLE };
   }
+  // A ZIP that is no workbook opens as a workbook without sheets.
+  if (workbook.worksheets.length === 0) return { ok: false, reason: UNREADABLE };
   const sheet = workbook.worksheets.find((s) => s.state === "visible" && s.actualRowCount > 0);
   if (!sheet) return { ok: false, reason: "The Excel file has no sheet with anything in it." };
   if (sheet.rowCount > MAX_SHEET_ROWS) return { ok: false, reason: TOO_BIG };

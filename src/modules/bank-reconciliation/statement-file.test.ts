@@ -97,7 +97,7 @@ describe("an Excel statement", () => {
     const fromExcel = lines(await readStatementFile(bytes, "hbl"));
     expect(fromExcel).toEqual(lines(readStatement(SAMPLE, "hbl")));
     expect(fromExcel.lines).toHaveLength(10);
-    expect(fromExcel.lines[2]).toMatchObject({ row: 8, date: "2026-11-05", reference: "000412", amount: "-20000.00", balance: "30000.00" });
+    expect(fromExcel.lines[1]).toMatchObject({ row: 8, date: "2026-11-05", reference: "000412", amount: "-20000.00", balance: "30000.00" });
     expect([fromExcel.opening, fromExcel.closing]).toEqual(["0.00", "49595.67"]);
     // Read by the column names too, and by names given by hand.
     expect(lines(await readStatementFile(bytes, "auto"))).toEqual(fromExcel);

@@ -7,7 +7,7 @@ import { approvalJournal, commissionOf, monthEnd, monthsEmployedEarlier, monthsL
 
 const d = (value: string | number) => new Decimal(value);
 const slab = (over: number, upTo: number | null, fixed: number, rate: number): Slab => ({ over: d(over), upTo: upTo === null ? null : d(upTo), fixed: d(fixed), rate: d(rate) });
-// Tax year 2027 (Finance Act 2026), as shipped in drizzle/0032_payroll_employees.sql.
+// Tax year 2027 (Finance Act 2026), as shipped in drizzle/0037_payroll_employees.sql.
 const TABLE = {
   from: "2026-07-01",
   slabs: [

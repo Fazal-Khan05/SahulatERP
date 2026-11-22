@@ -11,7 +11,7 @@ import { tenants } from "../tenant/schema";
 // earned: approving moves it from Commission payable to Salaries payable, never into an expense
 // again), then paid out of a cash or bank account. Before approval it can be worked out again or
 // cancelled. Statuses after a draft, numbers and journals are the database's own answers
-// (drizzle/0033_payroll_runs.sql).
+// (drizzle/0039_payroll_runs.sql).
 
 /** A month's payroll for the company: PR-2627-00001 once approved. */
 export const payrollRuns = pgTable(

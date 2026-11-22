@@ -164,7 +164,7 @@ Fifty-two steps in nine phases. Phases finish in order; steps inside a phase mos
 | 33 | Recovery: follow-ups, promise-to-pay with broken-promise list, customer statement print and email, aged receivables | Overdue list matches ageing report | Done 2026-11-15, except emailing the statement: no email service chosen yet (docs/later/step-33.md) |
 | 34 | Bank and cash accounts, transfers, expenses, petty cash; archive only at zero balance | Expense with provincial services tax withholding posts correctly | Done 2026-11-22 (cash and bank accounts, transfers, expenses with withholding, petty cash as a cash account) |
 | 35 | Bank statement import (CSV/Excel from HBL, Meezan, UBL formats; generic column mapper), matching rules, reconciliation screen, unreconcile | 90% of a sample statement auto-matches; reconciled balance equals ledger | |
-| 36 | Cash-flow statement; owner dashboard with date and branch filters | Cash-flow net equals change in bank and cash | |
+| 36 | Cash-flow statement; owner dashboard with date and branch filters | Cash-flow net equals change in bank and cash | Done 2026-11-18 (the cash-flow statement by the direct method, and the owner's figures on Home) |
 
 ### Phase 6: Commissions and payroll
 

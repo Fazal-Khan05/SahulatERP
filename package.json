@@ -28,6 +28,9 @@
     "worker": "node --env-file-if-exists=.env.local scripts/worker.mjs",
     "demo:seed": "DEMO_ACTION=seed vitest run --config vitest.demo.config.ts",
     "demo:reset": "DEMO_ACTION=reset vitest run --config vitest.demo.config.ts",
+    "perf:seed": "PERF_ACTION=seed vitest run --config vitest.perf.config.ts",
+    "perf:measure": "PERF_ACTION=measure vitest run --config vitest.perf.config.ts",
+    "perf:reset": "PERF_ACTION=reset vitest run --config vitest.perf.config.ts",
     "check": "npm run check:migrations && npm run typecheck && npm run lint && npm run test"
   },
   "dependencies": {

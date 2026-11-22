@@ -24,7 +24,9 @@ import {
   type ReportFilter,
   type ReportTable,
   type Totals,
+  REPORTS,
 } from "./rules";
+import { cashFlow, cashFlowTable, ownerFigures, type CashFlowEntry, type OwnerFigures } from "./cash-flow";
 
 // The ledger reports, read straight from posted journal lines. Row-level security decides what
 // the reader may see: a member limited to some branches gets the books of those branches only.
@@ -103,6 +105,77 @@ export async function getBalanceSheet(ctx: TenantContext, filter: ReportFilter):
     const yearStart = await selectYearStart(tx, ctx.tenantId, filter.to);
     const [chart, totals] = [await reportAccounts(tx, ctx.tenantId), await selectTotals(tx, ctx.tenantId, { from: yearStart, to: filter.to, branchId: filter.branchId })];
     return balanceSheetTable(balanceSheet(chart, totals), filter.to);
+  });
+}
+
+/**
+ * The cash-flow statement for a period (Step 36): every journal that moved money in or out of a
+ * cash or bank account in the period, line by line, and what those accounts held before it and
+ * at its end; one branch's, when asked.
+ */
+export async function getCashFlow(ctx: TenantContext, filter: ReportFilter): Promise<ReportTable> {
+  requireReportAccess(ctx);
+  return withTenant(ctx.userId, ctx.tenantId, async (tx) => {
+    const chart = await reportAccounts(tx, ctx.tenantId);
+    // One statement, so the balances and the entries are read as of one moment: a receipt posted
+    // meanwhile is in both or in neither. A journal is wholly in one branch (its lines take its
+    // branch), so the branch asked for takes whole journals.
+    const rows = await tx.execute<{ kind: "balance" | "entry"; journal_id: string | null; source_type: string | null; account_id: string | null; net: string; closing: string | null }>(sql`
+      with cash as (
+        select a.id from public.accounts a where a.tenant_id = ${ctx.tenantId} and a.control_type in ('cash', 'bank') and not a.is_group
+      ),
+      cash_lines as (
+        select l.journal_id, l.debit - l.credit as net, j.journal_date
+        from public.journal_lines l join public.journals j on j.tenant_id = l.tenant_id and j.id = l.journal_id
+        where l.tenant_id = ${ctx.tenantId} and l.account_id in (select id from cash) and j.journal_date <= ${filter.to}::date
+          and (${filter.branchId}::uuid is null or l.branch_id = ${filter.branchId}::uuid)
+      ),
+      moved as (select distinct c.journal_id from cash_lines c where c.journal_date >= ${filter.from}::date)
+      select 'balance' as kind, null::uuid as journal_id, null::text as source_type, null::uuid as account_id,
+        coalesce(sum(c.net) filter (where c.journal_date < ${filter.from}::date), 0)::text as net, coalesce(sum(c.net), 0)::text as closing
+      from cash_lines c
+      union all
+      select 'entry', l.journal_id,
+        -- A reversal says what it reverses: the reversal of an opening balance is an opening balance too.
+        case when j.source_type = 'reversal' then 'reversal:' || coalesce(o.source_type, '') else j.source_type end,
+        l.account_id, sum(l.debit - l.credit)::text, null
+      from public.journal_lines l
+      join public.journals j on j.tenant_id = l.tenant_id and j.id = l.journal_id
+      left join public.journals o on o.tenant_id = j.tenant_id and o.id = j.reverses_journal_id
+      where l.tenant_id = ${ctx.tenantId} and l.journal_id in (select journal_id from moved)
+      group by l.journal_id, j.source_type, o.source_type, l.account_id`);
+    const balance = rows.find((row) => row.kind === "balance")!;
+    const entries = rows
+      .filter((row) => row.kind === "entry")
+      .map((row): CashFlowEntry => ({ journalId: row.journal_id!, sourceType: row.source_type!, accountId: row.account_id!, net: new Decimal(row.net) }));
+    return cashFlowTable(cashFlow(chart, entries, new Decimal(balance.net), new Decimal(balance.closing!)), filter, REPORTS["cash-flow"].title);
+  });
+}
+
+/**
+ * The owner's figures for a period and a branch (Step 36): what cash and bank hold at its end and
+ * how much that moved, sales, profit, and what customers and suppliers owe at its end. One read of
+ * the books; each figure is what the reports show.
+ */
+export async function getOwnerFigures(ctx: TenantContext, filter: ReportFilter): Promise<OwnerFigures> {
+  requireReportAccess(ctx);
+  return withTenant(ctx.userId, ctx.tenantId, async (tx) => {
+    // In one statement: the period's movements in every account, and before it only the accounts
+    // whose balance is shown (cash and bank, what customers and suppliers owe), not all history.
+    const rows = await tx.execute<{ account_id: string; before: string; debit: string; credit: string }>(sql`
+      select l.account_id,
+        coalesce(sum(l.debit - l.credit) filter (where j.journal_date < ${filter.from}::date), 0)::text as before,
+        coalesce(sum(l.debit) filter (where j.journal_date >= ${filter.from}::date), 0)::text as debit,
+        coalesce(sum(l.credit) filter (where j.journal_date >= ${filter.from}::date), 0)::text as credit
+      from public.journal_lines l
+      join public.journals j on j.tenant_id = l.tenant_id and j.id = l.journal_id
+      join public.accounts a on a.tenant_id = l.tenant_id and a.id = l.account_id
+      where l.tenant_id = ${ctx.tenantId} and j.journal_date <= ${filter.to}::date
+        and (${filter.branchId}::uuid is null or l.branch_id = ${filter.branchId}::uuid)
+        and (j.journal_date >= ${filter.from}::date or a.control_type in ('cash', 'bank', 'ar', 'ap'))
+      group by l.account_id`);
+    const totals = new Map(rows.map((row): [string, AccountTotal] => [row.account_id, { before: new Decimal(row.before), debit: new Decimal(row.debit), credit: new Decimal(row.credit) }]));
+    return ownerFigures(await reportAccounts(tx, ctx.tenantId), totals);
   });
 }
 

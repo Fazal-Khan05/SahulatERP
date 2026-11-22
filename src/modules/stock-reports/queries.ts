@@ -215,16 +215,9 @@ async function lowStock(tx: Tx, ctx: TenantContext, filter: StockFilter, today: 
       where b.tenant_id = ${ctx.tenantId} and b.quantity <> 0 and ${branchOf(filter)}
       order by lower(w.name)`),
     // What submitted sales orders still have to deliver: each line less what posted delivery notes and invoices made from it took.
-    tx.execute<{ item_id: string; open: string }>(sql`
-      select ol.item_id, sum(greatest(ol.base_quantity - coalesce((
-          select sum(l.base_quantity) from public.sales_lines l
-          join public.sales_documents x on x.tenant_id = l.tenant_id and x.id = l.document_id
-          where l.tenant_id = ol.tenant_id and l.source_line_id = ol.id and x.kind in ('delivery', 'invoice') and x.status = 'submitted'), 0), 0))::text as open
-      from public.sales_lines ol
-      join public.sales_documents o on o.tenant_id = ol.tenant_id and o.id = ol.document_id
-      join public.warehouses w on w.tenant_id = o.tenant_id and w.id = o.warehouse_id
-      where ol.tenant_id = ${ctx.tenantId} and o.kind = 'order' and o.status = 'submitted' and ${branchOf(filter)}
-      group by ol.item_id`),
+    // What submitted sales orders still have to deliver: each line less what posted delivery notes and invoices
+    // made from it took, added up in one pass in the database (app.open_order_quantities).
+    tx.execute<{ item_id: string; open: string }>(sql`select item_id, open::text from app.open_order_quantities(${filter.branchId}::uuid)`),
   ]);
   const places = new Map<string, { warehouse: string; quantity: Decimal }[]>();
   for (const row of held) places.set(row.item_id, [...(places.get(row.item_id) ?? []), { warehouse: row.warehouse, quantity: d(row.quantity) }]);
@@ -239,38 +232,13 @@ async function lowStock(tx: Tx, ctx: TenantContext, filter: StockFilter, today: 
 }
 
 async function itemProfit(tx: Tx, ctx: TenantContext, filter: StockFilter): Promise<ReportTable> {
+  // Added up in the database, in one pass (app.item_profit): what each line's goods cost was a look-up in the
+  // stock moves for every line sold in the period, which took ten seconds for a few thousand invoices.
   const rows = await tx.execute<{ code: string; name: string; unit: string; quantity: string; sales: string; cost: string }>(sql`
-    with sold as (
-      -- Posted invoices in the period, with what the goods on each line left stock at: on the
-      -- invoice itself when it delivered them, or on the delivery note line it bills.
-      select l.item_id, l.base_quantity as quantity, l.value * s.exchange_rate as sales, coalesce(c.cost, 0) as cost
-      from public.sales_lines l
-      join public.sales_documents s on s.tenant_id = l.tenant_id and s.id = l.document_id
-      left join lateral (
-        select -sum(m.value) as cost from public.stock_moves m
-        where m.tenant_id = l.tenant_id
-          and ((m.source_type = 'sales_invoice' and m.source_id = s.id and m.source_line_id = l.id)
-            or (m.source_type = 'delivery_note' and l.source_line_id is not null and m.source_line_id = l.source_line_id))
-      ) c on true
-      where l.tenant_id = ${ctx.tenantId} and s.kind = 'invoice' and s.status = 'submitted'
-        and s.document_date between ${filter.from}::date and ${filter.to}::date
-        and (${filter.branchId}::uuid is null or s.branch_id = ${filter.branchId}::uuid)
-      union all
-      -- Posted credit notes (Step 21) in the period take back their quantity and value, and the
-      -- cost of the goods that came back onto the shelf; goods written off as damaged stay a cost.
-      select l.item_id, -l.base_quantity, -(l.value * s.exchange_rate), -coalesce(cc.cost - cc.written_off, 0)
-      from public.sales_lines l
-      join public.sales_documents s on s.tenant_id = l.tenant_id and s.id = l.document_id
-      left join public.credit_note_line_costs cc on cc.tenant_id = l.tenant_id and cc.line_id = l.id
-      where l.tenant_id = ${ctx.tenantId} and s.kind = 'credit_note' and s.status = 'submitted'
-        and s.document_date between ${filter.from}::date and ${filter.to}::date
-        and (${filter.branchId}::uuid is null or s.branch_id = ${filter.branchId}::uuid)
-    )
-    select i.code, i.name, u.code as unit, sum(sold.quantity)::text as quantity, round(sum(sold.sales), 4)::text as sales, sum(sold.cost)::text as cost
-    from sold
+    select i.code, i.name, u.code as unit, sold.quantity::text as quantity, round(sold.sales, 4)::text as sales, sold.cost::text as cost
+    from app.item_profit(${filter.from}::date, ${filter.to}::date, ${filter.branchId}::uuid) sold
     join public.items i on i.tenant_id = ${ctx.tenantId} and i.id = sold.item_id
     join public.units u on u.tenant_id = i.tenant_id and u.id = i.base_unit_id
-    group by i.id, i.code, i.name, u.code
     order by lower(i.code)`);
   return itemProfitTable(
     rows.map((row) => ({ code: row.code, name: row.name, unit: row.unit, quantity: d(row.quantity), sales: d(row.sales), cost: d(row.cost) })),

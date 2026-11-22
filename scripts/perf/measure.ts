@@ -65,7 +65,10 @@ export async function measurePerf(): Promise<string[]> {
     const month = { from: `${last.slice(0, 8)}01`, to: last };
     const year = { from: first, to: last };
 
+    // PERF_ONLY="item-profit,aged" times only what has one of those words in its name.
+    const only = (process.env.PERF_ONLY ?? "").toLowerCase().split(",").map((part) => part.trim()).filter(Boolean);
     const time = async (area: string, name: string, run: () => Promise<unknown>) => {
+      if (only.length > 0 && !only.some((part) => `${area}, ${name}`.toLowerCase().includes(part))) return;
       const took: number[] = [];
       let rows: number | null = null;
       try {

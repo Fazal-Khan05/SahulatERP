@@ -137,7 +137,8 @@ export async function seedPerf(log: (line: string) => void = say): Promise<strin
     const as = (userId: string, role: MemberRole): TenantContext => ({ userId, email: `${role}-${userId.slice(0, 4)}@perf.sahulaterp.test`, tenantId, tenantName: PERF_COMPANY, role, branchIds: null });
     const owner = as(ownerId, "owner");
     if (fresh) {
-      const sellerIds = Array.from({ length: 5 }, () => randomUUID());
+      // Forty people selling: about a dozen invoices a day each, as a distributor of this size would have.
+      const sellerIds = Array.from({ length: 40 }, () => randomUUID());
       await sql`insert into public.tenants (id, name, created_by) values (${tenantId}, ${PERF_COMPANY}, ${ownerId})`;
       await sql`insert into public.memberships ${sql([
         { tenant_id: tenantId, user_id: ownerId, email: owner.email, role: "owner", branch_ids: null, created_by: ownerId },

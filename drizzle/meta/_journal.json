@@ -267,6 +267,13 @@
       "when": 1795021439529,
       "tag": "0037_payroll_employees",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1795355759127,
+      "tag": "0038_cash_bank",
+      "breakpoints": true
     }
   ]
 }

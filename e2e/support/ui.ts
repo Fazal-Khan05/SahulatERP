@@ -1,12 +1,34 @@
 import { expect, test as base, type Page, type Request } from "@playwright/test";
 import type { TestUser } from "./admin";
+import { freshCode } from "./two-step";
 
-export async function signIn(page: Page, user: Pick<TestUser, "email" | "password">) {
+/**
+ * Signs in with the password and, for an account with an authenticator app, its code. An account
+ * without one is offered the setup; this passes it by ("Not now") where the role allows.
+ */
+export async function signIn(page: Page, user: Pick<TestUser, "email" | "password" | "totp">) {
   await page.goto("/sign-in");
   await page.getByLabel("Email").fill(user.email);
   await page.getByLabel("Password").fill(user.password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).not.toHaveURL(/\/sign-in$/);
+  await page.waitForURL((url) => url.pathname !== "/sign-in");
+  if (new URL(page.url()).pathname === "/two-step") await giveCode(page, user);
+  else if (new URL(page.url()).pathname === "/two-step/setup") {
+    const notNow = page.getByRole("link", { name: "Not now" });
+    if (await notNow.isVisible()) {
+      await notNow.click();
+      await page.waitForURL((url) => !url.pathname.startsWith("/two-step"));
+    }
+  }
+}
+
+/** Gives the authenticator app's code on the code page. */
+export async function giveCode(page: Page, user: Pick<TestUser, "email" | "totp">) {
+  if (!user.totp) throw new Error(`${user.email} has no authenticator app in this test`);
+  await page.getByLabel("Code", { exact: true }).fill(await freshCode(user.totp));
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.waitForURL((url) => url.pathname !== "/two-step");
 }
 
 /** The labels in the left rail, links and not-yet-built entries alike, in order. */

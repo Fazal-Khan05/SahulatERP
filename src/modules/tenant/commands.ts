@@ -202,17 +202,32 @@ export async function setModuleEnabled(ctx: TenantContext, rawModule: unknown, e
   });
 }
 
-export type AuthEvent = "auth.sign_in" | "auth.sign_out" | "auth.password_set";
+export type AuthEvent =
+  | "auth.sign_in"
+  | "auth.sign_out"
+  | "auth.sign_out_everywhere"
+  | "auth.password_set"
+  | "auth.two_step_passed"
+  | "auth.two_step_failed"
+  | "auth.two_step_on"
+  | "auth.two_step_off";
+
+/** What a sign-in history row says besides who and when: how, from what device, from where. */
+export type AuthEventDetail = {
+  method?: "password" | "recovery" | "invite";
+  device?: string;
+  address?: string | null;
+};
 
 /**
- * Writes a sign-in, sign-out or password change to the audit log of every company the user is an
- * active member of, in one transaction: every company gets its row or none does. A user with no
- * company yet has no log to write to.
+ * Writes a sign-in, sign-out, password change or two-step event to the audit log of every company
+ * the user is an active member of, in one transaction: every company gets its row or none does.
+ * A user with no company yet has no log to write to.
  */
 export async function recordAuthEvent(
   userId: string,
   action: AuthEvent,
-  detail?: { method: "password" | "recovery" | "invite" },
+  detail?: AuthEventDetail,
 ): Promise<MembershipSummary[]> {
   return withTenant(userId, null, async (tx) => {
     const active = await selectMyMemberships(tx, userId);

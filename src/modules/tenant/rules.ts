@@ -133,11 +133,33 @@ export const emailSchema = z
   .toLowerCase()
   .pipe(z.email("Enter a valid email address.").max(254));
 
-// Supabase Auth enforces the same minimum; 72 bytes is the bcrypt limit.
+// The password policy (Step 47). Length is what makes a password hard to guess, so there are no
+// rules about kinds of character; a password is refused when it is short, made of a few characters
+// over and over, one of the passwords people use most, or the product's name. Supabase Auth's own
+// minimum is lower; 72 bytes is the bcrypt limit. A password chosen before the policy still works.
+export const PASSWORD_MIN = 12;
+
+const COMMON_PASSWORDS = new Set([
+  "123456789012", "1234567890123", "12345678901234", "1234567890qwerty", "qwertyuiop12", "qwertyuiop123",
+  "qwertyuiopasdf", "1q2w3e4r5t6y", "1qaz2wsx3edc", "password1234", "password12345", "passwordpassword",
+  "pakistan1234", "pakistan12345", "pakistanzindabad", "iloveyou1234", "welcome12345", "admin1234567",
+  "administrator", "abcdefghijkl", "abc123456789", "aaaaaaaaaaaa", "letmein12345", "football1234",
+  "karachi12345", "lahore123456", "islamabad123", "bismillah123", "bismillah1234", "allahuakbar1",
+]);
+
 export const passwordSchema = z
   .string()
-  .min(10, "Use at least 10 characters.")
-  .max(72, "Use at most 72 characters.");
+  .min(PASSWORD_MIN, `Use at least ${PASSWORD_MIN} characters.`)
+  .max(72, "Use at most 72 characters.")
+  .refine((value) => new Set(value.toLowerCase()).size >= 5, "Use more different characters.")
+  .refine((value) => !COMMON_PASSWORDS.has(value.toLowerCase()), "That password is one of the most used. Choose another.")
+  .refine((value) => !/sahulat/i.test(value), "Do not use the product's name in the password.");
+
+/** A new password must also not contain the name part of the member's own email address. */
+export function passwordUsesEmail(password: string, email: string): boolean {
+  const name = email.split("@")[0]?.toLowerCase() ?? "";
+  return name.length >= 4 && password.toLowerCase().includes(name);
+}
 
 export const signInSchema = z.object({
   email: emailSchema,

@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb, withTenant } from "@/db";
 import { postCreditNote, saveCreditNoteDraft, startCreditNote } from "@/modules/credit-notes/commands";
 import { setBaseCurrency } from "@/modules/currencies/commands";
-import { addUnit, createItem } from "@/modules/items/commands";
+import { addUnit, createItem, setItemUnit } from "@/modules/items/commands";
 import { addAccount, seedAccounts } from "@/modules/ledger/commands";
 import { openFiscalYear } from "@/modules/numbering/commands";
 import { createParty } from "@/modules/parties/commands";
@@ -14,7 +14,7 @@ import { postReceipt, saveReceiptDraft } from "@/modules/receipts/commands";
 import { postInvoice, saveInvoiceDraft, saveSalesDraft, startInvoice, submitSalesDocument } from "@/modules/sales/commands";
 import { getSalesDocument } from "@/modules/sales/queries";
 import { addShipmentCharge, addShipmentReceipt, allocateShipment, openShipment } from "@/modules/shipments/commands";
-import { postBill, saveBillDraft } from "@/modules/supplier-bills/commands";
+import { postBill, saveBillDraft, setWithholding } from "@/modules/supplier-bills/commands";
 import { postReturn, saveReturnDraft } from "@/modules/supplier-returns/commands";
 import type { TenantContext } from "@/modules/tenant/rules";
 import { adminSql, deleteTenants, hasAdminDb, type AdminSql } from "../../../tests/support/admin-db";
@@ -260,6 +260,8 @@ describe.skipIf(!hasDb)("the sales tax return", { timeout: 600_000 }, () => {
       "HL-1 6506.1000: opened 0/0, imported 0/0, purchased 8/4800, supplied 5/3000, other 0/0, closed 3/1800",
       "CH-3 null: opened 20/4000, imported 0/0, purchased 0/0, supplied 0/0, other 0/0, closed 20/4000",
     ]);
+    // None of the three has a tax category of its own: each is charged, and stated at, the standard rate.
+    expect(november.h1.map((r) => r.taxRate?.toString())).toEqual(["18", "18", "18"]);
     // What the statement closes at is what the warehouse held on the last day of the month.
     const closing = november.h1.reduce((total, r) => total.plus(r.closingValue), november.h1[0].closingValue.minus(november.h1[0].closingValue));
     const [{ held }] = await admin<{ held: string }[]>`select sum(value)::numeric(20,2)::text as held from public.stock_moves where tenant_id = ${tenantA} and move_date <= ${NOVEMBER.to}`;
@@ -308,6 +310,82 @@ describe.skipIf(!hasDb)("the sales tax return", { timeout: 600_000 }, () => {
     expect(await codeOf(as.auditor, sql`update public.tax_return_settings set province = 'sindh', updated_by = ${userIds.auditor}`)).toBeUndefined();
     expect((await getReturnStanding(as.owner)).province).toBe("punjab");
     expect(await codeOf(otherOwner, sql`insert into public.tax_return_settings (tenant_id, province, created_by, updated_by) values (${tenantA}, 'sindh', ${ownerB}, ${ownerB})`)).toBe("42501");
+    // Like the return, the province is the whole company's: not a branch accountant's to read or set.
+    await expect(setReturnProvince(north, "balochistan")).rejects.toThrow(WHOLE_COMPANY_ONLY);
+    expect(await codeOf(north, sql`update public.tax_return_settings set province = 'balochistan', updated_by = ${northAccountant}`)).toBeUndefined();
+    expect((await withTenant(north.userId, north.tenantId, (tx) => tx.execute(sql`select 1 from public.tax_return_settings`))).length).toBe(0);
+    expect((await getReturnStanding(as.owner)).province).toBe("punjab");
+    // When it was written is the database's to say.
+    expect(await codeOf(as.owner, sql`update public.tax_return_settings set updated_at = '1999-01-01', updated_by = ${userIds.owner}`)).toBe("42501");
     await setReturnProvince(as.owner, "sindh");
+    const [{ fresh }] = await admin<{ fresh: boolean }[]>`select updated_at > now() - interval '5 minutes' and updated_at > created_at as fresh from public.tax_return_settings where tenant_id = ${tenantA}`;
+    expect(fresh).toBe(true);
+  });
+
+  // What the independent review found (2026-11-22), each in a September of its own.
+  const SEPTEMBER = readReturnPeriod("2026-09", "2026-12-05");
+
+  it("what the review found: sales tax withheld is not lost when a bill's first line, or every line, is Annex-B's", async () => {
+    await setWithholding(as.accountant, true);
+    try {
+      const shipment = await openShipment(as.accountant, { openedOn: "2026-09-02", supplierId: ningbo, branchId: mainBranch });
+      const lineIds = async (billId: string) => (await admin<{ id: string }[]>`select id from public.supplier_bill_lines where tenant_id = ${tenantA} and bill_id = ${billId} order by line_no`).map((row) => row.id);
+      // A bill whose first line is tax paid at the port, with sales tax withheld from the agent.
+      const mixed = await saveBillDraft(as.accountant, null, { date: "2026-09-03", supplierId: agent, branchId: mainBranch, supplierInvoiceNo: "KC-7", salesTaxCode: "sales_tax.not_active_taxpayer", expenses: [{ accountId: transit, description: "More sales tax at import", amount: "500" }, { accountId: transit, description: "More freight", amount: "1000" }] });
+      await postBill(as.accountant, mixed.id, mixed.updatedAt);
+      await addShipmentCharge(as.accountant, shipment.id, { billLineId: (await lineIds(mixed.id))[0], class: "sales_tax" });
+      // And one that is nothing but tax paid at the port.
+      const customs = await saveBillDraft(as.accountant, null, { date: "2026-09-04", supplierId: agent, branchId: mainBranch, supplierInvoiceNo: "KC-8", salesTaxCode: "sales_tax.not_active_taxpayer", expenses: [{ accountId: transit, description: "Sales tax at import again", amount: "800" }] });
+      await postBill(as.accountant, customs.id, customs.updatedAt);
+      await addShipmentCharge(as.accountant, shipment.id, { billLineId: (await lineIds(customs.id))[0], class: "sales_tax" });
+
+      const september = await getTaxReturn(as.accountant, SEPTEMBER);
+      const withheld = reconcile(september).find((line) => line.label.startsWith("Sales tax withheld"))!;
+      expect(withheld.ledger.gt(0)).toBe(true);
+      expect(withheld.agrees, `${withheld.annex} / ${withheld.ledger}`).toBe(true);
+      expect(september.a.map((r) => `${r.supplierInvoiceNo} ${r.lineNo} ${r.description} ${r.value} ${r.stWithheld.gt(0) ? "withheld" : "none"}`)).toEqual([
+        "KC-7 2 More freight 1000 withheld",
+        "KC-8 0 Sales tax withheld; the bill's lines are on Annex-B 0 withheld",
+      ]);
+    } finally {
+      await setWithholding(as.accountant, false);
+    }
+  });
+
+  it("what the review found: a taxed line stays on Annex-A with its input tax, whatever it was put on a shipment as", async () => {
+    const [{ id: standard }] = await admin<{ id: string }[]>`select id from public.tax_categories where tenant_id = ${tenantA} and kind = 'standard' order by created_at limit 1`;
+    const [{ id: deposits }] = await admin<{ id: string }[]>`select id from public.accounts where tenant_id = ${tenantA} and code = '1220'`;
+    const shipment = await openShipment(as.accountant, { openedOn: "2026-09-10", supplierId: ningbo, branchId: mainBranch });
+    const bill = await saveBillDraft(as.accountant, null, { date: "2026-09-11", supplierId: sialkot, branchId: mainBranch, supplierInvoiceNo: "SS/DEP", expenses: [{ accountId: transit, description: "Container deposit, taxed", amount: "1000", taxCategoryId: standard }] });
+    await postBill(as.accountant, bill.id, bill.updatedAt);
+    const [{ id: lineId }] = await admin<{ id: string }[]>`select id from public.supplier_bill_lines where tenant_id = ${tenantA} and bill_id = ${bill.id}`;
+    await addShipmentCharge(as.accountant, shipment.id, { billLineId: lineId, class: "deposit", accountId: deposits });
+
+    const september = await getTaxReturn(as.accountant, SEPTEMBER);
+    expect(september.a.filter((r) => r.supplierInvoiceNo === "SS/DEP").map((r) => `${r.value} ${r.salesTax}`)).toEqual(["1000 180"]);
+    const purchases = reconcile(september).find((line) => line.label.startsWith("Input tax on purchases"))!;
+    expect([purchases.annex.toString(), purchases.ledger.toString(), purchases.agrees]).toEqual(["180", "180", true]);
+  });
+
+  it("what the review found: Third Schedule goods sold by the carton are stated at the retail price of every piece", async () => {
+    const [{ id: third }] = await admin<{ id: string }[]>`select id from public.tax_categories where tenant_id = ${tenantA} and kind = 'third_schedule' order by created_at limit 1`;
+    const [{ id: pieceId }] = await admin<{ id: string }[]>`select id from public.units where tenant_id = ${tenantA} and code = 'pc'`;
+    const carton = (await addUnit(as.owner, { code: "ctn", name: "Carton" })).id;
+    const soap = (await createItem(as.owner, { code: "SP-9", name: "Soap", unit: pieceId, defaultPrice: "100" })).id;
+    await admin`update public.items set tax_category_id = ${third}, retail_price = 120 where tenant_id = ${tenantA} and id = ${soap}`;
+    await setItemUnit(as.owner, soap, { unit: carton, factor: "12" });
+    await seedStock(admin, { tenantId: tenantA, itemId: soap, warehouseId: warehouse, quantity: "48", value: "2400", userId: userIds.owner, date: "2026-09-01" });
+    const order = await saveSalesDraft(as.salesperson, null, { kind: "order", date: "2026-09-15", customerId: dealer, warehouseId: warehouse, lines: [{ itemId: soap, quantity: "2", unitId: carton, unitPrice: "", discountPercent: "", description: "" }], shares: [{ userId: userIds.salesperson, percent: "100" }] });
+    await submitSalesDocument(as.salesperson, order.id);
+    const { id } = await startInvoice(as.salesperson, order.id);
+    const draft = (await getSalesDocument(as.salesperson, id))!;
+    await saveInvoiceDraft(as.salesperson, id, { date: "2026-09-15", lines: draft.lines.map((l) => ({ sourceLineId: l.sourceLineId, quantity: l.quantity.toFixed() })) });
+    await postInvoice(as.salesperson, id);
+
+    const september = await getTaxReturn(as.accountant, SEPTEMBER);
+    const [row] = september.c.filter((r) => r.description.includes("Soap") || r.hsCode === null);
+    // Two cartons of twelve at a retail price of 120 a piece: 2,880, on which 18% is 518.40.
+    expect([row.quantity.toString(), row.retailValue?.toString(), row.salesTax.toString()]).toEqual(["24", "2880", "518.4"]);
+    expect(reconcile(september)[0]).toMatchObject({ agrees: true });
   });
 });

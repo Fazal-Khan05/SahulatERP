@@ -64,6 +64,34 @@ says so. Each annex's columns are one list in that file, so a heading or its pla
 Sent to the founder: can he, or a registered company's tax adviser, download the current
 templates for Annex-C, C1 and H1 (and a screenshot of A and B) and put them in the repository?
 
+## The independent review (2026-11-22)
+
+A reviewer who had not seen the work attacked the functions as a signed-in member running any
+SQL as the app's role, and posted three months of trade through the app's own commands to set
+the annexes beside the ledger. **Nothing critical or high; access held everywhere** (every role
+but the three, a branch-limited accountant, another company's owner, nobody signed in). Three
+medium and five low findings, all put right and tested:
+
+- **Medium: sales tax withheld was lost from Annex-A** when a bill's first line was a charge paid
+  to Customs (the withholding was pinned to a line that was then left out), and a bill of nothing
+  but such charges vanished with its withholding. It now sits on the first line that is listed,
+  and such a bill gets a row for the withholding alone.
+- **Medium: the retail value of Third Schedule goods sold in a pack was wrong** (the price of one
+  piece times the number of cartons). It is the price of one piece times the pieces.
+- **Medium: Annex-H1 left the rate empty** for an item with no tax category of its own, and split
+  one HS code into two rows. Such an item is stated at the standard rate, as it is sold.
+- **Low: a taxed line put on a shipment as a deposit dropped out of Annex-A with its input tax.**
+  A line that carries sales tax is always listed.
+- **Low: a month like 0001-02 was read by the database as another span of years** (the member's
+  own data only). Only this century's months are taken.
+- **Low: "other entries" on the input tax account were shown beside both Annex-A and Annex-B.**
+  Shown once now.
+- **Low: the first spreading of a shipment was chosen by its date**, so a later one dated back
+  took the customs value from it. It is the first one made.
+- **Low: an accountant limited to a branch could read and set the province**, and whoever could
+  write the row could write its time. The province is the whole company's, like the return; the
+  database stamps the times.
+
 ## Decided for Fazal, to confirm
 
 1. **A month is by the document's date** for C and A; by the day a payment was set against an
@@ -86,6 +114,17 @@ templates for Annex-C, C1 and H1 (and a screenshot of A and B) and put them in t
 8. Dates are written DD-MM-YYYY and rates as "18%", as FBR's files do.
 
 ## Known gaps
+
+- **A month already filed can read differently later.** Nothing is kept: a cheque that bounces
+  next month leaves this month's Annex-C1, and a bill line put on a shipment later leaves an
+  earlier month's Annex-A. Download the files when the return is filed and keep them. Keeping a
+  copy of each filed return in the product is a step of its own.
+- **Annex-H1 can show a negative** supplied or purchased figure in a month in which more came
+  back than went out; IRIS may not take one. Opening stock entered in a month is under "other".
+- **Goods received in one month and billed in the next** are in that month's stock statement and
+  the next month's Annex-A, as the books have them.
+- **Open the Excel file, not the CSV, in Excel**: Excel reads a bare HS code or CNIC in a CSV as a
+  number and spoils it. The Excel file writes them as text.
 
 - **Sales tax withheld by a buyer who is a withholding agent is not recorded** anywhere yet (a
   receipt has no field for it), so that column of Annex-C is empty and said to be.

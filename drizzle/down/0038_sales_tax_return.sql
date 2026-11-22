@@ -12,6 +12,7 @@ DROP FUNCTION app.annex_c1_rows(date, date);
 DROP FUNCTION app.annex_c_rows(date, date);
 DROP FUNCTION app.tax_return_tenant();
 DROP TABLE public.tax_return_settings;
+DROP FUNCTION app.stamp_tax_return_settings();
 -- The row drizzle-kit wrote for 0038_sales_tax_return (its "when" in drizzle/meta/_journal.json).
 DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1795355841995;
 COMMIT;

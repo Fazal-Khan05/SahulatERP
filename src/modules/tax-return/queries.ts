@@ -141,13 +141,15 @@ export async function getTaxReturn(ctx: TenantContext, period: ReturnPeriod): Pr
 /** Sets the province the company supplies from. Written by the owner or an accountant. */
 export async function setReturnProvince(ctx: TenantContext, province: unknown): Promise<void> {
   if (!can(ctx.role, "tax_return.settings")) throw new UserError("Only an owner or an accountant can set the province.");
+  if (ctx.branchIds !== null) throw new UserError(WHOLE_COMPANY_ONLY);
   if (typeof province !== "string" || !(PROVINCES as readonly string[]).includes(province)) throw new UserError("Choose a province.");
   const chosen = province as Province;
   await withTenant(ctx.userId, ctx.tenantId, async (tx) => {
     const [before] = await tx.select({ province: taxReturnSettings.province }).from(taxReturnSettings).where(eq(taxReturnSettings.tenantId, ctx.tenantId));
     if (before?.province === chosen) return;
     if (before) {
-      await tx.update(taxReturnSettings).set({ province: chosen, updatedAt: sql`now()`, updatedBy: ctx.userId }).where(eq(taxReturnSettings.tenantId, ctx.tenantId));
+      // When it was changed is stamped by the database (the app may not write that column).
+      await tx.update(taxReturnSettings).set({ province: chosen, updatedBy: ctx.userId }).where(eq(taxReturnSettings.tenantId, ctx.tenantId));
     } else {
       await tx.execute(sql`insert into public.tax_return_settings (tenant_id, province, created_by, updated_by) values (${ctx.tenantId}, ${chosen}, ${ctx.userId}, ${ctx.userId})`);
     }

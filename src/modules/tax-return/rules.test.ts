@@ -49,6 +49,10 @@ describe("the return's period", () => {
     expect(readReturnPeriod("2026-13", "2026-12-05").month).toBe("2026-11");
     expect(readReturnPeriod("November", "2027-01-15")).toMatchObject({ month: "2026-12", to: "2026-12-31", label: "December 2026" });
     expect(readReturnPeriod(["2026-10"], "2026-12-05").month).toBe("2026-11");
+    // A year the database would read as another year is not a month to ask for.
+    expect(readReturnPeriod("0001-02", "2026-12-05").month).toBe("2026-11");
+    expect(readReturnPeriod("0000-01", "2026-12-05").month).toBe("2026-11");
+    expect(readReturnPeriod("1999-12", "2026-12-05").month).toBe("2026-11");
   });
 
   it("steps to the month before and after, over the year's end", () => {
@@ -152,6 +156,7 @@ describe("beside the ledger", () => {
     const lines = reconcile(data({ ledger: [ledger("input_tax", "supplier_bill", 1080, 0), ledger("input_tax", "supplier_return", 0, 216), ledger("input_tax", "landed_cost", 3000, 0), ledger("input_tax", "opening", 10, 0)] }));
     const purchases = lines.find((l) => l.label.startsWith("Input tax on purchases"))!;
     const imports = lines.find((l) => l.label.startsWith("Input tax paid at import"))!;
-    expect([purchases.ledger.toString(), purchases.other.toString(), imports.ledger.toString(), imports.other.toString()]).toEqual(["864", "10", "3000", "10"]);
+    // The opening entry of 10 on the account is shown once, not beside both annexes.
+    expect([purchases.ledger.toString(), purchases.other.toString(), imports.ledger.toString(), imports.other.toString()]).toEqual(["864", "10", "3000", "0"]);
   });
 });

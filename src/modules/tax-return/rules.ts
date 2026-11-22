@@ -39,7 +39,8 @@ export function readReturnPeriod(month: unknown, today: string): ReturnPeriod {
     index = 11;
     year -= 1;
   }
-  if (typeof month === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+  // This century only: a year like 0001 would be written "1" and read by the database as 2001.
+  if (typeof month === "string" && /^20\d{2}-(0[1-9]|1[0-2])$/.test(month)) {
     year = Number(month.slice(0, 4));
     index = Number(month.slice(5, 7)) - 1;
   }
@@ -307,6 +308,7 @@ export function annexC1Table(data: TaxReturn): ReportTable {
   return tableOf(ANNEXES["annex-c1"].title, data.period, ANNEX_C1_COLUMNS, data.c1, data, [
     ...(cash.gt(0) ? [`Of this, ${cash.toFixed(2)} was received in cash. Section 73 asks for payment through a bank above its limit.`] : []),
     "A payment is listed in the month it was set against the invoice; money received ahead is listed when it is used.",
+    "A cheque that bounces later, or a receipt cancelled later, is no longer listed: download the file when the return is filed, and keep it.",
     LAYOUT_NOTE,
   ]);
 }
@@ -431,7 +433,8 @@ export function annexH1Table(data: TaxReturn): ReportTable {
   return tableOf(ANNEXES["annex-h1"].title, data.period, ANNEX_H1_COLUMNS, groupH1(data.h1), data, [
     ...(noHs > 0 ? [`Items with no HS code (${noHs}) are listed together on a row without one.`] : []),
     "Every value is what the stock is carried at (cost), as S.R.O. 55(I)/2025 asks. Supplied is net of what customers sent back; purchased is net of what went back to suppliers.",
-    "Other is stock counts and adjustments. Opening and what came in, less what was supplied, plus other, is closing.",
+    "Other is stock counts, adjustments and opening stock entered in the month. Opening and what came in, less what was supplied, plus other, is closing.",
+    "A month in which more came back than went out shows a negative supplied or purchased figure.",
     LAYOUT_NOTE,
   ]);
 }
@@ -488,19 +491,21 @@ export function reconcile(data: TaxReturn): ReconLine[] {
     data.ledger
       .filter((row) => row.control === control && (sources === null ? true : sources.includes(row.sourceType)))
       .reduce((total, row) => total.plus(credit ? row.credit.minus(row.debit) : row.debit.minus(row.credit)), ZERO);
-  const line = (label: string, annex: Decimal, control: LedgerRow["control"], sources: string[], credit: boolean, others: string[] = []): ReconLine => {
+  /** `others` are the other annex's documents on the same account; `null` leaves "other entries" to that annex's line. */
+  const line = (label: string, annex: Decimal, control: LedgerRow["control"], sources: string[], credit: boolean, others: string[] | null = []): ReconLine => {
     const ledger = net(control, sources, credit);
-    const all = net(control, null, credit);
-    const elsewhere = net(control, others, credit);
-    return { label, annex, ledger, other: all.minus(ledger).minus(elsewhere), agrees: annex.equals(ledger) };
+    const other = others === null ? ZERO : net(control, null, credit).minus(ledger).minus(net(control, others, credit));
+    return { label, annex, ledger, other, agrees: annex.equals(ledger) };
   };
   const purchases = ["supplier_bill", "supplier_return"];
   const imports = ["landed_cost"];
   return [
     line("Output tax (Annex-C: sales tax and extra tax)", netC((r) => r.salesTax.plus(r.extraTax))(data.c), "output_tax", ["sales_invoice", "credit_note"], true),
     line("Further tax (Annex-C)", netC((r) => r.furtherTax)(data.c), "further_tax", ["sales_invoice", "credit_note"], true),
+    // Purchases and imports share the input tax account: anything else on it is shown once, here.
     line("Input tax on purchases (Annex-A)", netA((r) => r.salesTax)(data.a), "input_tax", purchases, false, imports),
-    line("Input tax paid at import (Annex-B)", sum(data.b, (r) => r.salesTax), "input_tax", imports, false, purchases),
+    line("Input tax paid at import (Annex-B)", sum(data.b, (r) => r.salesTax), "input_tax", imports, false, null),
+    // Paying what was withheld over to FBR is another entry on this account, and shows as one.
     line("Sales tax withheld from suppliers (Annex-A)", sum(data.a, (r) => r.stWithheld), "wht_sales_tax", ["supplier_bill"], true),
   ];
 }

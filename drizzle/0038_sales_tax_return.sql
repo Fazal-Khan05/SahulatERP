@@ -42,28 +42,55 @@ GRANT SELECT ON public.tax_return_settings TO app_runtime;
 --> statement-breakpoint
 GRANT INSERT (tenant_id, province, created_by, updated_by) ON public.tax_return_settings TO app_runtime;
 --> statement-breakpoint
-GRANT UPDATE (province, updated_at, updated_by) ON public.tax_return_settings TO app_runtime;
+GRANT UPDATE (province, updated_by) ON public.tax_return_settings TO app_runtime;
 --> statement-breakpoint
 ALTER TABLE public.tax_return_settings ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
 ALTER TABLE public.tax_return_settings FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint
 -- Read by those who read the return; written by the owner and an accountant, as themselves.
+-- Like the return, it is the whole company's: not for a member limited to some branches.
 CREATE POLICY tax_return_settings_select ON public.tax_return_settings FOR SELECT TO app_runtime
-  USING (tenant_id = (SELECT app.tenant_id()) AND (SELECT app.tenant_role()) IN ('owner', 'accountant', 'auditor'));
+  USING (tenant_id = (SELECT app.tenant_id()) AND (SELECT app.tenant_role()) IN ('owner', 'accountant', 'auditor')
+    AND (SELECT app.tenant_branch_ids()) IS NULL);
 --> statement-breakpoint
 CREATE POLICY tax_return_settings_insert ON public.tax_return_settings FOR INSERT TO app_runtime
   WITH CHECK (
     tenant_id = (SELECT app.tenant_id()) AND (SELECT app.tenant_role()) IN ('owner', 'accountant')
+    AND (SELECT app.tenant_branch_ids()) IS NULL
     AND created_by = (SELECT app.current_user_id()) AND updated_by = (SELECT app.current_user_id())
   );
 --> statement-breakpoint
 CREATE POLICY tax_return_settings_update ON public.tax_return_settings FOR UPDATE TO app_runtime
-  USING (tenant_id = (SELECT app.tenant_id()) AND (SELECT app.tenant_role()) IN ('owner', 'accountant'))
+  USING (tenant_id = (SELECT app.tenant_id()) AND (SELECT app.tenant_role()) IN ('owner', 'accountant')
+    AND (SELECT app.tenant_branch_ids()) IS NULL)
   WITH CHECK (
     tenant_id = (SELECT app.tenant_id()) AND (SELECT app.tenant_role()) IN ('owner', 'accountant')
+    AND (SELECT app.tenant_branch_ids()) IS NULL
     AND updated_by = (SELECT app.current_user_id())
   );
+--> statement-breakpoint
+-- When a row was written is the database's to say, not the writer's.
+CREATE FUNCTION app.stamp_tax_return_settings() RETURNS trigger
+  LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp
+  AS $$
+BEGIN
+  IF session_user = 'postgres' THEN
+    RETURN NEW;
+  END IF;
+  IF TG_OP = 'INSERT' THEN
+    NEW.created_at := now();
+  END IF;
+  NEW.updated_at := now();
+  RETURN NEW;
+END $$;
+--> statement-breakpoint
+REVOKE ALL ON FUNCTION app.stamp_tax_return_settings() FROM PUBLIC;
+--> statement-breakpoint
+CREATE TRIGGER tax_return_settings_stamp BEFORE INSERT OR UPDATE ON public.tax_return_settings
+  FOR EACH ROW EXECUTE FUNCTION app.stamp_tax_return_settings();
+--> statement-breakpoint
+ALTER TABLE public.tax_return_settings ENABLE ALWAYS TRIGGER tax_return_settings_stamp;
 --> statement-breakpoint
 
 -- ── hand-written: who reads the return ──────────────────────────────────────────────────────────
@@ -93,8 +120,10 @@ REVOKE ALL ON FUNCTION app.tax_return_tenant() FROM PUBLIC;
 -- ── hand-written: Annex-C, domestic sales ───────────────────────────────────────────────────────
 -- One row for each line of each posted sales invoice and credit note dated in the period, as
 -- posting stored it: the buyer as written on the document, and the line's value, tax, further
--- tax and extra tax. Nothing is worked out again. Amounts are positive for both kinds; a credit
--- note names the invoice it corrects. The sales tax of the invoices less that of the credit notes
+-- tax and extra tax. No tax is worked out again. The one figure made here is the retail value of
+-- a Third Schedule line, the retail price of one base unit times the base units on the line: a
+-- credit note's line keeps a copy of its invoice's whole retail value, not its own share.
+-- Amounts are positive for both kinds; a credit note names the invoice it corrects. The sales tax of the invoices less that of the credit notes
 -- is what the period's journals put on the output tax account (app.tax_return_ledger).
 CREATE FUNCTION app.annex_c_rows(p_from date, p_to date)
   RETURNS TABLE (
@@ -120,7 +149,7 @@ BEGIN
       o.number, o.document_date,
       l.line_no, l.hs_code, l.description, l.sale_type, l.tax_kind, l.tax_rate,
       l.base_quantity, coalesce(l.fbr_uom_code, u.name), l.value,
-      CASE WHEN l.tax_kind = 'third_schedule' AND l.retail_price IS NOT NULL THEN round(l.retail_price * l.quantity, 2) END,
+      CASE WHEN l.tax_kind = 'third_schedule' AND l.retail_price IS NOT NULL THEN round(l.retail_price * l.base_quantity, 2) END,
       l.tax_amount, l.extra_tax_amount, l.further_tax_amount,
       l.sro_schedule_no, l.sro_item_serial, l.total
     FROM public.sales_documents d
@@ -180,9 +209,11 @@ GRANT EXECUTE ON FUNCTION app.annex_c1_rows(date, date) TO app_runtime;
 -- One row for each line of each posted supplier bill dated in the period, and for each billed
 -- line of each posted supplier return (a debit note), as posting stored them. What a bill pays
 -- to customs for a shipment (sales tax at import, income tax at import, a deposit) is not a
--- purchase and is left to Annex-B. The supplier is as it stands today: a bill keeps no copy of
--- the supplier's numbers. Sales tax withheld from the supplier is shown once, on the bill's
--- first line.
+-- purchase and is left to Annex-B, unless the line itself carries sales tax, which is input tax
+-- of this annex whatever the line was put on a shipment as. The supplier is as it stands today:
+-- a bill keeps no copy of the supplier's numbers. Sales tax withheld from the supplier is shown
+-- once, on the first of the bill's lines listed here; a bill with none of its lines here and
+-- tax withheld gets a row for the withholding alone.
 CREATE FUNCTION app.annex_a_rows(p_from date, p_to date)
   RETURNS TABLE (
     doc_kind text, document_number text, supplier_invoice_no text, document_date date,
@@ -206,21 +237,43 @@ BEGIN
       x.line_no, x.line_kind, i.hs_code, x.description, x.tax_rate,
       x.quantity, coalesce(i.fbr_uom_code, u.name), x.value, x.sales_tax, x.st_withheld, x.value + x.sales_tax
     FROM (
-      SELECT 'bill'::text AS doc_kind, b.number AS document_number, b.supplier_invoice_no, b.bill_date AS document_date,
-        b.supplier_id, NULL::text AS original_number, NULL::date AS original_date,
-        l.line_no, l.kind AS line_kind, l.item_id, l.description, l.tax_rate,
-        CASE WHEN g.id IS NOT NULL THEN l.quantity * g.unit_factor ELSE l.quantity END AS quantity,
-        l.amount AS value, l.sales_tax,
-        CASE WHEN l.line_no = (SELECT min(f.line_no) FROM public.supplier_bill_lines f WHERE f.tenant_id = b.tenant_id AND f.bill_id = b.id)
-          THEN coalesce((SELECT sum(w.amount) FROM public.withholding_entries w WHERE w.tenant_id = b.tenant_id AND w.bill_id = b.id AND w.kind = 'sales_tax'), 0)
-          ELSE 0 END AS st_withheld
+      SELECT 'bill'::text AS doc_kind, k.number AS document_number, k.supplier_invoice_no, k.bill_date AS document_date,
+        k.supplier_id, NULL::text AS original_number, NULL::date AS original_date,
+        k.line_no, k.line_kind, k.item_id, k.description, k.tax_rate, k.quantity, k.value, k.sales_tax,
+        CASE WHEN k.line_no = min(k.line_no) OVER (PARTITION BY k.bill_id) THEN k.withheld ELSE 0 END AS st_withheld
+      FROM (
+        SELECT b.id AS bill_id, b.number, b.supplier_invoice_no, b.bill_date, b.supplier_id, w.withheld,
+          l.line_no, l.kind AS line_kind, l.item_id, l.description, l.tax_rate,
+          CASE WHEN g.id IS NOT NULL THEN l.quantity * g.unit_factor ELSE l.quantity END AS quantity,
+          l.amount AS value, l.sales_tax
+        FROM public.supplier_bills b
+        CROSS JOIN LATERAL (
+          SELECT coalesce(sum(e.amount), 0) AS withheld FROM public.withholding_entries e
+          WHERE e.tenant_id = b.tenant_id AND e.bill_id = b.id AND e.kind = 'sales_tax') w
+        JOIN public.supplier_bill_lines l ON l.tenant_id = b.tenant_id AND l.bill_id = b.id
+        LEFT JOIN public.goods_receipt_lines g ON g.tenant_id = l.tenant_id AND g.id = l.receipt_line_id
+        WHERE b.tenant_id = v_tenant AND b.status = 'posted' AND b.bill_date BETWEEN p_from AND p_to
+          AND (l.sales_tax <> 0 OR NOT EXISTS (
+            SELECT 1 FROM public.shipment_charges c
+            WHERE c.tenant_id = l.tenant_id AND c.bill_line_id = l.id AND c.class IN ('sales_tax', 'advance_income_tax', 'deposit')))
+      ) k
+      UNION ALL
+      -- A bill all of whose lines went to Annex-B, with sales tax withheld from its supplier.
+      SELECT 'bill'::text, b.number, b.supplier_invoice_no, b.bill_date,
+        b.supplier_id, NULL::text, NULL::date,
+        0, 'expense'::text, NULL::uuid, 'Sales tax withheld; the bill''s lines are on Annex-B'::text, NULL::numeric, NULL::numeric, 0::numeric, 0::numeric,
+        w.withheld
       FROM public.supplier_bills b
-      JOIN public.supplier_bill_lines l ON l.tenant_id = b.tenant_id AND l.bill_id = b.id
-      LEFT JOIN public.goods_receipt_lines g ON g.tenant_id = l.tenant_id AND g.id = l.receipt_line_id
-      WHERE b.tenant_id = v_tenant AND b.status = 'posted' AND b.bill_date BETWEEN p_from AND p_to
+      CROSS JOIN LATERAL (
+        SELECT coalesce(sum(e.amount), 0) AS withheld FROM public.withholding_entries e
+        WHERE e.tenant_id = b.tenant_id AND e.bill_id = b.id AND e.kind = 'sales_tax') w
+      WHERE b.tenant_id = v_tenant AND b.status = 'posted' AND b.bill_date BETWEEN p_from AND p_to AND w.withheld <> 0
         AND NOT EXISTS (
-          SELECT 1 FROM public.shipment_charges c
-          WHERE c.tenant_id = l.tenant_id AND c.bill_line_id = l.id AND c.class IN ('sales_tax', 'advance_income_tax', 'deposit'))
+          SELECT 1 FROM public.supplier_bill_lines l
+          WHERE l.tenant_id = b.tenant_id AND l.bill_id = b.id
+            AND (l.sales_tax <> 0 OR NOT EXISTS (
+              SELECT 1 FROM public.shipment_charges c
+              WHERE c.tenant_id = l.tenant_id AND c.bill_line_id = l.id AND c.class IN ('sales_tax', 'advance_income_tax', 'deposit'))))
       UNION ALL
       SELECT 'debit_note'::text, r.number, r.supplier_reference, r.return_date,
         r.supplier_id, ob.number, ob.bill_date,
@@ -244,8 +297,8 @@ GRANT EXECUTE ON FUNCTION app.annex_a_rows(date, date) TO app_runtime;
 --> statement-breakpoint
 
 -- ── hand-written: Annex-B, imports ──────────────────────────────────────────────────────────────
--- One row for each spreading of a shipment's charges in the period that is its first, or that
--- carries tax paid at import: the goods declaration, and the sales tax and income tax paid at
+-- One row for each spreading of a shipment's charges in the period that is its first (the first
+-- made, whatever day it was dated), or that carries tax paid at import: the goods declaration, and the sales tax and income tax paid at
 -- import that the spreading took into the books. The period is the day of the spreading, which
 -- is when the input tax reached the ledger; the goods declaration's own date is given beside it.
 CREATE FUNCTION app.annex_b_rows(p_from date, p_to date)
@@ -279,7 +332,7 @@ BEGIN
     CROSS JOIN LATERAL (
       SELECT e.id AS first_id FROM public.shipment_allocations e
       WHERE e.tenant_id = a.tenant_id AND e.shipment_id = a.shipment_id
-      ORDER BY e.allocated_on, e.created_at, e.id LIMIT 1) f
+      ORDER BY e.created_at, e.id LIMIT 1) f
     WHERE a.tenant_id = v_tenant AND a.allocated_on BETWEEN p_from AND p_to
       AND (f.first_id = a.id OR t.sales_tax <> 0 OR t.income_tax <> 0)
     ORDER BY a.allocated_on, h.number, a.created_at;
@@ -296,7 +349,9 @@ GRANT EXECUTE ON FUNCTION app.annex_b_rows(date, date) TO app_runtime;
 -- from abroad (goods received on a shipment, and the charges spread onto them), what was bought
 -- at home (less what went back to suppliers), what was supplied (less what customers sent back),
 -- everything else (counts and adjustments; a transfer between warehouses nets to nothing), and
--- what was held when it closed. The rate is the item's tax category's rate on the last day.
+-- what was held when it closed. The rate is the rate on the last day of the item's tax category,
+-- or of the company's standard-rate category for an item with none of its own, which is what a
+-- sale of it is charged.
 CREATE FUNCTION app.annex_h1_rows(p_from date, p_to date)
   RETURNS TABLE (
     item_code text, item_name text, hs_code text, uom text, tax_rate numeric,
@@ -345,7 +400,10 @@ BEGIN
     )
     SELECT i.code, i.name, i.hs_code, coalesce(i.fbr_uom_code, u.name),
       (SELECT r.rate FROM public.tax_rates r
-         WHERE r.tenant_id = i.tenant_id AND r.category_id = i.tax_category_id AND r.effective_from <= p_to
+         WHERE r.tenant_id = i.tenant_id AND r.effective_from <= p_to
+           AND r.category_id = coalesce(i.tax_category_id, (
+             SELECT c.id FROM public.tax_categories c
+             WHERE c.tenant_id = i.tenant_id AND c.kind = 'standard' ORDER BY c.created_at, c.name LIMIT 1))
          ORDER BY r.effective_from DESC LIMIT 1),
       z.oq, z.ov, z.iq, z.iv, z.pq, z.pv, -z.sq, -z.sv, z.xq, z.xv, z.cq, z.cv
     FROM sums z

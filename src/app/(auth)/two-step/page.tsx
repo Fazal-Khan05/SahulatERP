@@ -24,8 +24,10 @@ export default function TwoStepPage({ searchParams }: PageProps<"/two-step">) {
 async function GiveCode({ searchParams }: Pick<PageProps<"/two-step">, "searchParams">) {
   const account = await getSignedInAccount();
   if (!account) redirect("/sign-in");
-  if (account.gate !== "code") redirect("/");
   const next = (await searchParams).next === "/reset-password" ? "/reset-password" : "/";
+  // Also where a member lands once the code is given: the new session's cookies make Next draw
+  // this page again in the action's reply, and what this page says then is where the browser goes.
+  if (account.gate !== "code") redirect(next);
   return (
     <>
       <p className="text-sm text-muted-foreground">

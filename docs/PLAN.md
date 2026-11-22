@@ -190,7 +190,7 @@ Fifty-two steps in nine phases. Phases finish in order; steps inside a phase mos
 
 | Step | Deliverable | Acceptance | Status |
 | --- | --- | --- | --- |
-| 47 | 2FA (TOTP or SMS), session timeout, login history, password policy; secrets audit | A member without 2FA is prompted on next login | |
+| 47 | 2FA (TOTP or SMS), session timeout, login history, password policy; secrets audit | A member without 2FA is prompted on next login | Done 2026-11-22 |
 | 48 | Nightly per-tenant export job to R2 (every table as CSV + files), restore script, and a one-click "export my data" for the owner | Restore into a fresh dev project reproduces the trial balance | |
 | 49 | Migration importer for Fast Accounts, Tally and Excel: customers, suppliers, items with stock, opening balances; `docs/MIGRATION.md` checklist | The pilot company's Fast Accounts export imports with a matching trial balance | |
 | 50 | Performance pass: seed 100,000 invoices; every list and report under 3 seconds; indexes; query plans checked | Aged receivables and stock valuation under 3 s on the seed | |

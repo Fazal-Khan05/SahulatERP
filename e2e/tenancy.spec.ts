@@ -358,7 +358,7 @@ test("a reset link sets a new password, works once, and the old password stops w
   await expect(page.getByText(`This link signs you in as ${ownerB.email}.`)).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
   // The link alone is not enough for an account with an authenticator app: its code comes first.
-  await expect(page).toHaveURL(/\/two-step\?next=%2Freset-password$/);
+  await expect(page).toHaveURL(/\/two-step\?next=(%2F|\/)reset-password$/);
   await giveCode(page, ownerB);
   await expect(page).toHaveURL(/\/reset-password$/);
   await expect(page.getByText(`For ${ownerB.email}`)).toBeVisible();

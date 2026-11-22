@@ -61,8 +61,12 @@ The column headings and their order in `src/modules/tax-return/rules.ts` are the
 of those sources and of the older annex forms. **They must be checked against the templates
 downloaded from IRIS before the first return is filed from these files.** Every sheet's note
 says so. Each annex's columns are one list in that file, so a heading or its place is one line.
-Sent to the founder: can he, or a registered company's tax adviser, download the current
-templates for Annex-C, C1 and H1 (and a screenshot of A and B) and put them in the repository?
+**Still to be checked: the IRIS templates for Annex-A, B, C, C1 and H1.** The founder was asked
+(2026-11-22) and answered "Build now, templates later." So the annexes are built to the
+published filing guide and the 2025 S.R.O.s, and every export is marked to be checked against
+the IRIS template before the first filing. When he, or a registered company's tax adviser,
+downloads the current templates for C, C1 and H1 (and a screenshot of A and B) and puts them in
+the repository, the column lists in `rules.ts` are set to match and this note is closed.
 
 ## The independent review (2026-11-22)
 

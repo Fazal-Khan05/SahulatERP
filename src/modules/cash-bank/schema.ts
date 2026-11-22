@@ -8,7 +8,7 @@ import { branches, tenants } from "../tenant/schema";
 // out of them. A cash or bank account is an account of the chart under Cash accounts (1110) or
 // Bank accounts (1120); petty cash is one more cash account. Transfers and expenses are written
 // only by the database's own functions, each with its journal, in one act
-// (drizzle/0032_cash_bank.sql); the app's role reads them.
+// (drizzle/0038_cash_bank.sql); the app's role reads them.
 
 /** What the chart does not say about a bank account: the bank, and the account's number or IBAN. */
 export const cashBankAccounts = pgTable(

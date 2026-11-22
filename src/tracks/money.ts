@@ -24,7 +24,7 @@ export const permissions = {
   "commission.pay": ["owner", "accountant"],
   // Step 34. The company's cash and bank accounts, transfers between them and expenses paid out
   // of them: kept by the owner and an accountant, read by the auditor too. The policies and
-  // functions in drizzle/0032_cash_bank.sql name the same roles.
+  // functions in drizzle/0038_cash_bank.sql name the same roles.
   "cash_bank.read": ["owner", "accountant", "auditor"],
   "cash_bank.manage": ["owner", "accountant"],
   // Step 40. Employees and what they are paid are read by the owner, the payroll administrator,

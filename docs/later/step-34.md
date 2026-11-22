@@ -1,8 +1,8 @@
 # Step 34: cash and bank accounts, transfers, expenses, petty cash
 
 Track C, built by the Finisher while the founder was away (2026-11-17); nothing here was asked of
-him. Migration `0032_cash_bank` (five tables, the functions that record and cancel, a guard on
-archiving), renumbered at merge. Not applied to the shared database: his yes does not cover it.
+him. Migration `0038_cash_bank` (five tables, the functions that record and cancel, a guard on
+archiving), renumbered at merge; the coordinator applies it to the shared database once merged.
 
 ## What is built
 

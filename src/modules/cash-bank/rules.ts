@@ -3,7 +3,7 @@ import { isIsoDate } from "@/modules/currencies/rules";
 
 // Step 34: what is typed for cash and bank, cleaned, or the first thing that is wrong in plain
 // words; and what an expense comes to, worked out as the database works it out
-// (app.record_expense in drizzle/0032_cash_bank.sql), so a form can show it before it is sent.
+// (app.record_expense in drizzle/0038_cash_bank.sql), so a form can show it before it is sent.
 
 const text = (value: unknown) => (typeof value === "string" ? value.trim() : "");
 const tidy = (value: unknown) => text(value).replace(/\s+/g, " ");

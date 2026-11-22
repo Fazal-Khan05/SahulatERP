@@ -7,6 +7,7 @@ import { UserError } from "@/lib/errors";
 import { isIsoDate } from "@/modules/currencies/rules";
 import { currencies } from "@/modules/currencies/schema";
 import { itemUnits, items, units } from "@/modules/items/schema";
+import { notWalkIn } from "@/modules/counter-sales/queries";
 import { customers, partyAddresses } from "@/modules/parties/schema";
 import { selectPricesFor } from "@/modules/prices/queries";
 import type { PriceSource } from "@/modules/prices/rules";
@@ -507,7 +508,7 @@ export async function searchCustomers(ctx: TenantContext, typed: string): Promis
     tx
       .select({ id: customers.id, code: customers.code, name: customers.name })
       .from(customers)
-      .where(and(eq(customers.tenantId, ctx.tenantId), isNull(customers.archivedAt), or(sql`${customers.name} ilike ${pattern}`, sql`${customers.code} ilike ${pattern}`)))
+      .where(and(eq(customers.tenantId, ctx.tenantId), isNull(customers.archivedAt), notWalkIn, or(sql`${customers.name} ilike ${pattern}`, sql`${customers.code} ilike ${pattern}`)))
       .orderBy(asc(sql`lower(${customers.name})`))
       .limit(10),
   );

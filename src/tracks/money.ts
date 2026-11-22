@@ -26,7 +26,7 @@ export const permissions = {
   // the accountant and the auditor (the founder's decision, 2026-11-15), and kept by the owner
   // and the payroll administrator. The statutory tables are the law: every member reads them;
   // the owner, the accountant and the payroll administrator keep them, as tax rates are kept.
-  // The policies in drizzle/0032_payroll_employees.sql name the same roles.
+  // The policies in drizzle/0037_payroll_employees.sql name the same roles.
   "payroll.read": ["owner", "payroll_administrator", "accountant", "auditor"],
   "payroll.manage": ["owner", "payroll_administrator"],
   "statutory_rate.manage": ["owner", "accountant", "payroll_administrator"],

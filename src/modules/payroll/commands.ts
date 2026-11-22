@@ -26,7 +26,7 @@ import {
 import { employeeAttendance, employees } from "./schema";
 
 // The commands behind the payroll screens (Step 40). Everything is written by the app under
-// row-level security; the database's own checks stand behind each (drizzle/0032_payroll_employees.sql).
+// row-level security; the database's own checks stand behind each (drizzle/0037_payroll_employees.sql).
 // Nothing here posts to the books: payroll runs are Step 41's.
 
 function requireManager(ctx: TenantContext): void {

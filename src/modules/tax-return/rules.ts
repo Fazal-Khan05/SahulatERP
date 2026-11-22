@@ -383,7 +383,7 @@ export function annexBTable(data: TaxReturn): ReportTable {
 // ── Annex-H1 ────────────────────────────────────────────────────────────────────────────────────
 
 /** The stock statement by HS code, unit and rate: FBR asks for goods, not for our item codes. */
-export type H1Group = Omit<AnnexH1Row, "itemCode" | "itemName"> & { description: string; items: number };
+export type H1Group = Omit<AnnexH1Row, "itemName"> & { description: string; items: number };
 
 export function groupH1(rows: AnnexH1Row[]): H1Group[] {
   const groups = new Map<string, H1Group>();
@@ -391,7 +391,7 @@ export function groupH1(rows: AnnexH1Row[]): H1Group[] {
     const key = JSON.stringify([row.hsCode, row.uom, row.taxRate?.toString() ?? null]);
     const group = groups.get(key);
     if (!group) {
-      const { itemCode: _code, itemName, ...rest } = row;
+      const { itemName, ...rest } = row;
       groups.set(key, { ...rest, description: itemName, items: 1 });
       continue;
     }

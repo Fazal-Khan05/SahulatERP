@@ -214,9 +214,11 @@ describe.skipIf(!hasDb)("the sales tax return", { timeout: 600_000 }, () => {
     // What stands in the way of a clean file is said under the table.
     expect(table.notes).toContain("1 document is to an unregistered buyer with no CNIC or NTN.");
     // The file for upload is the headings and the rows: no title, no total, no note.
-    const lines = annexCsv(table).trim().split("\r\n");
+    const csv = annexCsv(table);
+    expect(csv.charCodeAt(0)).toBe(0xfeff);
+    const lines = csv.slice(1).trim().split("\r\n");
     expect(lines).toHaveLength(4);
-    expect(lines[0].startsWith("﻿Sr.,Buyer NTN,Buyer CNIC")).toBe(true);
+    expect(lines[0].startsWith("Sr.,Buyer NTN,Buyer CNIC")).toBe(true);
     expect(lines[3]).toContain("Credit Note,CN-2627-00001,08-11-2026");
   });
 

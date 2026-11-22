@@ -34,7 +34,7 @@ export const permissions = {
   "counter_sale.manage": ["owner", "accountant"],
   // Step 46. The monthly sales tax return's annexes are read by those who read the books; the
   // province the company supplies from is set by the owner or an accountant. The functions and
-  // the policies in drizzle/0038_sales_tax_return.sql name the same roles.
+  // the policies in drizzle/0039_sales_tax_return.sql name the same roles.
   "tax_return.read": ["owner", "accountant", "auditor"],
   "tax_return.settings": ["owner", "accountant"],
 } as const satisfies TrackPermissions;

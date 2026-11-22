@@ -5,7 +5,7 @@ import { tenants } from "../tenant/schema";
 // Step 46: the monthly sales tax return's annexes.
 //
 // The annexes themselves are not tables: they are read, each time, from what posting stored
-// (drizzle/0038_sales_tax_return.sql, the functions app.annex_*_rows). The one thing the return
+// (drizzle/0039_sales_tax_return.sql, the functions app.annex_*_rows). The one thing the return
 // needs that the company has not been asked before is the province it supplies from.
 
 /** What the sales tax return needs to know about the company itself. One row per company. */

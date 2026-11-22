@@ -1,6 +1,6 @@
 # Step 46: the sales tax return's annexes
 
-Built by the Builder (Fable) on 2026-11-22, track A. Migration `0038_sales_tax_return`. The
+Built by the Builder (Fable) on 2026-11-22, track A. Migration `0039_sales_tax_return`. The
 founder was away; one question was sent to him through the coordinator (the templates, below)
 and everything else was decided here and is listed under "Decided for Fazal, to confirm".
 
@@ -11,7 +11,7 @@ and everything else was decided here and is listed under "Decided for Fazal, to 
   for upload, what is missing for a clean file, and every annex set beside the ledger.
 - **The annexes** are read each time from what posting stored; nothing is kept and no tax is
   worked out again (the plan: "Report code never recomputes tax"). Each is a database function
-  (`drizzle/0038_sales_tax_return.sql`):
+  (`drizzle/0039_sales_tax_return.sql`):
   - **Annex-C, domestic sales** (`app.annex_c_rows`): every line of the month's posted invoices
     and credit notes, with the buyer as written on the document, HS code, sale type, rate,
     quantity, value, sales tax, extra tax, further tax, and for a credit note the invoice it

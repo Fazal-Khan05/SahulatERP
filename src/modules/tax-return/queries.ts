@@ -10,7 +10,7 @@ import type { AnnexARow, AnnexBRow, AnnexC1Row, AnnexCRow, AnnexH1Row, LedgerRow
 import { taxReturnSettings } from "./schema";
 
 // The sales tax return's read model. Every figure comes from the functions in
-// drizzle/0038_sales_tax_return.sql, which read what posting stored and ask who is reading; the
+// drizzle/0039_sales_tax_return.sql, which read what posting stored and ask who is reading; the
 // checks here only give a clear refusal before a query is tried.
 
 const d = (value: string | null | undefined) => new Decimal(value ?? "0");

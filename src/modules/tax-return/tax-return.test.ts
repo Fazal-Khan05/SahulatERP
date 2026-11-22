@@ -265,7 +265,7 @@ describe.skipIf(!hasDb)("the sales tax return", { timeout: 600_000 }, () => {
     const [{ held }] = await admin<{ held: string }[]>`select sum(value)::numeric(20,2)::text as held from public.stock_moves where tenant_id = ${tenantA} and move_date <= ${NOVEMBER.to}`;
     expect(closing.toFixed(2)).toBe(held);
     expect(groupH1(november.h1).map((g) => `${g.hsCode} ${g.description} ${g.closingQuantity}`)).toEqual(["4203.2100 Glove 10", "6506.1000 Helmet 3", "null Chain 20"]);
-    expect(annexTable(november, "annex-h1").notes).toContain("1 item has no HS code and are listed together on a row without one.");
+    expect(annexTable(november, "annex-h1").notes).toContain("Items with no HS code (1) are listed together on a row without one.");
   });
 
   it("keeps each month to itself", async () => {

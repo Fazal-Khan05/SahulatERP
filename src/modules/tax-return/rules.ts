@@ -429,7 +429,7 @@ export const ANNEX_H1_COLUMNS: Column<H1Group>[] = [
 export function annexH1Table(data: TaxReturn): ReportTable {
   const noHs = data.h1.filter((r) => !r.hsCode).length;
   return tableOf(ANNEXES["annex-h1"].title, data.period, ANNEX_H1_COLUMNS, groupH1(data.h1), data, [
-    ...(noHs > 0 ? [`${count(noHs, "item has", "items have")} no HS code and are listed together on a row without one.`] : []),
+    ...(noHs > 0 ? [`Items with no HS code (${noHs}) are listed together on a row without one.`] : []),
     "Every value is what the stock is carried at (cost), as S.R.O. 55(I)/2025 asks. Supplied is net of what customers sent back; purchased is net of what went back to suppliers.",
     "Other is stock counts and adjustments. Opening and what came in, less what was supplied, plus other, is closing.",
     LAYOUT_NOTE,

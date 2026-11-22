@@ -52,6 +52,13 @@ The figures are worked in `docs/examples/step-35.md`. **Checked by Claude, not a
    those would need another library. A workbook comes from outside, so before the library opens
    it, its parts are unpacked once here with a ceiling of 40 MB (a 5,000-line statement is under
    5 MB), and a ZIP laid out in any unusual way is refused (`statement-file.ts`).
+   exceljs brings 94 packages (none already installed changed). `npm audit` then lists two more
+   moderate advisories, both one: `uuid` below 11.1.1 does not check a buffer's bounds in its
+   v3, v5 and v6 when given one (GHSA-w5hq-g745-h8pq), and exceljs depends on it. exceljs calls
+   only `v4`, so they are left (the coordinator agreed, 2026-11-23); `npm audit fix --force`
+   would put back exceljs 3.4.0. Six of the packages are marked deprecated by their authors
+   (fstream, glob 7, inflight, lodash.isequal, rimraf 2, uuid 8), all from exceljs's own
+   dependencies.
 2. **The banks' layouts are read by their column names as known on 2026-11-18**, not from a real
    file of each bank. HBL: Transaction Date, Transaction Details, Cheque No., Debit, Credit,
    Balance; Meezan: Date, Description, Cheque No, Debit, Credit, Balance; UBL: Txn Date,

@@ -22,6 +22,11 @@ export const permissions = {
   "commission_earned.own": ["owner", "sales_manager", "salesperson"],
   "commission.approve": ["owner", "accountant"],
   "commission.pay": ["owner", "accountant"],
+  // Step 34. The company's cash and bank accounts, transfers between them and expenses paid out
+  // of them: kept by the owner and an accountant, read by the auditor too. The policies and
+  // functions in drizzle/0038_cash_bank.sql name the same roles.
+  "cash_bank.read": ["owner", "accountant", "auditor"],
+  "cash_bank.manage": ["owner", "accountant"],
   // Step 40. Employees and what they are paid are read by the owner, the payroll administrator,
   // the accountant and the auditor (the founder's decision, 2026-11-15), and kept by the owner
   // and the payroll administrator. The statutory tables are the law: every member reads them;
@@ -42,7 +47,7 @@ export const permissions = {
  * words and the order of each role's menu are in src/modules/tenant/rules.ts and do not change.
  */
 export const links = {
-  cashAndBank: null,
+  cashAndBank: "/cash-bank",
   commissions: "/commissions",
   myCommission: "/commissions/earned",
   payroll: "/payroll",
@@ -67,6 +72,8 @@ export const controls = {
 export const documents = {
   // Step 38: a commission payment to one person.
   CP: "Commission payment",
+  // Step 34: money moved between two of the company's cash and bank accounts.
+  TR: "Cash transfer",
   // Step 41: a month's payroll, numbered when approved, and the payment of its salaries.
   PR: "Payroll run",
   SP: "Salary payment",

@@ -152,7 +152,7 @@ Fifty-two steps in nine phases. Phases finish in order; steps inside a phase mos
 | 26 | Supplier payments with withholding deducted, challan recording, supplier advances in foreign currency with revaluation | Payment of a bill with an advance applied nets correctly | Done 2026-11-18 |
 | 27 | Supplier returns (debit notes) | Reverses GRNI or AP as appropriate | Done 2026-11-18 |
 | 28 | Shipments: status flow, GD number/date, port, container, LC number; shipment charges with the five classes; landed-cost allocation by value/qty/weight/volume; late charges re-allocate and adjust inventory and COGS | Port the old allocation tests; a late freight bill adjusts remaining stock and COGS of sold units | Done 2026-11-18 |
-| 29 | Reports: aged payables, supplier statement, withholding register, s.165 quarterly export, GRNI | Withholding register totals equal withholding payable | |
+| 29 | Reports: aged payables, supplier statement, withholding register, s.165 quarterly export, GRNI | Withholding register totals equal withholding payable | Done 2026-11-22 |
 
 ### Phase 5: Inventory, collections, cash and bank
 
@@ -162,7 +162,7 @@ Fifty-two steps in nine phases. Phases finish in order; steps inside a phase mos
 | 31 | Reports: stock valuation, stock movement, stock ageing, low stock, item profitability (margin) | Valuation equals the inventory control account | Done 2026-11-15 |
 | 32 | Receipts (bank, cash, cheque) allocated across invoices; cheque lifecycle received → deposited → cleared/bounced; bounce reverses allocation, AR and commission release in one transaction; cheques-in-hand register; bank charges on receipt | Bouncing a cheque restores the invoice balance and reverses the released commission | Done 2026-11-15 (the commission part comes with Step 38) |
 | 33 | Recovery: follow-ups, promise-to-pay with broken-promise list, customer statement print and email, aged receivables | Overdue list matches ageing report | Done 2026-11-15, except emailing the statement: no email service chosen yet (docs/later/step-33.md) |
-| 34 | Bank and cash accounts, transfers, expenses, petty cash; archive only at zero balance | Expense with provincial services tax withholding posts correctly | |
+| 34 | Bank and cash accounts, transfers, expenses, petty cash; archive only at zero balance | Expense with provincial services tax withholding posts correctly | Done 2026-11-22 (cash and bank accounts, transfers, expenses with withholding, petty cash as a cash account) |
 | 35 | Bank statement import (CSV/Excel from HBL, Meezan, UBL formats; generic column mapper), matching rules, reconciliation screen, unreconcile | 90% of a sample statement auto-matches; reconciled balance equals ledger | |
 | 36 | Cash-flow statement; owner dashboard with date and branch filters | Cash-flow net equals change in bank and cash | Done 2026-11-18 (the cash-flow statement by the direct method, and the owner's figures on Home) |
 
@@ -190,7 +190,7 @@ Fifty-two steps in nine phases. Phases finish in order; steps inside a phase mos
 
 | Step | Deliverable | Acceptance | Status |
 | --- | --- | --- | --- |
-| 47 | 2FA (TOTP or SMS), session timeout, login history, password policy; secrets audit | A member without 2FA is prompted on next login | |
+| 47 | 2FA (TOTP or SMS), session timeout, login history, password policy; secrets audit | A member without 2FA is prompted on next login | Done 2026-11-22 |
 | 48 | Nightly per-tenant export job to R2 (every table as CSV + files), restore script, and a one-click "export my data" for the owner | Restore into a fresh dev project reproduces the trial balance | |
 | 49 | Migration importer for Fast Accounts, Tally and Excel: customers, suppliers, items with stock, opening balances; `docs/MIGRATION.md` checklist | The pilot company's Fast Accounts export imports with a matching trial balance | |
 | 50 | Performance pass: seed 100,000 invoices; every list and report under 3 seconds; indexes; query plans checked | Aged receivables and stock valuation under 3 s on the seed | |

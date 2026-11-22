@@ -26,13 +26,13 @@ const plural = (n: number, one: string, many: string) => `${n.toLocaleString("en
 /** Imports a statement file, all or nothing, and matches what is sure at once. */
 export async function importStatementAction(accountId: string, _: FormState, formData: FormData): Promise<FormState> {
   const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) return { error: "Choose the bank's CSV file." };
+  if (!(file instanceof File) || file.size === 0) return { error: "Choose the bank's CSV or Excel file." };
   if (file.size > MAX_FILE_BYTES) return { error: "The file is too large. Import at most 5,000 lines at a time." };
   let message: string;
   try {
     const session = await requireCashBankModule();
     const column = (name: string) => formData.get(`column_${name}`);
-    const outcome = await importStatement(session, accountId, { name: file.name, text: await file.text() }, formData.get("layout"), {
+    const outcome = await importStatement(session, accountId, { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) }, formData.get("layout"), {
       date: column("date"),
       description: column("description"),
       reference: column("reference"),

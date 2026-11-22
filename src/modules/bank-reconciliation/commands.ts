@@ -6,6 +6,7 @@ import { AMOUNT_SCALE } from "@/lib/money";
 import { can, type TenantContext } from "@/modules/tenant/rules";
 import { selectUnmatchedBank, selectUnmatchedBooks } from "./queries";
 import { autoMatch, isLayout, readStatement, type ColumnNames, type Role } from "./rules";
+import { readStatementFile } from "./statement-file";
 
 // The commands behind the reconciliation screen (Step 35). Importing, matching, unmatching and
 // removing an import are the database's own acts (drizzle/00xx_bank_reconciliation.sql); the app
@@ -58,14 +59,15 @@ async function matchSure(tx: Tx, tenantId: string, accountId: string): Promise<n
 export type ImportOutcome = { problems: string[] } | { lines: number; added: number; matched: number };
 
 /**
- * Imports a bank's statement file for one bank account, and matches what is sure at once. A line
- * imported before (from this file or another) is not imported again. Nothing is imported when
- * anything in the file is wrong: the problems come back, each with its row.
+ * Imports a bank's statement file (CSV text, or the bytes of a CSV file or an Excel workbook) for
+ * one bank account, and matches what is sure at once. A line imported before (from this file or
+ * another) is not imported again. Nothing is imported when anything in the file is wrong: the
+ * problems come back, each with its row.
  */
 export async function importStatement(
   ctx: TenantContext,
   accountId: unknown,
-  file: { name: string; text: string },
+  file: { name: string; text: string } | { name: string; bytes: Uint8Array },
   rawLayout: unknown,
   rawColumns: Partial<Record<Role, unknown>> = {},
 ): Promise<ImportOutcome> {
@@ -77,7 +79,7 @@ export async function importStatement(
     const typed = rawColumns[role];
     if (typeof typed === "string" && typed.trim() !== "") columns[role] = typed.trim().slice(0, 60);
   }
-  const read = readStatement(file.text, rawLayout, columns);
+  const read = "bytes" in file ? await readStatementFile(file.bytes, rawLayout, columns) : readStatement(file.text, rawLayout, columns);
   if (!read.ok) return { problems: read.problems };
   const lines = read.lines.map((line) => ({
     date: line.date,

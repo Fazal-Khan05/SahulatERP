@@ -312,10 +312,10 @@ export async function ReconcileScreen({
         {keep ? (
           <Card title="Import a statement">
             <p className="mb-3 text-sm text-muted-foreground">
-              The CSV file the bank&apos;s internet banking gives. Lines
-              imported before are not imported again; if anything in the file is
-              wrong, nothing is imported and every wrong row is listed. Excel
-              files: save as &quot;CSV UTF-8&quot; first.
+              The CSV or Excel (.xlsx) file the bank&apos;s internet banking
+              gives. Lines imported before are not imported again; if anything in
+              the file is wrong, nothing is imported and every wrong row is
+              listed. An older Excel file (.xls): save it as .xlsx first.
             </p>
             <ActionForm
               action={importStatementAction.bind(null, page.account.id)}
@@ -324,12 +324,12 @@ export async function ReconcileScreen({
             >
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="file">CSV file</Label>
+                  <Label htmlFor="file">CSV or Excel file</Label>
                   <input
                     id="file"
                     name="file"
                     type="file"
-                    accept=".csv,text/csv"
+                    accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     required
                     className="text-sm"
                   />

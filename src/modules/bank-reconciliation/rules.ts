@@ -128,8 +128,17 @@ const OPENING = /^(opening balance|balance b\/?f|brought forward|balance forward
 const CLOSING = /^(closing balance|balance c\/?f|carried forward|total|grand total)\b/i;
 export const MAX_STATEMENT_LINES = 5000;
 
+/** A statement read from a bank's CSV file: see readStatementRows. */
+export function readStatement(csv: string, layout: Layout, columns: ColumnNames = {}): ReadStatement {
+  if (csv.includes("�")) return { ok: false, problems: ['The file is not saved as UTF-8. In Excel, save it as "CSV UTF-8 (Comma delimited)" and import it again.'] };
+  const parsed = parseCsv(csv);
+  if (!parsed.ok) return { ok: false, problems: [parsed.reason] };
+  return readStatementRows(parsed.rows, layout, columns);
+}
+
 /**
- * A statement read from a bank's CSV file. The heading row is found wherever it is (a bank's
+ * A statement read from the rows of a bank's file, a CSV file's or an Excel sheet's, each row in
+ * its place (row r + 1 of the file is rows[r]). The heading row is found wherever it is (a bank's
  * file often starts with the account's name and the period); each line needs a day and money in
  * or out, from a Debit and a Credit column or one Amount column (money out less than nil). A line
  * without money that says it is the opening or the closing balance gives that balance. Lines are
@@ -137,10 +146,7 @@ export const MAX_STATEMENT_LINES = 5000;
  * before: a file read with its columns mixed up is refused, not imported. Nothing is imported when
  * anything is wrong; up to twenty problems are given, each with its row.
  */
-export function readStatement(csv: string, layout: Layout, columns: ColumnNames = {}): ReadStatement {
-  if (csv.includes("�")) return { ok: false, problems: ['The file is not saved as UTF-8. In Excel, save it as "CSV UTF-8 (Comma delimited)" and import it again.'] };
-  const parsed = parseCsv(csv);
-  if (!parsed.ok) return { ok: false, problems: [parsed.reason] };
+export function readStatementRows(rows: readonly (readonly string[])[], layout: Layout, columns: ColumnNames = {}): ReadStatement {
   const names: Names =
     layout === "columns"
       ? Object.fromEntries(Object.entries(columns).filter(([, heading]) => !blank(heading)).map(([role, heading]) => [role, [heading!]]))
@@ -151,8 +157,8 @@ export function readStatement(csv: string, layout: Layout, columns: ColumnNames 
   // The heading row: the first that names a day column and money columns.
   let headingAt = -1;
   let at: Partial<Record<Role, number>> = {};
-  for (let r = 0; r < Math.min(parsed.rows.length, 30) && headingAt === -1; r++) {
-    const cells = parsed.rows[r].map(plain);
+  for (let r = 0; r < Math.min(rows.length, 30) && headingAt === -1; r++) {
+    const cells = rows[r].map(plain);
     const found: Partial<Record<Role, number>> = {};
     for (const role of Object.keys(names) as Role[]) {
       for (const name of names[role] ?? []) {
@@ -173,8 +179,8 @@ export function readStatement(csv: string, layout: Layout, columns: ColumnNames 
   const read: Omit<StatementLine, "fingerprint">[] = [];
   let opening: Decimal | null = null;
   let closing: Decimal | null = null;
-  for (let r = headingAt + 1; r < parsed.rows.length && problems.length < 20; r++) {
-    const cells = parsed.rows[r];
+  for (let r = headingAt + 1; r < rows.length && problems.length < 20; r++) {
+    const cells = rows[r];
     if (cells.every((cell) => blank(cell))) continue;
     const row = r + 1;
     const cell = (role: Role) => (at[role] === undefined ? undefined : cells[at[role]!]);

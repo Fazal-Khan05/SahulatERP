@@ -1,10 +1,12 @@
 import { expect, type Locator, type Page } from "@playwright/test";
+import ExcelJS from "exceljs";
 import { adminSql, type AdminSql } from "../tests/support/admin-db";
 import { createUser, hasE2EEnv, type TestUser } from "./support/admin";
 import { createCompany, signIn, test } from "./support/ui";
 
-// Step 35 on screen: the owner banks cash and draws some back, imports the bank's statement (two
-// of its three lines matched at once, the books reconciled with the bank), unmatches one line
+// Step 35 on screen: the owner banks cash and draws some back, imports the bank's statement as an
+// Excel workbook (two of its three lines matched at once, the books reconciled with the bank; a
+// CSV file is read by the same rules, tested in src/modules/bank-reconciliation), unmatches one line
 // and has it matched again; the auditor reads the reconciliation and changes nothing. What each
 // of these does, the acceptance among them, is tested against the database in
 // src/modules/bank-reconciliation.
@@ -30,24 +32,30 @@ test.afterAll(async () => {
 const shown = (locator: Locator) => locator.filter({ visible: true });
 const label = (page: Page, text: string) => shown(page.getByLabel(text, { exact: true }));
 const tabs = (page: Page) => shown(page.getByRole("navigation", { name: "Cash and bank" }));
-/** Today in Pakistan, as the bank writes it. */
-const today = () => {
-  const [year, month, day] = new Date(Date.now() + 5 * 3600_000).toISOString().slice(0, 10).split("-");
-  return `${day}/${month}/${year}`;
-};
-const statement = () =>
-  [
-    "Habib Bank Limited",
-    "Account Title,E2E Reconcile Traders",
-    "",
-    "Transaction Date,Transaction Details,Cheque No.,Debit,Credit,Balance",
-    `${today()},Opening Balance,,,,0.00`,
-    `${today()},Cash deposit,,,"50,000.00","50,000.00"`,
-    `${today()},Cash withdrawal,000412,"20,000.00",,"30,000.00"`,
-    `${today()},Bank charges,,250.00,,"29,750.00"`,
-  ].join("\n");
+/** Today in Pakistan, as a day in Excel. */
+const today = () => new Date(`${new Date(Date.now() + 5 * 3600_000).toISOString().slice(0, 10)}T00:00:00Z`);
+/**
+ * The bank's statement as its internet banking gives it in Excel: days as days, money as numbers
+ * (a fixture: Excel itself keeps a binary fraction), the cheque number as text.
+ */
+async function statement(): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Statement");
+  sheet.addRows([
+    ["Habib Bank Limited"],
+    ["Account Title", "E2E Reconcile Traders"],
+    [],
+    ["Transaction Date", "Transaction Details", "Cheque No.", "Debit", "Credit", "Balance"],
+    [today(), "Opening Balance", null, null, null, 0],
+    [today(), "Cash deposit", null, null, 50000, 50000],
+    [today(), "Cash withdrawal", "000412", 20000, null, 30000],
+    [today(), "Bank charges", null, 250, null, 29750],
+  ]);
+  sheet.getColumn(1).numFmt = "dd/mm/yyyy";
+  return Buffer.from(await workbook.xlsx.writeBuffer());
+}
 
-test("the owner imports the bank's statement and the books reconcile with it", async ({ page }) => {
+test("the owner imports the bank's Excel statement and the books reconcile with it", async ({ page }) => {
   await signIn(page, owner);
   await createCompany(page, "E2E Reconcile Traders");
   tenantId = (await sql<{ id: string }[]>`select id from public.tenants where created_by = ${owner.id}`)[0].id;
@@ -74,7 +82,11 @@ test("the owner imports the bank's statement and the books reconcile with it", a
   await tabs(page).getByRole("link", { name: "Reconcile" }).click();
   await page.getByRole("link", { name: "1121 HBL current account" }).click();
   await expect(page.getByRole("heading", { name: "Reconcile 1121 HBL current account" })).toBeVisible();
-  await label(page, "CSV file").setInputFiles({ name: "hbl.csv", mimeType: "text/csv", buffer: Buffer.from(statement()) });
+  await label(page, "CSV or Excel file").setInputFiles({
+    name: "hbl.xlsx",
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    buffer: await statement(),
+  });
   await label(page, "The bank").selectOption("hbl");
   await page.getByRole("button", { name: "Import", exact: true }).click();
   await expect(page.getByText("Imported 3 lines; 2 were matched with the books.")).toBeVisible();

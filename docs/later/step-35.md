@@ -8,10 +8,11 @@ built on Step 34 and renumbered at merge. Nothing here posts to the books.
 
 - **Reconcile** (`/cash-bank/reconcile`, a tab of Cash and bank, and under Reports): each bank
   account, with the day its statements reach.
-- **Importing a statement**: the CSV file the bank's internet banking gives. The heading row is
-  found under whatever the bank puts above it; each line needs a day and money in or out (a Debit
-  and a Credit column, or one Amount column); a line without money that says it is the opening or
-  closing balance gives that balance; a file listed newest first is read oldest first. Days are
+- **Importing a statement**: the CSV or Excel (.xlsx) file the bank's internet banking gives. The
+  heading row is found under whatever the bank puts above it; each line needs a day and money in
+  or out (a Debit and a Credit column, or one Amount column); a line without money that says it
+  is the opening or closing balance gives that balance; a file listed newest first is read oldest
+  first. Days are
   read day first, as Pakistani banks write them (05/11/2026, 05-Nov-2026, 5 November 2026, an
   Excel day number); amounts with their grouping, brackets, a minus, Cr or Dr. When the file
   gives a running balance, every line must follow from the one before, so a file read with its
@@ -43,11 +44,14 @@ The figures are worked in `docs/examples/step-35.md`. **Checked by Claude, not a
 
 ## Decided for Fazal, to confirm
 
-1. **Excel files are not read yet.** The library to read them (`exceljs`, which you approved) could
-   not be added from this chat: the approval was given in the coordinator's chat, and adding a
-   library needs it in the chat that adds it. Until then, an Excel statement is saved as "CSV
-   UTF-8" and imported. Once approved here, reading .xlsx is a small addition (the same reading
-   rules, fed from the sheet).
+1. **Excel files are read as .xlsx**, with `exceljs` 4.4.0 (approved by Fazal in the Finisher's
+   chat, 2026-11-18; added 2026-11-22). The first sheet that is shown and has anything in it is
+   read by the same rules as a CSV file: a day Excel keeps as a day is that day, a number is read
+   as Excel shows it (to 15 figures), a formula by its result, and merged cells once. An older
+   .xls file, or a workbook with a password, is refused with a note to save it as .xlsx: reading
+   those would need another library. A workbook comes from outside, so before the library opens
+   it, its parts are unpacked once here with a ceiling of 40 MB (a 5,000-line statement is under
+   5 MB), and a ZIP laid out in any unusual way is refused (`statement-file.ts`).
 2. **The banks' layouts are read by their column names as known on 2026-11-18**, not from a real
    file of each bank. HBL: Transaction Date, Transaction Details, Cheque No., Debit, Credit,
    Balance; Meezan: Date, Description, Cheque No, Debit, Credit, Balance; UBL: Txn Date,
@@ -95,6 +99,12 @@ these, all fixed:
 
 ## Tests
 
+- `src/modules/bank-reconciliation/statement-file.test.ts`: the sample statement as an Excel
+  workbook (days as days, money as numbers) reads line for line, fingerprints and all, as its CSV
+  file; a binary fraction, a formula, rich text, an Excel day number and merged cells; the first
+  sheet shown; an .xls file, a file that is not a workbook, too many rows, a ZIP that unpacks past
+  the ceiling (also when its directory understates it, and in many small parts), and a ZIP with
+  bytes before or after it or cut short, all refused; CSV bytes with and without Excel's mark.
 - `src/modules/bank-reconciliation/rules.test.ts`: days and amounts as banks write them; an HBL
   file with the bank's own lines above its heading; newest-first files and one Amount column;
   columns named by the company; a file with its columns swapped, and lines that cannot be read;
@@ -105,12 +115,12 @@ these, all fixed:
   unmatching, totals that do not agree, removing an import; who keeps, reads and cannot see it,
   and that the app's role writes nothing but through the database's functions.
 - `e2e/bank-reconciliation.spec.ts`, in the browser: the owner banks cash and draws some back,
-  imports the statement (two of three lines matched, reconciled), unmatches and matches again; the
-  auditor reads it and changes nothing.
+  imports the statement as an Excel workbook (two of three lines matched, reconciled), unmatches
+  and matches again; the auditor reads it and changes nothing.
 
 ## Later
 
-- Reading .xlsx statements, once `exceljs` is approved in this chat (decision 1).
+- Reading older .xls statements (decision 1), if a bank gives nothing else.
 - Recording a bank charge straight from its statement line.
 - A printed or PDF reconciliation statement for the auditor.
 - Matching suggestions for what is not sure (a ranked list of candidates), and a tolerance.

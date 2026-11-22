@@ -267,13 +267,6 @@
       "when": 1795021439529,
       "tag": "0037_payroll_employees",
       "breakpoints": true
-    },
-    {
-      "idx": 38,
-      "version": "7",
-      "when": 1795355841995,
-      "tag": "0038_sales_tax_return",
-      "breakpoints": true
     }
   ]
 }

@@ -62,6 +62,8 @@ export const ACCRUAL_LIST_LIMIT = 500;
 
 /** Accruals the reader may see, newest invoice first; one person's when named, one invoice's when named. */
 export async function selectAccruals(tx: Tx, tenantId: string, filter: { userId?: string | null; invoiceId?: string | null } = {}): Promise<Accrual[]> {
+  // Only the newest are shown, so only the days that can hold them are joined and sorted: every row of the
+  // first page is dated on or after the day of the row that would come last (the inner select).
   const rows = await tx.execute<AccrualRow>(sql`
     select a.id, a.invoice_id, d.number as invoice_number, a.invoice_date::text, d.buyer_name as customer_name, i.code as item_code,
            a.user_id, a.kind, a.level, a.seller_user_id, a.share_percent::text, a.base::text, a.team_rate::text,
@@ -73,6 +75,12 @@ export async function selectAccruals(tx: Tx, tenantId: string, filter: { userId?
     where a.tenant_id = ${tenantId}::uuid
       and (${filter.userId ?? null}::uuid is null or a.user_id = ${filter.userId ?? null}::uuid)
       and (${filter.invoiceId ?? null}::uuid is null or a.invoice_id = ${filter.invoiceId ?? null}::uuid)
+      and a.invoice_date >= coalesce((
+        select b.invoice_date from commission_accruals b
+        where b.tenant_id = ${tenantId}::uuid
+          and (${filter.userId ?? null}::uuid is null or b.user_id = ${filter.userId ?? null}::uuid)
+          and (${filter.invoiceId ?? null}::uuid is null or b.invoice_id = ${filter.invoiceId ?? null}::uuid)
+        order by b.invoice_date desc offset ${ACCRUAL_LIST_LIMIT} limit 1), '-infinity'::date)
     order by a.invoice_date desc, d.number desc nulls last, l.line_no, a.kind, a.level, a.id
     limit ${ACCRUAL_LIST_LIMIT + 1}`);
   return rows.map((row) => ({

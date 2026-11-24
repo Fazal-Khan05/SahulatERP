@@ -272,6 +272,8 @@ export const salesLineSalespeople = pgTable(
     foreignKey({ name: "sales_line_salespeople_line_fk", columns: [t.tenantId, t.documentId, t.lineId], foreignColumns: [salesLines.tenantId, salesLines.documentId, salesLines.id] }),
     foreignKey({ name: "sales_line_salespeople_member_fk", columns: [t.tenantId, t.userId], foreignColumns: [memberships.tenantId, memberships.userId] }),
     index("sales_line_salespeople_tenant_user_idx").on(t.tenantId, t.userId),
+    // Who sold a document's lines (Step 50: it was found by reading every share of the company).
+    index("sales_line_salespeople_tenant_document_idx").on(t.tenantId, t.documentId),
     check("sales_line_salespeople_share_range", sql`${t.sharePercent} > 0 and ${t.sharePercent} <= 100`),
   ],
 );

@@ -32,6 +32,11 @@ export const permissions = {
   // money in one act, so it is for those who do both, the owner and an accountant. The policies
   // on counter_sales and app.walk_in_customer() in drizzle/0035_counter_sales.sql name the same two.
   "counter_sale.manage": ["owner", "accountant"],
+  // Step 46. The monthly sales tax return's annexes are read by those who read the books; the
+  // province the company supplies from is set by the owner or an accountant. The functions and
+  // the policies in drizzle/0039_sales_tax_return.sql name the same roles.
+  "tax_return.read": ["owner", "accountant", "auditor"],
+  "tax_return.settings": ["owner", "accountant"],
 } as const satisfies TrackPermissions;
 
 /**
@@ -67,6 +72,12 @@ export const reports: readonly ReportSection[] = [
     reports: [
       { label: "Aged receivables", href: "/recovery/ageing", about: "What each customer owes, by days past the due date.", permission: "recovery.read", module: "collections" },
       { label: "Customer statements", href: "/recovery/statements", about: "A customer's invoices and payments over a period, with the balance after each.", permission: "recovery.read", module: "collections" },
+    ],
+  },
+  {
+    title: "Sales tax",
+    reports: [
+      { label: "Sales tax return", href: "/tax-return", about: "The month's annexes for FBR (sales, payments received, purchases, imports, stock), each set beside the ledger.", permission: "tax_return.read" },
     ],
   },
 ];

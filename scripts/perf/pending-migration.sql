@@ -405,3 +405,54 @@ END $$;
 REVOKE ALL ON FUNCTION app.ledger_totals(date, date, uuid, text[]) FROM PUBLIC;
 --> statement-breakpoint
 GRANT EXECUTE ON FUNCTION app.ledger_totals(date, date, uuid, text[]) TO app_runtime;
+
+-- ── goods received, not yet billed ──────────────────────────────────────────────────────────────
+-- The lines of posted goods received notes that supplier bills have not billed in full, with
+-- what is left of each and what it cost (src/modules/purchasing/queries.ts, getGrni). Asked
+-- through the tables' own policies, the planner took each table for a row or two and set every
+-- stock move of the company's receipts beside every item: 19 seconds for 2,900 receipts.
+--
+-- Told to those who read all of the tables it is worked out from, as their policies have it:
+-- an owner, an accountant or an auditor (a warehouse manager reads the notes, not what the
+-- goods cost), and a member limited to some branches the notes of their warehouses, counting
+-- the bills and returns of their branches, as before.
+CREATE FUNCTION app.goods_received_not_billed()
+  RETURNS TABLE (receipt_id uuid, receipt_line_id uuid, order_line_id uuid, item_id uuid, line_no integer, quantity numeric, value numeric)
+  LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+  AS $$
+#variable_conflict use_column
+DECLARE
+  v_tenant uuid := app.tenant_id();
+  v_role public.member_role := app.tenant_role();
+  v_scope uuid[] := app.tenant_branch_ids();
+BEGIN
+  IF v_tenant IS NULL OR v_role IS NULL OR v_role NOT IN ('owner', 'accountant', 'auditor') THEN
+    RETURN;
+  END IF;
+  RETURN QUERY
+    SELECT l.receipt_id, l.id, l.order_line_id, l.item_id, l.line_no,
+           l.quantity - billed.quantity - back.quantity, m.value - billed.value - back.value
+    FROM public.goods_receipts r
+    JOIN public.warehouses w ON w.tenant_id = r.tenant_id AND w.id = r.warehouse_id
+    JOIN public.goods_receipt_lines l ON l.tenant_id = r.tenant_id AND l.receipt_id = r.id
+    JOIN public.stock_moves m ON m.tenant_id = l.tenant_id AND m.source_line_id = l.id AND m.source_type = 'goods_receipt' AND m.source_id = r.id
+    JOIN public.warehouses mw ON mw.tenant_id = m.tenant_id AND mw.id = m.warehouse_id
+    CROSS JOIN LATERAL (
+      SELECT coalesce(sum(bl.quantity), 0) AS quantity, coalesce(sum(bl.received_value), 0) AS value
+      FROM public.supplier_bill_lines bl JOIN public.supplier_bills b ON b.tenant_id = bl.tenant_id AND b.id = bl.bill_id
+      WHERE bl.tenant_id = l.tenant_id AND bl.receipt_line_id = l.id AND b.status = 'posted'
+        AND (v_scope IS NULL OR b.branch_id = ANY (v_scope))) billed
+    CROSS JOIN LATERAL (
+      SELECT coalesce(sum(x.quantity), 0) AS quantity, coalesce(sum(x.grni_value), 0) AS value
+      FROM public.supplier_return_lines x JOIN public.supplier_returns d ON d.tenant_id = x.tenant_id AND d.id = x.return_id
+      WHERE x.tenant_id = l.tenant_id AND x.receipt_line_id = l.id AND x.bill_line_id IS NULL AND d.status = 'posted'
+        AND (v_scope IS NULL OR d.branch_id = ANY (v_scope))) back
+    WHERE r.tenant_id = v_tenant AND r.status = 'posted'
+      AND (v_scope IS NULL OR (w.branch_id = ANY (v_scope) AND mw.branch_id = ANY (v_scope)))
+      AND l.quantity > billed.quantity + back.quantity;
+END $$;
+--> statement-breakpoint
+REVOKE ALL ON FUNCTION app.goods_received_not_billed() FROM PUBLIC;
+--> statement-breakpoint
+GRANT EXECUTE ON FUNCTION app.goods_received_not_billed() TO app_runtime;
+--> statement-breakpoint

@@ -69,8 +69,11 @@ function random(seed: number) {
   return { next, int: (from: number, to: number) => from + Math.floor(next() * (to - from + 1)), pick: <T>(list: readonly T[]) => list[Math.floor(next() * list.length)] };
 }
 
-/** Runs the jobs a few at a time. One that fails is tried again, then counted and left. */
-async function inParallel<T>(jobs: readonly T[], run: (job: T) => Promise<void>, failed: { count: number; first: string[] }): Promise<void> {
+/** What went wrong with documents that were left out: how many, the first few in words, and a way to keep every one. */
+type Failed = { count: number; first: string[]; keep: (step: string, message: string, code: string | null) => Promise<void> };
+
+/** Runs the jobs a few at a time. One that fails is tried again, then counted, written down (perf_seed.failures) and left. */
+async function inParallel<T>(step: string, jobs: readonly T[], run: (job: T) => Promise<void>, failed: Failed): Promise<void> {
   let next = 0;
   const worker = async () => {
     while (next < jobs.length) {
@@ -82,7 +85,11 @@ async function inParallel<T>(jobs: readonly T[], run: (job: T) => Promise<void>,
         } catch (error) {
           if (attempt < 3) continue;
           failed.count += 1;
-          if (failed.first.length < 20) failed.first.push(error instanceof Error ? error.message.slice(0, 300) : String(error));
+          const message = error instanceof Error ? error.message.slice(0, 300) : String(error);
+          if (failed.first.length < 20) failed.first.push(message);
+          // The database's own code, where the refusal was the database's and not the app's wording of it.
+          const code = (error as { cause?: { code?: string }; code?: string }).cause?.code ?? (error as { code?: string }).code ?? null;
+          await failed.keep(step, message, typeof code === "string" ? code : null).catch(() => undefined);
           break;
         }
       }
@@ -115,11 +122,21 @@ export async function seedPerf(log: (line: string) => void = say): Promise<strin
   if (!Number.isInteger(shards) || !Number.isInteger(shard) || shards < 1 || shard < 0 || shard >= shards) throw new Error("PERF_SHARD: 0 up to one less than PERF_SHARDS.");
   const sql = adminSql();
   const said: string[] = [];
-  const failed = { count: 0, first: [] as string[] };
+  let failedOn = "";
+  let failedIn: string | null = null;
+  const failed: Failed = {
+    count: 0,
+    first: [],
+    keep: async (step, message, code) => {
+      if (failedIn) await sql`insert into perf_seed.failures (tenant_id, shard, day, step, message, code) values (${failedIn}, ${shard}, ${failedOn}, ${step}, ${message}, ${code})`;
+    },
+  };
   try {
     // (A schema of its own: nothing of the app's, and no company's rows, live in it.)
     await sql`create schema if not exists perf_seed`.catch(() => undefined);
     await sql`create table if not exists perf_seed.progress (tenant_id uuid not null, shard int not null, state jsonb not null, primary key (tenant_id, shard))`.catch(() => undefined);
+    // Every document that was left out, with what the app or the database said: docs/later/step-50.md sorts them.
+    await sql`create table if not exists perf_seed.failures (tenant_id uuid not null, shard int not null, day date not null, step text not null, message text not null, code text, at timestamptz not null default now())`.catch(() => undefined);
     if (shard > 0) {
       // The first process makes the company; this one starts once that one has finished a day.
       for (let waited = 0; ; waited += 1) {
@@ -237,11 +254,14 @@ export async function seedPerf(log: (line: string) => void = say): Promise<strin
       const date = shift(FIRST_DAY, index);
       if (state.lastDay && date <= state.lastDay) continue;
       const dice = random(1000 + index);
+      failedOn = date;
+      failedIn = tenantId;
       // The invoices of the day: the same share of the whole each day, so the last day ends on the number asked for.
       const count = Math.round((wanted * (index + 1)) / days) - Math.round((wanted * index) / days);
 
       // Buying: goods ordered, received and billed, to be paid a month on.
       await inParallel(
+        "purchase",
         shard === 0 ? Array.from({ length: Math.max(1, Math.round(count / 35)) }, (_, n) => n) : [],
         async (n) => {
           const local = random(index * 1000 + n + 7);
@@ -267,6 +287,7 @@ export async function seedPerf(log: (line: string) => void = say): Promise<strin
 
       // Selling.
       await inParallel(
+        "sale",
         Array.from({ length: count }, (_, n) => n).filter((n) => n % shards === shard),
         async (n) => {
           const local = random(index * 100_000 + n + 13);
@@ -309,6 +330,7 @@ export async function seedPerf(log: (line: string) => void = say): Promise<strin
 
       // Goods that come back.
       await inParallel(
+        "credit note",
         state.returns[date] ?? [],
         async (invoiceId) => {
           const billed = (await getSalesDocument(owner, invoiceId))!;
@@ -322,12 +344,19 @@ export async function seedPerf(log: (line: string) => void = say): Promise<strin
 
       // Money in.
       await inParallel(
+        "receipt",
         state.receivables[date] ?? [],
         async (due) => {
+          // A customer pays what is still owed: goods may have come back since the invoice, and a
+          // day that is posted again after a stop finds some of its invoices paid already. (The
+          // first full run did not ask, and 1,076 of its receipts were refused for asking too much.)
+          const [open] = await sql<{ left: string }[]>`select (i.total - i.settled)::text as left from app.receivable_items(${tenantId}, ${due.customerId}) i where i.kind = 'invoice' and i.id = ${due.invoiceId}`;
+          const amount = Decimal.min(due.amount, open?.left ?? "0");
+          if (amount.lte(0)) return;
           const { id } = await saveReceiptDraft(owner, null, {
-            date, customerId: due.customerId, method: due.method, accountId: due.method === "cash" ? cash : due.method === "bank" ? bank : "", amount: due.amount,
+            date, customerId: due.customerId, method: due.method, accountId: due.method === "cash" ? cash : due.method === "bank" ? bank : "", amount: amount.toFixed(2),
             chequeNumber: due.method === "cheque" ? String(10_000_000 + dice.int(0, 89_999_999)) : "", chequeBank: due.method === "cheque" ? "HBL" : "", chequeDate: due.method === "cheque" ? date : "",
-            allocations: [{ kind: "invoice", id: due.invoiceId, amount: due.amount }],
+            allocations: [{ kind: "invoice", id: due.invoiceId, amount: amount.toFixed(2) }],
           });
           await postReceipt(owner, id);
           // Cheques of the last fortnight are still in hand; older ones were deposited and cleared.
@@ -342,6 +371,7 @@ export async function seedPerf(log: (line: string) => void = say): Promise<strin
 
       // Money out.
       await inParallel(
+        "supplier payment",
         state.payables[date] ?? [],
         async (due) => {
           const [bill] = await sql<{ payable: string }[]>`select payable::text from public.supplier_bills where tenant_id = ${tenantId} and id = ${due.billId}`;
@@ -388,6 +418,7 @@ export async function resetPerf(): Promise<string[]> {
     const found = await findSeed(sql);
     if (!found) return ["There is no performance company to remove."];
     await sql`delete from perf_seed.progress where tenant_id = ${found.id}`.catch(() => undefined);
+    await sql`delete from perf_seed.failures where tenant_id = ${found.id}`.catch(() => undefined);
     await deleteTenants(sql, [found.id]);
     return ["Removed the performance company."];
   } finally {

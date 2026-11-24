@@ -9,12 +9,15 @@ import { addUnit, createItem } from "@/modules/items/commands";
 import { seedAccounts } from "@/modules/ledger/commands";
 import { openFiscalYear } from "@/modules/numbering/commands";
 import { createParty } from "@/modules/parties/commands";
+import { postReceipt as postGoodsReceipt, saveOrderDraft, saveReceiptDraft as saveGoodsReceiptDraft, submitOrder } from "@/modules/purchasing/commands";
+import { getGrni, getOrder } from "@/modules/purchasing/queries";
 import { postReceipt, saveReceiptDraft } from "@/modules/receipts/commands";
 import { listCustomerAgeing } from "@/modules/recovery/queries";
 import { getTrialBalance } from "@/modules/reports/queries";
 import { postDelivery, postInvoice, saveDeliveryDraft, saveInvoiceDraft, saveSalesDraft, startDelivery, startInvoice, submitSalesDocument } from "@/modules/sales/commands";
 import { getCustomerCredit, getSalesDocument, listOrdersToDeliver } from "@/modules/sales/queries";
 import { getStockReport } from "@/modules/stock-reports/queries";
+import { postBill, saveBillDraft } from "@/modules/supplier-bills/commands";
 import type { TenantContext } from "@/modules/tenant/rules";
 import { adminSql, deleteTenants, hasAdminDb, type AdminSql } from "../../tests/support/admin-db";
 
@@ -176,6 +179,27 @@ const ledgerTotalsBefore = (tenantId: string, from: string, to: string, branchId
     and (${mode}::text <> 'owner' or j.journal_date >= ${from}::date or a.control_type in ('cash', 'bank', 'ar', 'ap'))
   group by l.account_id order by l.account_id`;
 
+const grniBefore = (tenantId: string) => sql`
+  select l.id::text as line_id, (l.quantity - billed.quantity - back.quantity)::text as quantity, (m.value - billed.value - back.value)::text as value
+  from goods_receipts r
+  join goods_receipt_lines l on l.tenant_id = r.tenant_id and l.receipt_id = r.id
+  join purchase_orders o on o.tenant_id = r.tenant_id and o.id = r.order_id
+  join purchase_order_lines ol on ol.tenant_id = l.tenant_id and ol.id = l.order_line_id
+  join suppliers s on s.tenant_id = r.tenant_id and s.id = r.supplier_id
+  join items i on i.tenant_id = l.tenant_id and i.id = l.item_id
+  join units u on u.tenant_id = ol.tenant_id and u.id = ol.unit_id
+  join stock_moves m on m.tenant_id = l.tenant_id and m.source_type = 'goods_receipt' and m.source_id = r.id and m.source_line_id = l.id
+  cross join lateral (
+    select coalesce(sum(bl.quantity), 0) as quantity, coalesce(sum(bl.received_value), 0) as value
+    from supplier_bill_lines bl join supplier_bills b on b.tenant_id = bl.tenant_id and b.id = bl.bill_id
+    where bl.tenant_id = l.tenant_id and bl.receipt_line_id = l.id and b.status = 'posted') billed
+  cross join lateral (
+    select coalesce(sum(x.quantity), 0) as quantity, coalesce(sum(x.grni_value), 0) as value
+    from supplier_return_lines x join supplier_returns d on d.tenant_id = x.tenant_id and d.id = x.return_id
+    where x.tenant_id = l.tenant_id and x.receipt_line_id = l.id and x.bill_line_id is null and d.status = 'posted') back
+  where r.tenant_id = ${tenantId}::uuid and r.status = 'posted' and l.quantity > billed.quantity + back.quantity
+  order by l.id`;
+
 const receivablesBefore = (tenantId: string) => sql`
   select c.id::text as customer_id, r.kind, r.id::text as item_id, r.number, r.document_date::text, r.due_date::text, r.total::text, r.settled::text, r.outstanding::text
   from public.customers c cross join lateral app.receivables_open(c.id) r
@@ -231,6 +255,23 @@ describe.skipIf(!hasDb)("the performance pass answers as before", { timeout: 600
     // Khan Autos pays 1,500 of the 4,000 invoiced.
     const receipt = await saveReceiptDraft(as.owner, null, { date: "2026-11-11", customerId: khan, method: "cash", accountId: cash, amount: "1500", chequeNumber: "", chequeBank: "", chequeDate: "", allocations: [{ kind: "invoice", id: firstInvoice, amount: "1500" }] });
     await postReceipt(as.owner, receipt.id);
+
+    // Buying, on the last day and of an item nothing above sells, so that no figure above moves.
+    // Forty brake pads arrive at Main and are not billed; thirty arrive at North, twenty of them billed.
+    const brake = (await createItem(as.owner, { code: "BR-1", name: "Brake pad", unit: piece, defaultPrice: "400" })).id;
+    const supplier = (await createParty(as.owner, "supplier", { name: "Lahore Parts", supplierType: "aop" })).id;
+    const receive = async (warehouseId: string, quantity: string) => {
+      const placed = await saveOrderDraft(as.owner, null, { date: TO, supplierId: supplier, warehouseId, lines: [{ itemId: brake, quantity, unitCost: "250" }] });
+      await submitOrder(as.owner, placed.id);
+      const lines = (await getOrder(as.owner, placed.id))!.lines;
+      const note = await saveGoodsReceiptDraft(as.owner, null, placed.id, { date: TO, lines: lines.map((line) => ({ orderLineId: line.id, quantity: line.quantity.toFixed() })) });
+      await postGoodsReceipt(as.owner, note.id);
+      return (await admin<{ id: string }[]>`select id from public.goods_receipt_lines where tenant_id = ${tenantA} and receipt_id = ${note.id}`)[0].id;
+    };
+    await receive(mainStore, "40");
+    const northLine = await receive(northStore, "30");
+    const supplierBill = await saveBillDraft(as.owner, null, { date: TO, supplierId: supplier, branchId: northBranch, supplierInvoiceNo: "LP/1", goods: [{ receiptLineId: northLine, quantity: "20", unitPrice: "250" }] });
+    await postBill(as.owner, supplierBill.id, supplierBill.updatedAt);
   }, 300_000);
 
   afterAll(async () => {
@@ -357,5 +398,23 @@ describe.skipIf(!hasDb)("the performance pass answers as before", { timeout: 600
       expect(await refusal(() => read(who, sql`select * from app.receivables_open_all()`)), who.email).toContain("not allowed to see what a customer has to pay");
     }
     expect(await read(other, sql`select * from app.receivables_open_all()`)).toEqual([]);
+  });
+
+  it("goods received and not billed: the lines, what is left of each and what it cost, as the tables' own policies gave them", async () => {
+    for (const who of [as.owner, as.accountant, as.auditor, as.warehouse_manager, as.sales_manager, as.salesperson, as.recovery_officer, north]) {
+      const before = await read(who, grniBefore(tenantA));
+      const now = await read(who, sql`select receipt_line_id::text as line_id, quantity::text, value::text from app.goods_received_not_billed() order by receipt_line_id`);
+      expect(now, who.email).toEqual(before);
+    }
+    // Forty at Main, and the ten of North's thirty that no bill has; at 250 each. The books hold the same.
+    const whole = await getGrni(as.owner);
+    expect(whole.rows.map((row) => `${row.itemCode} ${row.quantity.toFixed(0)} ${row.value.toFixed(2)}`).sort()).toEqual(["BR-1 10 2500.00", "BR-1 40 10000.00"]);
+    expect([whole.total.toFixed(2), whole.ledger.toFixed(2)]).toEqual(["12500.00", "12500.00"]);
+    // A member of the North branch only: North's ten.
+    expect((await getGrni(north)).rows.map((row) => row.quantity.toFixed(0))).toEqual(["10"]);
+    // Those who do not read what stock cost are told nothing, and nothing of another company is told.
+    for (const who of [as.warehouse_manager, as.sales_manager, as.salesperson, as.recovery_officer, other]) {
+      expect(await read(who, sql`select * from app.goods_received_not_billed()`), who.email).toEqual([]);
+    }
   });
 });

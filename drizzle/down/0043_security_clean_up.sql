@@ -94,6 +94,7 @@ AS $function$
   $function$
 ;
 
+DROP FUNCTION app.identity_key_gone();
 DROP FUNCTION app.identity_signature_valid(numeric, integer, bytea, bytea);
 DROP FUNCTION app.identity_number(bytea);
 DROP TABLE app.identity_public_keys;

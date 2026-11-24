@@ -261,7 +261,9 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
       .begin(async (tx) => {
         await tx`delete from app.identity_keys`;
         await tx`delete from app.identity_public_keys`;
-        const who = async () => ({ ...(await tx`select app.current_user_id() as "user", app.tenant_id() as tenant, app.tenant_role() as role, (select count(*)::int from app.member_tenant_ids()) as companies`)[0] });
+        // (Asked in a savepoint: a transaction whose key has been taken out is stopped, not answered.)
+        const who = async () =>
+          tx.savepoint(async (sp) => ({ ...(await sp`select app.current_user_id() as "user", app.tenant_id() as tenant, app.tenant_role() as role, (select count(*)::int from app.member_tenant_ids()) as companies`)[0] })).catch((error: { code?: string; message?: string }) => `${error.code}: ${error.message}`);
         const enter = (user: string, tenant: string | null, expires: number, signature: string) =>
           tx.savepoint((sp) => sp`select app.enter(${user}::uuid, ${tenant}::uuid, ${expires}::bigint, ${signature}::text)`).then(
             () => undefined,
@@ -338,7 +340,7 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
         // A second key in the other slot is accepted beside the first (how a key is changed).
         const next = publicHalf(other);
         await tx`insert into app.identity_public_keys (slot, modulus, bytes) values (2, ${next.modulus}::numeric, ${next.bytes})`;
-        seen.both = [await enter(ownerB, tenantB, soon, signed(ownerB, tenantB, soon, other)), (await who()).user, await enter(ownerA, tenantA, soon, signed(ownerA, tenantA, soon)), (await who()).user];
+        seen.both = [await enter(ownerB, tenantB, soon, signed(ownerB, tenantB, soon, other)), await who(), await enter(ownerA, tenantA, soon, signed(ownerA, tenantA, soon)), await who()];
         throw undone;
       })
       .catch((error) => {
@@ -356,17 +358,19 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
     expect(seen.elsewhere).toEqual({ user: ownerA, tenant: null, role: null, companies: 1 });
     expect(seen.keyRefused).toEqual(Array(12).fill(DENIED));
     // Whoever the transaction had proved it was, it proved with the secret, and the secret was
-    // then taken out: from that statement on it is nobody, though it never ended. (Found by the
-    // reviewer of the security clean-up: it used to go on being believed for as long as it stayed open.)
-    expect(seen.afterKeyRefusals).toEqual(nobody);
+    // then taken out: from that statement on it is stopped, though it never ended. (Found by the
+    // reviewer of the security clean-up: it used to go on being believed for as long as it stayed
+    // open. Stopped, not carried on as nobody: a command half-way through must not end half-done.)
+    const stopped = "42501: the key this transaction proved who it was with has been taken out";
+    expect(seen.afterKeyRefusals).toBe(stopped);
     expect(seen.keyEntered).toBeUndefined();
     expect(seen.keyOwner).toEqual({ user: ownerA, tenant: tenantA, role: "owner", companies: 1 });
     expect(seen.again).toEqual([undefined, DENIED, DENIED, DENIED]);
     expect(seen.afterAgain).toEqual({ user: ownerA, tenant: tenantA, role: "owner", companies: 1 });
-    expect(seen.keyGone).toEqual([nobody, DENIED]);
-    expect(seen.keyBack).toEqual([nobody, undefined, { user: ownerA, tenant: tenantA, role: "owner", companies: 1 }]);
+    expect(seen.keyGone).toEqual([stopped, DENIED]);
+    expect(seen.keyBack).toEqual([stopped, undefined, { user: ownerA, tenant: tenantA, role: "owner", companies: 1 }]);
     expect(seen.keyNowhere).toEqual({ user: ownerA, tenant: null, role: null, companies: 1 });
-    expect(seen.both).toEqual([undefined, ownerB, undefined, ownerA]);
+    expect((seen.both as unknown[]).map((value) => (typeof value === "object" && value !== null ? (value as { user: string }).user : value))).toEqual([undefined, ownerB, undefined, ownerA]);
     // Neither key ever left that transaction.
     expect(await admin`select 1 from app.identity_keys where inner_key = ${inner}`).toHaveLength(0);
     expect(await admin`select 1 from app.identity_public_keys where modulus = ${publicHalf(key).modulus}::numeric`).toHaveLength(0);
@@ -528,7 +532,7 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
       const [installed] = await admin<{ id: string }[]>`select id from app.identity_keys union all select id from app.identity_public_keys limit 1`;
       const seen = await direct.begin(async (tx) => {
         const [{ pid, xid }] = await tx<{ pid: number; xid: string }[]>`select pg_backend_pid() as pid, pg_current_xact_id()::text as xid`;
-        const who = () => tx`select app.current_user_id() as "user", app.tenant_role() as role, (select count(*)::int from public.branches) as branches`.then((rows) => ({ ...rows[0] }));
+        const who = () => tx.savepoint((sp) => sp`select app.current_user_id() as "user", app.tenant_role() as role, (select count(*)::int from public.branches) as branches`.then((rows) => ({ ...rows[0] }))).catch((error: { code?: string }) => error.code);
         const write = (proven: boolean, key: string | null) => admin`
           insert into app.identity_sessions (pid, xid, user_id, tenant_id, proven, key_id) values (${pid}, ${xid}::xid8, ${ownerA}, ${tenantA}, ${proven}, ${key})
           on conflict (pid) do update set xid = excluded.xid, user_id = excluded.user_id, tenant_id = excluded.tenant_id, proven = excluded.proven, key_id = excluded.key_id, proof = null, proof_expires = null`;
@@ -547,7 +551,8 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
         return { unproven, unnamed, gone, proven, unsigned };
       });
       const nobody = { user: null, role: null, branches: 0 };
-      expect([seen.unproven, seen.unnamed, seen.gone]).toEqual([nobody, nobody, nobody]);
+      // Not proven: nobody. Proven against no key, or one that is not installed: stopped.
+      expect([seen.unproven, seen.unnamed, seen.gone]).toEqual([nobody, DENIED, DENIED]);
       expect(seen.proven).toMatchObject({ user: ownerA, role: "owner" });
       expect(seen.unsigned).toBe(DENIED);
     } finally {

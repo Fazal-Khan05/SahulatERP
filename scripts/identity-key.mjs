@@ -153,10 +153,15 @@ if (action === "generate") {
       console.log(`Database ${name}: public key installed in slot ${slot}.`);
     }
   }
-  // With a key, the secret is not put in (or put back, after it was retired) unless asked: a
-  // working copy whose .env.local still has the old line must not undo the retirement.
+  // The secret is not put in (or put back, after it was retired) unless asked, where a key is
+  // in play: in a working copy that has a key, or in a database that holds a public key and no
+  // secret. A working copy whose .env.local still has the old line must not undo the retirement.
+  const keyOnly = secret && !rest.includes("--with-secret") && (await sql`select (select count(*) from app.identity_public_keys)::int as keys, (select count(*) from app.identity_keys)::int as secrets`).some((row) => row.keys > 0 && row.secrets === 0);
   if (secret && mine && !rest.includes("--with-secret")) {
     console.log(`Database ${name}: ${SECRET_NAME} is also set here and was left out: the key is what this working copy signs with. (install --with-secret puts the secret in as well.)`);
+  } else if (keyOnly) {
+    await sql.end();
+    fail(`Database ${name} holds a public key and no shared secret: its secret was retired, and ${SECRET_NAME} was NOT put back. This working copy needs the key (${KEY_NAME}) to be believed there. (install --with-secret puts a secret in all the same.)`);
   } else if (secret) {
     const halved = halves(secret);
     // The halves must give what Node's own HMAC gives, or nothing the app signs would be accepted.

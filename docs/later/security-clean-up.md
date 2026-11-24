@@ -145,14 +145,22 @@ shows nothing.
    which key its proof was checked against, and the database asks every time whether that key
    is still installed. (Found by the reviewer, and then by trying it: a transaction that had
    said who it was with the secret went on being believed for as long as it was held open, and
-   closing the app's connections from outside cannot be relied on.)
+   closing the app's connections from outside cannot be relied on.) A transaction caught in
+   the middle is stopped with an error, not carried on as nobody: a command half-way through
+   must not end half-done. So take a key or a secret out only once the app has stopped signing
+   with it; then the only transactions it stops are ones that should not be there.
 4. Take `IDENTITY_SIGNING_SECRET` out of Vercel and out of every `.env.local`.
 
 Until step 3, this item is open exactly as before: the secret is still in the database.
 
 `install` puts in only the key's public half when a working copy has a key; a secret still in
-its `.env.local` is left out unless asked for (`install --with-secret`). Found by the reviewer:
-otherwise any working copy with an old line would have put the retired secret back.
+its `.env.local` is left out unless asked for (`install --with-secret`), and a working copy
+that has only the old secret is refused by a database that holds a key and no secret. Found by
+the reviewer: otherwise any working copy with an old line would have put the retired secret back.
+
+The app now opens every transaction as read committed outright, and no longer leaves it to the
+connection's default: a connection someone had left set to another default would otherwise
+have made the next person's pages come back with nothing (the reviewer's second look).
 
 Known and left: the table of public keys takes any odd number of the right length. It is
 written only by the owner of the database, through `install`, which puts in a real key's.

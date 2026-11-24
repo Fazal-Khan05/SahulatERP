@@ -363,17 +363,34 @@ BEGIN
 END $$;
 --> statement-breakpoint
 
+-- Said by app.identity_now() to a transaction whose key has been taken out since it proved who
+-- it was. It stops there, loudly: left to go on as nobody it would read nothing and change
+-- nothing without a word, and a command half-way through could end half-done (found by this
+-- migration's reviewer).
+CREATE FUNCTION app.identity_key_gone() RETURNS uuid
+  LANGUAGE plpgsql STABLE SET search_path = pg_catalog, pg_temp
+  AS $$
+BEGIN
+  RAISE EXCEPTION 'the key this transaction proved who it was with has been taken out' USING ERRCODE = 'insufficient_privilege';
+END $$;
+--> statement-breakpoint
+REVOKE ALL ON FUNCTION app.identity_key_gone() FROM PUBLIC;
+--> statement-breakpoint
+
 -- Who this transaction is: the row app.enter wrote for it, after checking a proof, for as long
 -- as the key the proof was checked against is installed. Nothing else is believed: not the two
--- settings of before 0031, not a row written before this migration, and not a row whose key has
--- since been taken out. Always one row; both columns null for nobody.
+-- settings of before 0031, and not a row written without a proof. A transaction whose key has
+-- been taken out is stopped (above). Always one row; both columns null for nobody.
 CREATE OR REPLACE FUNCTION app.identity_now() RETURNS TABLE (user_id uuid, tenant_id uuid)
   LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
   AS $$
-    SELECT s.user_id, s.tenant_id
+    SELECT CASE WHEN s.pid IS NULL THEN NULL WHEN k.installed THEN s.user_id ELSE app.identity_key_gone() END,
+           CASE WHEN s.pid IS NOT NULL AND k.installed THEN s.tenant_id END
     FROM (SELECT 1) one
     LEFT JOIN app.identity_sessions s ON s.pid = pg_backend_pid() AND s.xid = pg_current_xact_id_if_assigned() AND s.proven
-      AND (EXISTS (SELECT 1 FROM app.identity_keys i WHERE i.id = s.key_id) OR EXISTS (SELECT 1 FROM app.identity_public_keys i WHERE i.id = s.key_id))
+    LEFT JOIN LATERAL (
+      SELECT EXISTS (SELECT 1 FROM app.identity_keys i WHERE i.id = s.key_id) OR EXISTS (SELECT 1 FROM app.identity_public_keys i WHERE i.id = s.key_id) AS installed
+    ) k ON true
   $$;
 --> statement-breakpoint
 -- "Is a proof wanted?" has one answer now, so nothing asks.

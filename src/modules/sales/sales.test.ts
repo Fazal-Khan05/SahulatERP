@@ -426,9 +426,11 @@ describe.skipIf(!hasDb)("quotations and sales orders", () => {
           { isolationLevel: "repeatable read" },
         ),
       );
-    expect(await old((tx) => tx.update(salesDocuments).set(submitting).where(mine))).toBe("SE056");
-    expect(await old((tx) => tx.delete(salesLines).where(and(eq(salesLines.tenantId, tenantA), eq(salesLines.documentId, big.id))))).toBe("SE056");
-    expect(await old((tx) => tx.insert(salesDocuments).values(draft))).toBe("SE056");
+    // Since the security clean-up nobody is anybody in a transaction that keeps an old picture:
+    // it is refused when it says who it is, before it reaches the guards (SE056) behind that.
+    expect(await old((tx) => tx.update(salesDocuments).set(submitting).where(mine))).toBe("42501");
+    expect(await old((tx) => tx.delete(salesLines).where(and(eq(salesLines.tenantId, tenantA), eq(salesLines.documentId, big.id))))).toBe("42501");
+    expect(await old((tx) => tx.insert(salesDocuments).values(draft))).toBe("42501");
     expect((await getSalesDocument(as.salesperson, big.id))!.status).toBe("draft");
     await discardSalesDraft(as.salesperson, big.id);
 

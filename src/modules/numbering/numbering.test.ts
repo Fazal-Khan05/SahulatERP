@@ -9,7 +9,7 @@ import { listWarehouses } from "@/modules/warehouses/queries";
 import { warehouses } from "@/modules/warehouses/schema";
 import { adminSql, deleteTenants, hasAdminDb, type AdminSql } from "../../../tests/support/admin-db";
 import { enterAs } from "../../../tests/support/identity";
-import { openFiscalYear, setPeriodLocked, takeJournalNumber } from "./commands";
+import { openFiscalYear, setPeriodLocked } from "./commands";
 import { listFiscalPeriods, listNumberSeries } from "./queries";
 import { formatDocumentNumber, periodRefusal } from "./rules";
 import { fiscalPeriods, numberSeries } from "./schema";
@@ -235,34 +235,28 @@ describe.skipIf(!hasDb)("fiscal periods, document numbers and warehouses", () =>
     expect((await listNumberSeries(as.owner)).find((s) => s.documentType === "SI" && s.yearCode === "2627")?.nextNumber).toBe(41);
   }, 120_000);
 
-  it("lets nobody take a number and throw it away", async () => {
+  it("lets nobody take a number and throw it away, or name one", async () => {
     // Found by the reviewer of Step 24: any member could call the numbering function and leave a
-    // gap in a series. The app's role can no longer call it at all.
+    // gap in a series. The app's role can no longer call it at all, whoever is signed in.
     for (const role of roles) {
       for (const type of ["SI", "PO", "GR", "JV"]) {
         expect(await codeOf(() => withTenant(userIds[role], tenantA, (tx) => tx.execute(`select app.next_document_number('${type}', '${D}')`))), `${role} ${type}`).toBe(DENIED);
       }
     }
-    // The one number the app takes for itself is a manual journal's, and only those who write journals may.
-    for (const role of ["salesperson", "warehouse_manager", "auditor"] as const) {
-      expect(await codeOf(() => withTenant(userIds[role], tenantA, (tx) => tx.execute(`select app.next_journal_number('${D}')`))), role).toBe(DENIED);
-    }
-    expect(await codeOf(() => withTenant(userIds.owner, tenantB, (tx) => tx.execute(`select app.next_journal_number('${D}')`)))).toBe(DENIED);
-    // Taken and not used, the transaction does not end: the number goes back.
-    for (const role of ["owner", "accountant"] as const) {
-      expect(await codeOf(() => withTenant(userIds[role], tenantA, (tx) => takeJournalNumber(tx, D))), role).toBe("SE004");
-      expect(await codeOf(() => withTenant(userIds[role], tenantA, (tx) => tx.execute(`select app.next_journal_number('${D}'), app.next_journal_number('${D}')`))), role).toBe("SE004");
-    }
-    // Nor by asking for the check early, nor by writing a journal that only looks like it carries the number.
-    expect(await codeOf(() => withTenant(userIds.owner, tenantA, async (tx) => {
-      await takeJournalNumber(tx, D);
-      await tx.execute(`set constraints all immediate`);
-    }))).toBe("SE004");
+    const reach = await admin`
+      select r, has_function_privilege(r, 'app.next_document_number(text, date)', 'EXECUTE') as may
+      from unnest(array['app_runtime', 'anon', 'authenticated', 'service_role', 'public']) r where has_function_privilege(r, 'app.next_document_number(text, date)', 'EXECUTE')`;
+    expect(reach).toHaveLength(0);
+    // Every function that does take a number runs as the owner of the database, so it still can.
+    const callers = await admin<{ name: string; definer: boolean }[]>`
+      select p.proname as name, p.prosecdef as definer from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'app' and p.prosrc like '%next_document_number%' and p.proname <> 'next_document_number'`;
+    expect(callers.length).toBeGreaterThan(10);
+    expect(callers.filter((f) => !f.definer).map((f) => f.name)).toEqual([]);
+    // A manual journal is numbered by the function that writes it, and a number cannot be named
+    // or taken apart from a journal: src/modules/ledger/posting.test.ts and
+    // src/modules/manual-journals/journals.test.ts.
     expect((await listNumberSeries(as.owner)).filter((s) => s.documentType === "JV")).toEqual([]);
-    await expect(withTenant(userIds.owner, tenantA, (tx) => takeJournalNumber(tx, "13-11-2026"))).rejects.toThrow("A journal needs a date before it can be numbered.");
-    await expect(withTenant(userIds.owner, tenantA, (tx) => takeJournalNumber(tx, "2031-01-01"))).rejects.toThrow("No fiscal period is open for 01-01-2031.");
-
-    // A manual journal that is posted keeps its number: src/modules/manual-journals/journals.test.ts.
   }, 120_000);
 
   it("adds warehouses to branches, seen by members who work in those branches", async () => {

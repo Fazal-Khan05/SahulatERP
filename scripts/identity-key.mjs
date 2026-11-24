@@ -1,7 +1,9 @@
 // npm run db:identity -- status
 // npm run db:identity -- generate-key [file]   a private key for the app (default file .env.local)
 // npm run db:identity -- generate [file]       a shared secret, the older way
-// npm run db:identity -- install               puts what this working copy signs with into the database
+// npm run db:identity -- install               puts what this working copy signs with into the database:
+//                                              the public half of the key if it has one, else the secret
+// npm run db:identity -- install --with-secret   the secret as well as the key (only to go back)
 // npm run db:identity -- retire-secret --yes   removes the shared secret from the database
 // npm run db:identity -- remove <slot> --yes        removes one shared secret
 // npm run db:identity -- remove-key <slot> --yes    removes one public key
@@ -24,6 +26,10 @@
 //   2. give the deployed app IDENTITY_SIGNING_KEY and redeploy; check the site
 //   3. retire-secret --yes                   (the database now accepts the key only)
 //   4. take IDENTITY_SIGNING_SECRET out of the deployed app's settings and out of .env.local
+//
+// Taking a key or a secret out also forgets every proof the database had already checked and
+// closes the app's open connections: a transaction that had said who it was with it would
+// otherwise go on being believed until it ended. The site's next request connects again.
 //
 // Nothing here ever prints a secret or a private key. The database is the one named by
 // MIGRATION_DATABASE_URL.
@@ -91,6 +97,23 @@ function writeSetting(file, name, make) {
   console.log(`A new ${name} was written to ${file}. It was not shown and is not in Git.`);
 }
 
+/**
+ * After something was taken out: the proofs already checked are forgotten (inside the caller's
+ * transaction), and the app's connections are closed once it has committed. Says what it could
+ * not do, for a database whose owner may not close other roles' connections.
+ */
+async function forgetProofs(tx) {
+  await tx`delete from app.identity_sessions`;
+}
+async function closeAppConnections(sql) {
+  try {
+    const closed = await sql`select count(*) filter (where pg_terminate_backend(pid))::int as n from pg_stat_activity where usename = 'app_runtime' and pid <> pg_backend_pid()`;
+    return `${closed[0].n} open connection${closed[0].n === 1 ? "" : "s"} of the app closed.`;
+  } catch {
+    return "The app's open connections could NOT be closed from here: a transaction already open may go on being believed until it ends. Restart the app, or close them in the database's dashboard.";
+  }
+}
+
 const sameSecret = (row, mine) => Buffer.compare(row.inner_key, mine.inner) === 0 && Buffer.compare(row.outer_key, mine.outer) === 0;
 
 if (action === "generate") {
@@ -147,7 +170,11 @@ if (action === "generate") {
       console.log(`Database ${name}: public key installed in slot ${slot}.`);
     }
   }
-  if (secret) {
+  // With a key, the secret is not put in (or put back, after it was retired) unless asked: a
+  // working copy whose .env.local still has the old line must not undo the retirement.
+  if (secret && mine && !rest.includes("--with-secret")) {
+    console.log(`Database ${name}: ${SECRET_NAME} is also set here and was left out: the key is what this working copy signs with. (install --with-secret puts the secret in as well.)`);
+  } else if (secret) {
     const halved = halves(secret);
     // The halves must give what Node's own HMAC gives, or nothing the app signs would be accepted.
     const probe = "sahulaterp-identity-v1|probe";
@@ -179,18 +206,28 @@ if (action === "generate") {
     await sql.end();
     fail(`Database ${name}: ${KEY_NAME} here does not match a public key in the database. Run install first; nothing was removed.`);
   }
-  const gone = await sql`delete from app.identity_keys returning slot`;
+  const gone = await sql.begin(async (tx) => {
+    const rows = await tx`delete from app.identity_keys returning slot`;
+    if (rows.length > 0) await forgetProofs(tx);
+    return rows;
+  });
+  const closed = gone.length > 0 ? await closeAppConnections(sql) : "";
   await sql.end();
-  console.log(gone.length === 0 ? `Database ${name}: no shared secret was installed.` : `Database ${name}: the shared secret is removed (${gone.length} slot${gone.length === 1 ? "" : "s"}). From now on only a proof signed with the private key is believed. Take ${SECRET_NAME} out of the deployed app's settings and out of .env.local.`);
+  console.log(gone.length === 0 ? `Database ${name}: no shared secret was installed.` : `Database ${name}: the shared secret is removed (${gone.length} slot${gone.length === 1 ? "" : "s"}). ${closed} From now on a new transaction is believed only with a proof signed with the private key. Take ${SECRET_NAME} out of the deployed app's settings and out of every .env.local.`);
 } else if (action === "remove" || action === "remove-key") {
   const slot = Number(rest[0]);
   if (![1, 2].includes(slot) || !rest.includes("--yes")) fail(`Usage: npm run db:identity -- ${action} <1|2> --yes   (with nothing left installed, the database shows nothing to anyone)`);
   const { sql, name } = database();
-  const gone = action === "remove" ? await sql`delete from app.identity_keys where slot = ${slot} returning slot` : await sql`delete from app.identity_public_keys where slot = ${slot} returning slot`;
+  const gone = await sql.begin(async (tx) => {
+    const rows = action === "remove" ? await tx`delete from app.identity_keys where slot = ${slot} returning slot` : await tx`delete from app.identity_public_keys where slot = ${slot} returning slot`;
+    if (rows.length > 0) await forgetProofs(tx);
+    return rows;
+  });
+  const closed = gone.length > 0 ? await closeAppConnections(sql) : "";
   const [{ left }] = await sql`select (select count(*) from app.identity_keys)::int + (select count(*) from app.identity_public_keys)::int as left`;
   await sql.end();
   const what = action === "remove" ? "shared secret" : "public key";
-  console.log(gone.length === 0 ? `Database ${name}: slot ${slot} held no ${what}.` : `Database ${name}: ${what} removed from slot ${slot}.${left === 0 ? " Nothing is left installed: this database now shows nothing to anyone." : ""}`);
+  console.log(gone.length === 0 ? `Database ${name}: slot ${slot} held no ${what}.` : `Database ${name}: ${what} removed from slot ${slot}. ${closed}${left === 0 ? " Nothing is left installed: this database now shows nothing to anyone." : ""}`);
 } else {
-  fail("Usage: npm run db:identity -- status | generate-key [file] | generate [file] | install | retire-secret --yes | remove <slot> --yes | remove-key <slot> --yes");
+  fail("Usage: npm run db:identity -- status | generate-key [file] | generate [file] | install [--with-secret] | retire-secret --yes | remove <slot> --yes | remove-key <slot> --yes");
 }

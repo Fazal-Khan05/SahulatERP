@@ -12,9 +12,11 @@
 # computer restarts), makes the database if it is missing, and prints the two addresses to put
 # in front of a test command. The data is kept in ~/.sahulaterp-localdb, outside the project and
 # outside the temporary folders a restart empties. Nothing here holds real data. The server
-# listens on this computer only and asks for no password, so anything in it can be read by
-# anyone at this computer: that includes the shared secret of .env.local, if that is what this
-# working copy still signs with (a private key leaves only its public half here).
+# listens on this computer only and asks for no password, so anything in it can be read by any
+# program running on this computer, whatever the permissions on .env.local. While a working copy
+# still signs with the shared secret, a copy of that secret sits in its local database, and it
+# is the same secret the shared development database accepts. A working copy that has
+# IDENTITY_SIGNING_KEY leaves only the key's public half here, which is no secret.
 set -eu
 
 NAME="${1:-}"

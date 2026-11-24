@@ -8,29 +8,6 @@ import { firstYearProblem, fiscalYearLabel, monthlyPeriods, nextDay, periodName,
 import { fiscalPeriods } from "./schema";
 
 /**
- * Takes the next number for a manual journal, such as JV-2627-00001. It must be called inside
- * the transaction that writes the journal: the database holds the counter until that transaction
- * ends, so numbers are consecutive, and a journal that fails gives its number back.
- *
- * This is the only number the app takes for itself; every other document is numbered by the
- * database function that posts it. The database refuses to keep a number taken here unless a
- * journal carries it when the transaction ends, so a number cannot be taken and thrown away
- * (app.next_journal_number). It also refuses a date with no open fiscal period.
- */
-export async function takeJournalNumber(tx: Tx, date: string): Promise<string> {
-  if (!isIsoDate(date)) throw new UserError("A journal needs a date before it can be numbered.");
-  try {
-    // A savepoint, so a refusal here leaves the caller's transaction usable.
-    const rows = await tx.transaction((inner) => inner.execute<{ number: string }>(sql`select app.next_journal_number(${date}::date) as number`));
-    return rows[0].number;
-  } catch (error) {
-    const refused = periodRefusal(pgCode(error), date);
-    if (refused) throw new UserError(refused);
-    throw error;
-  }
-}
-
-/**
  * Opens a fiscal year: twelve monthly periods. The company's first year starts in the month and
  * year given; every later year starts the day after the last one ends, whatever is given.
  * With `onlyFirst`, it opens nothing when a year is already open (the setup wizard asks this way).

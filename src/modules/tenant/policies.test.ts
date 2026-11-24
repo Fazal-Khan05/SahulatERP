@@ -435,6 +435,39 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
     expect([await plant(modulus, 256), await plant("3", 256), await plant((n + BigInt(1)).toString(), 256), await plant(modulus, 384), await plant(modulus, 128), await plant(`${modulus}.5`, 256)]).toEqual(["undone", CHECK, CHECK, CHECK, CHECK, CHECK]);
   });
 
+  // Found by the reviewer of the security clean-up: a transaction that keeps the picture of the
+  // database it began with went on seeing a key after it was removed, and took a proof made with
+  // it; so did a new transaction that borrowed that picture. Who is signed in can now be said
+  // only in an ordinary transaction, where every statement sees the database as it is.
+  it("lets nobody say who they are in a transaction that keeps an old picture of the database", async () => {
+    const direct = postgres(process.env.DATABASE_URL!, { max: 2 });
+    try {
+      for (const level of ["repeatable read", "serializable"] as const) {
+        const refused = await direct.begin(`isolation level ${level}`, async (tx) => tx.savepoint((sp) => enterAs(sp, ownerA, tenantA)).then(() => "believed", (error: { code?: string; message?: string }) => `${error.code}: ${error.message}`));
+        expect(refused, level).toBe("42501: The database did not accept who is signed in: who is signed in is said in a read committed transaction");
+      }
+      // One that borrows another's picture is one of those; and nobody is anybody in it.
+      const borrowed = await direct.begin("isolation level repeatable read", async (lender) => {
+        const [{ snapshot }] = await lender<{ snapshot: string }[]>`select pg_export_snapshot() as snapshot`;
+        return direct.begin("isolation level repeatable read", async (tx) => {
+          await tx.unsafe(`set transaction snapshot '${snapshot.replace(/[^0-9A-Fa-f-]/g, "")}'`);
+          const entered = await tx.savepoint((sp) => enterAs(sp, ownerA, tenantA)).then(() => "believed", (error: { code?: string }) => error.code);
+          const [who] = await tx`select app.current_user_id() as "user", (select count(*)::int from public.branches) as branches`;
+          return { entered, ...who };
+        });
+      });
+      expect(borrowed).toEqual({ entered: DENIED, user: null, branches: 0 });
+      // The level cannot be changed once the transaction has said who it is.
+      const changed = await direct.begin(async (tx) => {
+        await enterAs(tx, ownerA, tenantA);
+        return tx.savepoint((sp) => sp`set transaction isolation level repeatable read`).then(() => "changed", (error: { code?: string }) => error.code);
+      });
+      expect(changed).toBe("25001");
+    } finally {
+      await direct.end();
+    }
+  });
+
   it("believes who a transaction is only until that transaction ends", async () => {
     // One connection, so the second transaction is the same database session as the first.
     const direct = postgres(process.env.DATABASE_URL!, { max: 1 });

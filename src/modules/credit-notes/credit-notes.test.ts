@@ -520,7 +520,9 @@ describe.skipIf(!hasDb)("credit notes", () => {
           () => "reversed",
           (error: { code?: string }) => error.code,
         );
-      expect(stale).toBe("SE056");
+      // Since the security clean-up nobody is anybody in a transaction that keeps an old picture:
+      // it is refused when it says who it is, before it reaches the guard (SE056) behind that.
+      expect(stale).toBe("42501");
     } finally {
       await direct.end();
     }

@@ -44,13 +44,16 @@ async function messageOf(promise: Promise<unknown>): Promise<string> {
     return (error as Error).message;
   }
 }
+/** One journal through the bank account. The number is the one the database will give it: these are the company's only manual journals, in this order. */
 async function post(date: string, number: string, debit: string, credit: string, amount: string): Promise<void> {
   await withTenant(userIds.accountant, tenant, (tx) =>
-    postBacked(tx, as.accountant, { date, documentNumber: number }, [
+    postBacked(tx, as.accountant, { date }, [
       { accountId: debit === "bank" ? bank : account(debit), debit: new Decimal(amount) },
       { accountId: credit === "bank" ? bank : account(credit), credit: new Decimal(amount) },
     ]),
   );
+  const [last] = await admin<{ number: string }[]>`select document_number as number from public.journals where tenant_id = ${tenant} and source_type = 'manual_journal' order by created_at desc, document_number desc limit 1`;
+  expect(last.number).toBe(number);
 }
 
 describe.skipIf(!hasDb)("bank reconciliation", () => {
@@ -70,16 +73,16 @@ describe.skipIf(!hasDb)("bank reconciliation", () => {
     bank = (await addAccount(as.owner, { parentId: account("1120"), name: "HBL current account", code: "", kind: "account" })).id;
     // November in the books: everything the sample statement shows but its bank charges, and a
     // cheque for repairs the bank has not been shown yet.
-    await post("2026-11-02", "JV-2627-90001", "bank", "1111", "50000");
-    await post("2026-11-03", "JV-2627-90002", "2150", "bank", "20000");
-    await post("2026-11-05", "JV-2627-90003", "bank", "1230", "15000");
-    await post("2026-11-08", "JV-2627-90004", "bank", "1230", "7500");
-    await post("2026-11-10", "JV-2627-90005", "5230", "bank", "30000");
-    await post("2026-11-12", "JV-2627-90006", "bank", "4200", "12345.67");
-    await post("2026-11-15", "JV-2627-90007", "2140", "bank", "5000");
-    await post("2026-11-20", "JV-2627-90008", "bank", "2510", "100000");
-    await post("2026-11-25", "JV-2627-90009", "1520", "bank", "80000");
-    await post("2026-11-28", "JV-2627-90010", "5270", "bank", "3000");
+    await post("2026-11-02", "JV-2627-00001", "bank", "1111", "50000");
+    await post("2026-11-03", "JV-2627-00002", "2150", "bank", "20000");
+    await post("2026-11-05", "JV-2627-00003", "bank", "1230", "15000");
+    await post("2026-11-08", "JV-2627-00004", "bank", "1230", "7500");
+    await post("2026-11-10", "JV-2627-00005", "5230", "bank", "30000");
+    await post("2026-11-12", "JV-2627-00006", "bank", "4200", "12345.67");
+    await post("2026-11-15", "JV-2627-00007", "2140", "bank", "5000");
+    await post("2026-11-20", "JV-2627-00008", "bank", "2510", "100000");
+    await post("2026-11-25", "JV-2627-00009", "1520", "bank", "80000");
+    await post("2026-11-28", "JV-2627-00010", "5270", "bank", "3000");
   }, 120_000);
 
   afterAll(async () => {
@@ -95,11 +98,11 @@ describe.skipIf(!hasDb)("bank reconciliation", () => {
     // Matched by the invoice number the customer wrote, and the rest by amount and day.
     expect(page.matches.map((m) => m.rule).sort()).toEqual([...Array(8).fill("amount_date"), "reference"]);
     expect(page.bankLines.map((l) => [l.description, money(l.amount)])).toEqual([["Bank charges and FED", "-250.00"]]);
-    expect(page.bookLines.map((l) => [l.documentNumber, money(l.amount)])).toEqual([["JV-2627-90010", "-3000.00"]]);
+    expect(page.bookLines.map((l) => [l.documentNumber, money(l.amount)])).toEqual([["JV-2627-00010", "-3000.00"]]);
     // The bank charges are put in the books, and matched by hand.
-    await post("2026-11-30", "JV-2627-90011", "5290", "bank", "250");
+    await post("2026-11-30", "JV-2627-00011", "5290", "bank", "250");
     page = (await getReconciliationPage(as.accountant, bank))!;
-    const charges = page.bookLines.find((l) => l.documentNumber === "JV-2627-90011")!;
+    const charges = page.bookLines.find((l) => l.documentNumber === "JV-2627-00011")!;
     await matchByHand(as.accountant, bank, [page.bankLines[0].id], [charges.id]);
     page = (await getReconciliationPage(as.owner, bank))!;
     const r = page.reconciliation!;
@@ -133,11 +136,11 @@ describe.skipIf(!hasDb)("bank reconciliation", () => {
 
   it("unmatches, refuses lines that do not add up, and removes only an import with nothing matched", async () => {
     let page = (await getReconciliationPage(as.owner, bank))!;
-    const loan = page.matches.find((m) => m.books.some((b) => b.number === "JV-2627-90008"))!;
+    const loan = page.matches.find((m) => m.books.some((b) => b.number === "JV-2627-00008"))!;
     await unmatch(as.accountant, loan.id);
     page = (await getReconciliationPage(as.owner, bank))!;
     const loanBank = page.bankLines.find((l) => l.description === "Loan disbursement")!;
-    const loanBook = page.bookLines.find((l) => l.documentNumber === "JV-2627-90008")!;
+    const loanBook = page.bookLines.find((l) => l.documentNumber === "JV-2627-00008")!;
     const deposit = page.bankLines.find((l) => l.date === "2026-12-01")!;
     expect(await messageOf(matchByHand(as.accountant, bank, [loanBank.id, deposit.id], [loanBook.id]))).toMatch(/do not add up to the same money/);
     expect(await matchAutomatically(as.accountant, bank)).toEqual({ matched: 1 });

@@ -5,13 +5,14 @@
 -- Hand-written but for the one rule on audit_log (Drizzle's). No row of any company changes.
 -- Reverse with drizzle/down/0043_security_clean_up.sql.
 --
---   1. A member could take a document number and throw it away.
+--   1. A member could take a document number and throw it away, and an owner could name one.
 --   2. An audit row could carry a name that only looks like one the database writes.
 --   3. The app's database role had no time limits.
 --   4. A database with no key installed took the app's word for who is signed in.
 --   5. Whoever can read every table could read the key the proof is signed with.
 --
--- Functions of earlier steps written again: app.enter(uuid, uuid, bigint, text) and
+-- Functions of earlier steps written again: app.post_journal(date, text, uuid, jsonb, text,
+-- uuid, text) (drizzle/0018_sales_invoices.sql), app.enter(uuid, uuid, bigint, text) and
 -- app.identity_now() (both drizzle/0031_identity_proof.sql). Removed: app.identity_proof_wanted()
 -- and the sequence app.identity_proof_flag (0031). app.next_document_number is not written
 -- again; the app's role loses the right to call it.
@@ -20,57 +21,135 @@
 -- proof against (npm run db:identity -- status says; install puts it in). After it, a database
 -- with nothing installed shows nothing to anyone.
 
+-- This changes tables every transaction of the app touches. If one of them is held, give up
+-- after ten seconds and change nothing, sooner than queue the whole site behind the migration.
+SET LOCAL lock_timeout = '10s';
+--> statement-breakpoint
+
 -- ── 1. A document number is taken only by what writes the document ──────────────────────────────
 -- Any member but the auditor could call app.next_document_number directly and leave a gap in a
 -- series (found by the reviewer of Step 24). It was open to the app's role because a manual
--- journal took its number through it from the app. Every other caller is a function that posts
--- a document and runs as the owner, so the app's role no longer needs it. The function itself
--- is not written again (it never is: drizzle/0019_journal_documents.sql); only who may call it.
+-- journal took its number through it from the app. Every other caller is a function or a
+-- trigger that writes a document and runs as the owner, so the app's role no longer needs it.
+-- The function itself is not written again (it never is: drizzle/0019_journal_documents.sql);
+-- only who may call it.
 REVOKE EXECUTE ON FUNCTION app.next_document_number(text, date) FROM app_runtime;
 --> statement-breakpoint
 
--- The one number the app takes for itself: a manual journal's, by those who write journals.
--- It must be used: see the trigger below.
-CREATE FUNCTION app.next_journal_number(p_date date) RETURNS text
-  LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
-  AS $$
-BEGIN
-  IF app.tenant_id() IS NULL OR app.tenant_role() IS NULL OR app.tenant_role() NOT IN ('owner', 'accountant') THEN
-    RAISE EXCEPTION 'not allowed to number a journal' USING ERRCODE = 'insufficient_privilege';
-  END IF;
-  RETURN app.next_document_number('JV', p_date);
-END $$;
---> statement-breakpoint
-REVOKE ALL ON FUNCTION app.next_journal_number(date) FROM PUBLIC;
---> statement-breakpoint
-GRANT EXECUTE ON FUNCTION app.next_journal_number(date) TO app_runtime;
---> statement-breakpoint
-
--- Asked when the transaction ends, for every journal number taken in it: a journal of the
--- company carries that number, or the transaction does not end and the number goes back. The
--- number is built here exactly as app.next_document_number builds it. (A journal that carries a
--- number is itself held to its manual journal by the checks of drizzle/0019_journal_documents.sql.)
-CREATE FUNCTION app.check_journal_number_used() RETURNS trigger
+-- app.post_journal of drizzle/0018_sales_invoices.sql, with one change: it gives the number.
+--
+-- It is how the app writes a journal of its own (a manual journal, the opening balances), and
+-- it wrote on the journal whatever number the caller named. So an owner or an accountant running
+-- SQL of their own could post a manual journal under a number that was never taken, after which
+-- the series stopped at that number for good; or put another series' next number on an opening
+-- journal and stop that series (found by this migration's reviewer). Now a manual journal takes
+-- the next JV number here, in the statement that writes the journal, and a caller that names a
+-- number is refused. The app reads the number back from the journal it has just posted.
+CREATE OR REPLACE FUNCTION app.post_journal(
+  p_date date,
+  p_source_type text,
+  p_source_id uuid,
+  p_lines jsonb,
+  p_memo text DEFAULT NULL,
+  p_branch_id uuid DEFAULT NULL,
+  p_document_number text DEFAULT NULL
+) RETURNS uuid
   LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
   AS $$
 DECLARE
-  v_taken bigint := NEW.next_number - 1;
-  v_number text := NEW.document_type || '-' || NEW.year_code || '-' || CASE WHEN v_taken < 100000 THEN lpad(v_taken::text, 5, '0') ELSE v_taken::text END;
+  v_tenant uuid := app.tenant_id();
+  v_user uuid := app.current_user_id();
+  v_role public.member_role := app.tenant_role();
+  v_scope uuid[] := app.tenant_branch_ids();
+  v_roles public.member_role[] := app.journal_source_roles(p_source_type);
+  v_journal uuid;
+  v_lines integer;
+  v_debit numeric;
+  v_credit numeric;
+  v_blocked text;
+  v_number text;
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM public.journals j WHERE j.tenant_id = NEW.tenant_id AND j.document_number = v_number) THEN
-    RAISE EXCEPTION 'the number % was taken and no journal carries it', v_number USING ERRCODE = 'SE004';
+  IF v_tenant IS NULL OR v_user IS NULL OR v_role IS NULL THEN
+    RAISE EXCEPTION 'not a member of this company' USING ERRCODE = 'insufficient_privilege';
   END IF;
-  RETURN NULL;
+  IF v_roles IS NULL THEN
+    RAISE EXCEPTION 'unknown kind of journal source' USING ERRCODE = 'check_violation';
+  END IF;
+  -- The balance is checked when the transaction ends, whatever the caller set before this.
+  SET CONSTRAINTS public.journals_balanced, public.journal_lines_balanced, public.journals_with_document DEFERRED;
+  IF NOT (v_role = ANY (v_roles)) THEN
+    RAISE EXCEPTION 'this role cannot post that kind of journal' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  -- A member limited to some branches posts to one of them, never company-wide.
+  IF v_scope IS NOT NULL AND (p_branch_id IS NULL OR NOT (p_branch_id = ANY (v_scope))) THEN
+    RAISE EXCEPTION 'a member limited to some branches posts to one of them' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF p_date IS NULL OR p_source_id IS NULL THEN
+    RAISE EXCEPTION 'a journal needs a date and a source' USING ERRCODE = 'check_violation';
+  END IF;
+  IF p_lines IS NULL OR jsonb_typeof(p_lines) <> 'array' OR jsonb_array_length(p_lines) NOT BETWEEN 2 AND 1000 THEN
+    RAISE EXCEPTION 'a journal has between 2 and 1,000 lines' USING ERRCODE = 'SE003';
+  END IF;
+  -- An amount is a real number ("not a number" is a value numeric accepts) and is never rounded
+  -- behind anyone's back: more than four decimals is refused.
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(p_lines) AS l(value)
+    WHERE coalesce((l.value->>'debit')::numeric, 0) = 'NaN'::numeric
+       OR coalesce((l.value->>'credit')::numeric, 0) = 'NaN'::numeric
+       OR coalesce((l.value->>'debit')::numeric, 0) <> round(coalesce((l.value->>'debit')::numeric, 0), 4)
+       OR coalesce((l.value->>'credit')::numeric, 0) <> round(coalesce((l.value->>'credit')::numeric, 0), 4)
+  ) THEN
+    RAISE EXCEPTION 'an amount is a number with at most four decimals' USING ERRCODE = 'check_violation';
+  END IF;
+  -- Cost centres do not exist yet; a line can never be corrected, so none is accepted.
+  IF EXISTS (SELECT 1 FROM jsonb_array_elements(p_lines) AS l(value) WHERE nullif(l.value->>'cost_centre_id', '') IS NOT NULL) THEN
+    RAISE EXCEPTION 'cost centres are not available yet' USING ERRCODE = 'check_violation';
+  END IF;
+  -- Before anything is written: an account this kind of journal may not touch.
+  SELECT a.code INTO v_blocked
+    FROM jsonb_array_elements(p_lines) AS l(value)
+    JOIN public.accounts a ON a.tenant_id = v_tenant AND a.id = (l.value->>'account_id')::uuid
+    WHERE a.control_type = ANY (app.journal_source_blocked_controls(p_source_type))
+    LIMIT 1;
+  IF FOUND THEN
+    RAISE EXCEPTION 'account % cannot be posted to by this kind of journal', v_blocked USING ERRCODE = 'SE005';
+  END IF;
+  PERFORM app.require_open_period(v_tenant, p_date);
+  -- The number is the database's to give, never the caller's to name. A manual journal takes
+  -- the next JV number here, in the statement that writes it; no other journal written this way
+  -- carries a number of its own.
+  IF nullif(btrim(p_document_number), '') IS NOT NULL THEN
+    RAISE EXCEPTION 'a journal is numbered by the database, not by whoever posts it' USING ERRCODE = 'check_violation';
+  END IF;
+  IF p_source_type = 'manual_journal' THEN
+    v_number := app.next_document_number('JV', p_date);
+  END IF;
+
+  INSERT INTO public.journals (tenant_id, journal_date, source_type, source_id, document_number, memo, branch_id, created_by)
+    VALUES (v_tenant, p_date, p_source_type, p_source_id, v_number, nullif(btrim(p_memo), ''), p_branch_id, v_user)
+    RETURNING id INTO v_journal;
+  INSERT INTO public.journal_lines (tenant_id, journal_id, line_no, account_id, debit, credit, description, customer_id, supplier_id)
+    SELECT v_tenant, v_journal, l.line_no,
+      (l.value->>'account_id')::uuid,
+      coalesce((l.value->>'debit')::numeric, 0),
+      coalesce((l.value->>'credit')::numeric, 0),
+      nullif(btrim(l.value->>'description'), ''),
+      (l.value->>'customer_id')::uuid,
+      (l.value->>'supplier_id')::uuid
+    FROM jsonb_array_elements(p_lines) WITH ORDINALITY AS l(value, line_no);
+
+  SELECT count(*), sum(l.debit), sum(l.credit) INTO v_lines, v_debit, v_credit
+    FROM public.journal_lines l WHERE l.tenant_id = v_tenant AND l.journal_id = v_journal;
+  IF v_debit IS DISTINCT FROM v_credit OR v_debit = 'NaN'::numeric THEN
+    RAISE EXCEPTION 'the journal does not balance: debits %, credits %', v_debit, v_credit USING ERRCODE = 'SE003';
+  END IF;
+
+  INSERT INTO public.audit_log (tenant_id, actor_user_id, actor_role, action, entity, entity_id, after)
+    VALUES (v_tenant, v_user, v_role, 'journal.post', 'journal', v_journal,
+      jsonb_build_object('date', p_date, 'source', p_source_type, 'sourceId', p_source_id,
+        'number', v_number, 'lines', v_lines, 'total', v_debit::text));
+  RETURN v_journal;
 END $$;
---> statement-breakpoint
-REVOKE ALL ON FUNCTION app.check_journal_number_used() FROM PUBLIC;
---> statement-breakpoint
-CREATE CONSTRAINT TRIGGER number_series_journal_number_used
-  AFTER INSERT OR UPDATE ON public.number_series
-  DEFERRABLE INITIALLY DEFERRED
-  FOR EACH ROW WHEN (NEW.document_type = 'JV') EXECUTE FUNCTION app.check_journal_number_used();
---> statement-breakpoint
-ALTER TABLE public.number_series ENABLE ALWAYS TRIGGER number_series_journal_number_used;
 --> statement-breakpoint
 
 -- ── 2. An audit action has one shape ────────────────────────────────────────────────────────────
@@ -92,6 +171,11 @@ BEGIN
   EXECUTE format('ALTER ROLE app_runtime IN DATABASE %I SET statement_timeout = %L', current_database(), '60s');
   EXECUTE format('ALTER ROLE app_runtime IN DATABASE %I SET lock_timeout = %L', current_database(), '15s');
   EXECUTE format('ALTER ROLE app_runtime IN DATABASE %I SET idle_in_transaction_session_timeout = %L', current_database(), '60s');
+  -- A transaction that keeps doing small things for ever holds whatever it holds for ever
+  -- (found by this migration's reviewer). Postgres 17 and later can end it.
+  IF current_setting('server_version_num')::int >= 170000 THEN
+    EXECUTE format('ALTER ROLE app_runtime IN DATABASE %I SET transaction_timeout = %L', current_database(), '5min');
+  END IF;
 END $$;
 --> statement-breakpoint
 
@@ -174,21 +258,24 @@ BEGIN
     v_result := (v_result * v_result) % p_modulus;
   END LOOP;
   v_result := (v_result * v_signature) % p_modulus;
-  v_expected := '\x0001'::bytea || decode(repeat('ff', p_bytes - 54), 'hex') || '\x00'::bytea
-    || '\x3031300d060960864801650304020105000420'::bytea || sha256(p_message);
+  -- (Written with decode, not as '\x..' strings: those are read differently by a session that has
+  -- changed how it reads backslashes.)
+  v_expected := decode('0001' || repeat('ff', p_bytes - 54) || '00' || '3031300d060960864801650304020105000420', 'hex') || sha256(p_message);
   RETURN v_result = app.identity_number(v_expected);
 END $$;
 --> statement-breakpoint
 REVOKE ALL ON FUNCTION app.identity_signature_valid(numeric, integer, bytea, bytea) FROM PUBLIC;
 --> statement-breakpoint
 
--- app.enter of drizzle/0031_identity_proof.sql, with two changes.
+-- app.enter of drizzle/0031_identity_proof.sql, with three changes.
 --
 -- It no longer takes anyone's word. Until now a database with no key installed accepted an
 -- unsigned call, which let 0031 go in before the app that signs was deployed and let a
 -- development database run without a secret. Every database now has a key (npm run db:local
 -- installs one), so a call without a valid proof is refused everywhere, and a database with no
 -- key shows nothing.
+--
+-- It answers only in a read committed transaction (the reason is at the check, below).
 --
 -- And a proof may be signed with a private key whose public half is in
 -- app.identity_public_keys, as well as with the shared secret of app.identity_keys. The two are
@@ -208,6 +295,13 @@ DECLARE
 BEGIN
   IF p_user IS NULL THEN
     RAISE EXCEPTION 'who is signed in is needed' USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+  -- Only in an ordinary transaction, where every statement sees the database as it is now. One
+  -- that keeps the picture it began with (repeatable read, serializable), or borrows another's,
+  -- would go on seeing a key after it was removed, and a proof made with a removed key would be
+  -- taken (found by this migration's reviewer). The app never opens one.
+  IF current_setting('transaction_isolation') <> 'read committed' THEN
+    RAISE EXCEPTION 'who is signed in is said in a read committed transaction' USING ERRCODE = 'insufficient_privilege';
   END IF;
   -- 64 characters for the shared secret's signature; 512, 768 or 1024 for a key of 2048, 3072 or 4096 bits.
   IF p_expires IS NULL OR p_signature IS NULL OR p_signature !~ '^[0-9a-f]+$' OR length(p_signature) NOT IN (64, 512, 768, 1024) THEN

@@ -1,5 +1,10 @@
 # From the preparation for building in three tracks (2026-11-13)
 
+**2026-11-24:** three things below are closed or changed by the security clean-up
+(`docs/later/security-clean-up.md`): a database with no key no longer takes the app's word; the
+key can be a public one, so nothing readable in the database need be secret (switched on when
+the founder moves the site to it); and an audit action has one shape.
+
 ## Later
 
 - **Who is signed in is now proven to the database** (`drizzle/0031_identity_proof.sql`, built on

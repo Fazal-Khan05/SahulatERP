@@ -503,6 +503,12 @@ describe.skipIf(!hasDb)("quotations and sales orders", () => {
     for (const action of ["sales_order.credit_override", "sales_order.submit", "sales_quotation.cancel", "journal.post", "customer.credit_limit"]) {
       expect(await codeOf(() => withTenant(userIds.salesperson, tenantA, (tx) => tx.insert(auditLog).values({ ...fake, action }))), action).toBe("42501");
     }
+    // Nor by a name that only looks like one of them. An action has one shape: lower-case words
+    // joined by full stops, and nothing else (a space, a capital, a line end, a letter of another
+    // alphabet, a mark that cannot be seen).
+    for (const action of ["journal.post ", " journal.post", "Journal.post", "journal.POST", "journal.post\n", "journal.p\u043Est", "journal.post\u200B", "journal..post", "journal.post.", ".journal.post", "journal", "journal post", `a.${"b".repeat(79)}`]) {
+      expect(await codeOf(() => withTenant(userIds.salesperson, tenantA, (tx) => tx.insert(auditLog).values({ ...fake, action }))), JSON.stringify(action)).toBe("23514");
+    }
     await withTenant(userIds.salesperson, tenantA, (tx) => tx.insert(auditLog).values({ ...fake, action: "sales_order.note", at: new Date("2020-01-01T00:00:00Z") }));
     expect((await admin`select (at > now() - interval '1 minute') as fresh from public.audit_log where entity_id = ${done.id} and action = 'sales_order.note'`)[0].fresh).toBe(true);
     // The owner's change of a limit is in the log however it is made.

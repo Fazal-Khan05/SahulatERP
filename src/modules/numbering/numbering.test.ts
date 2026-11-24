@@ -7,7 +7,6 @@ import type { TenantContext } from "@/modules/tenant/rules";
 import { createWarehouse } from "@/modules/warehouses/commands";
 import { listWarehouses } from "@/modules/warehouses/queries";
 import { warehouses } from "@/modules/warehouses/schema";
-import { postManualJournal, saveManualJournalDraft } from "@/modules/manual-journals/commands";
 import { adminSql, deleteTenants, hasAdminDb, type AdminSql } from "../../../tests/support/admin-db";
 import { enterAs } from "../../../tests/support/identity";
 import { openFiscalYear, setPeriodLocked, takeJournalNumber } from "./commands";
@@ -263,14 +262,7 @@ describe.skipIf(!hasDb)("fiscal periods, document numbers and warehouses", () =>
     await expect(withTenant(userIds.owner, tenantA, (tx) => takeJournalNumber(tx, "13-11-2026"))).rejects.toThrow("A journal needs a date before it can be numbered.");
     await expect(withTenant(userIds.owner, tenantA, (tx) => takeJournalNumber(tx, "2031-01-01"))).rejects.toThrow("No fiscal period is open for 01-01-2031.");
 
-    // A manual journal that is posted keeps its number, and the next one follows it.
-    await admin`insert into public.accounts (tenant_id, code, name, type, created_by) values (${tenantA}, '1111', 'Cash', 'asset', ${userIds.owner}), (${tenantA}, '3111', 'Capital', 'equity', ${userIds.owner})`;
-    const journal = async () => {
-      const { id } = await saveManualJournalDraft(as.accountant, null, { date: D, memo: "Capital paid in", branchId: "", lines: [{ accountCode: "1111", debit: "100", credit: "", description: "" }, { accountCode: "3111", debit: "", credit: "100", description: "" }] });
-      return (await postManualJournal(as.accountant, id)).number;
-    };
-    expect([await journal(), await journal()]).toEqual(["JV-2627-00001", "JV-2627-00002"]);
-    expect((await listNumberSeries(as.owner)).find((s) => s.documentType === "JV")?.nextNumber).toBe(3);
+    // A manual journal that is posted keeps its number: src/modules/manual-journals/journals.test.ts.
   }, 120_000);
 
   it("adds warehouses to branches, seen by members who work in those branches", async () => {

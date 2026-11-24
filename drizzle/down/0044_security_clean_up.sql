@@ -1,4 +1,4 @@
--- Reverses drizzle/0043_security_clean_up.sql. Never run automatically. Run it by hand, as
+-- Reverses drizzle/0044_security_clean_up.sql. Never run automatically. Run it by hand, as
 -- postgres, only after showing it to the founder and getting a yes. No row of any company
 -- changes. It puts back every weakness that migration closed: a member can again take a
 -- document number and throw it away, an audit action can again look like the database's own,
@@ -211,6 +211,6 @@ END $function$
 ;
 GRANT EXECUTE ON FUNCTION app.next_document_number(text, date) TO app_runtime;
 
--- The row drizzle-kit wrote for 0043_security_clean_up (its "when" in drizzle/meta/_journal.json).
-DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1795529384925;
+-- The row drizzle-kit wrote for 0044_security_clean_up (its "when" in drizzle/meta/_journal.json).
+DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1795534749072;
 COMMIT;

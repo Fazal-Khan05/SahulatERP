@@ -3,7 +3,7 @@
 -- track: joint
 --
 -- Hand-written but for the one rule on audit_log (Drizzle's). No row of any company changes.
--- Reverse with drizzle/down/0043_security_clean_up.sql.
+-- Reverse with drizzle/down/0044_security_clean_up.sql.
 --
 --   1. A member could take a document number and throw it away, and an owner could name one.
 --   2. An audit row could carry a name that only looks like one the database writes.

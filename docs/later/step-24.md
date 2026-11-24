@@ -106,7 +106,9 @@ Also tightened: an order is not submitted on a day that has not come, and a date
 day (the database's "infinity" is refused).
 
 Found by the review but not this step's to change. Each touches something every track uses, so
-it needs a migration the three tracks agree on (told to the coordinator):
+it needs a migration the three tracks agree on (told to the coordinator). **All three were
+taken up on 2026-11-24 by the security clean-up (`docs/later/security-clean-up.md`), which says
+what each now is and what the third still does not do:**
 
 - **Any member except the auditor can take the next PO or GR number** by calling the numbering
   function directly, which leaves a gap in the series. The function is open to the app's role

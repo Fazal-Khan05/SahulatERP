@@ -141,7 +141,8 @@ deletes rows in Supabase's own tables.
   Supabase's own `public.rls_auto_enable`. It is the function behind Supabase's `ensure_rls` event
   trigger (which turns row-level security on for a new table), so it cannot be called as a plain
   function; harmless, and worth keeping (closes the item in `docs/later/preparation.md`).
-- **Still open** (`docs/later/preparation.md`): a database with no identity key still takes the
+- **Closed on 2026-11-24 by the security clean-up** (`docs/later/security-clean-up.md`); as it
+  stood then: a database with no identity key still takes the
   app's word. The local databases and the second development project have no key, and the tests
   run there; taking the fallback out waits until every database the tests use has one.
 

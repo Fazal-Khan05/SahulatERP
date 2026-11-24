@@ -38,20 +38,22 @@ test("an owner reads the books: trial balance, balance sheet, profit and loss, a
     (${tenantId}, ${seller.id}, ${seller.email}, 'salesperson', ${owner.id})`;
   // Three entries through the posting engine, as the owner: capital in, rent paid, a cash sale.
   const accounts = Object.fromEntries((await sql<{ id: string; code: string }[]>`select id, code from public.accounts where tenant_id = ${tenantId}`).map((a) => [a.code, a.id]));
-  const post = (debit: string, credit: string, amount: string, number: string, memo: string) =>
+  const post = (debit: string, credit: string, amount: string, memo: string) =>
     sql.begin(async (tx) => {
       await enterAs(tx, owner.id, tenantId);
       // Sent as text and read as JSON by the database: the driver would otherwise wrap it in quotes again.
       const lines = JSON.stringify([{ account_id: accounts[debit], debit: amount }, { account_id: accounts[credit], credit: amount }]);
       const [document] = await tx`select gen_random_uuid() as id`;
-      const [journal] = await tx`select app.post_journal(${today}::date, 'manual_journal', ${document.id}::uuid, (${lines}::text)::jsonb, ${memo}, null, ${number}) as id`;
+      // The database numbers a manual journal itself (the security clean-up): JV-2627-00001 and on.
+      const [journal] = await tx`select app.post_journal(${today}::date, 'manual_journal', ${document.id}::uuid, (${lines}::text)::jsonb, ${memo}, null, null) as id`;
+      const [{ number }] = await tx<{ number: string }[]>`select document_number as number from public.journals where id = ${journal.id}`;
       // The database keeps a journal only with its document: the manual journal it was posted for, written here directly.
       await tx`insert into public.manual_journals (id, tenant_id, status, journal_date, memo, number, journal_id, posted_at, posted_by, created_by, updated_by)
         values (${document.id}, ${tenantId}, 'posted', ${today}, ${memo}, ${number}, ${journal.id}, now(), ${owner.id}, ${owner.id}, ${owner.id})`;
     });
-  await post("1111", "3100", "500000", "JV-2627-00001", "Owner's money put in");
-  await post("5230", "1111", "40000", "JV-2627-00002", "Shop rent");
-  await post("1111", "4100", "12500.50", "JV-2627-00003", "Cash sale");
+  await post("1111", "3100", "500000", "Owner's money put in");
+  await post("5230", "1111", "40000", "Shop rent");
+  await post("1111", "4100", "12500.50", "Cash sale");
 
   await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Reports" }).click();
   await expect(page.getByRole("list", { name: "Ledger reports" }).getByRole("link")).toHaveText(["Trial balance", "General ledger", "Balance sheet", "Profit and loss", "Cash flow"]);

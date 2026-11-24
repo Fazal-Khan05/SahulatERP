@@ -58,9 +58,10 @@ describe.skipIf(!hasDb)("the ledger reports", () => {
     await openFiscalYear(as.owner, {});
     chart = await listAccounts(as.owner);
 
-    const post = (date: string, debit: string, credit: string, amount: string, more: { branchId?: string; number?: string; memo?: string } = {}) =>
+    // Each is numbered by the database as it is written: the first of fiscal 2027-28 is JV-2728-00001.
+    const post = (date: string, debit: string, credit: string, amount: string, more: { branchId?: string; memo?: string } = {}) =>
       withTenant(userIds.accountant, tenantA, (tx) =>
-        postBacked(tx, as.accountant, { date, branchId: more.branchId, documentNumber: more.number, memo: more.memo }, [
+        postBacked(tx, as.accountant, { date, branchId: more.branchId, memo: more.memo }, [
           { accountId: account(debit), debit: d(amount) },
           { accountId: account(credit), credit: d(amount) },
         ]),
@@ -72,8 +73,8 @@ describe.skipIf(!hasDb)("the ledger reports", () => {
     await post("2027-06-30", "5100", "1230", "120000");
     // The second year: sales and rent at the Main branch, other income, and a rent entry made twice and reversed.
     await post("2027-07-15", "1111", "4100", "80000.25", { branchId: mainBranch });
-    await post("2027-07-20", "5230", "1111", "10000", { branchId: mainBranch, number: "JV-2728-00001", memo: "July rent" });
-    const twice = await post("2027-07-20", "5230", "1111", "10000", { branchId: mainBranch, number: "JV-2728-00002", memo: "July rent" });
+    await post("2027-07-20", "5230", "1111", "10000", { branchId: mainBranch, memo: "July rent" });
+    const twice = await post("2027-07-20", "5230", "1111", "10000", { branchId: mainBranch, memo: "July rent" });
     await withTenant(userIds.accountant, tenantA, (tx) => reverseBacked(tx, as.accountant, twice, { date: "2027-07-25", memo: "Entered twice" }));
     await post("2027-08-01", "1111", "4200", "1500");
   });
@@ -179,9 +180,9 @@ describe.skipIf(!hasDb)("the ledger reports", () => {
     expect(ledger?.title).toBe("General ledger: 5230 Rent");
     expect(lines(ledger!)).toEqual([
       "||Opening balance|||30,000.00 Dr",
-      "20-07-2027|JV-2728-00001|July rent|10000||40,000.00 Dr",
-      "20-07-2027|JV-2728-00002|July rent|10000||50,000.00 Dr",
-      "25-07-2027|Reversal of JV-2728-00002|Entered twice||10000|40,000.00 Dr",
+      "20-07-2027|JV-2728-00002|July rent|10000||40,000.00 Dr",
+      "20-07-2027|JV-2728-00003|July rent|10000||50,000.00 Dr",
+      "25-07-2027|Reversal of JV-2728-00003|Entered twice||10000|40,000.00 Dr",
       "||Closing balance|20000|10000|40,000.00 Dr",
     ]);
     // A page that cannot hold every entry says so, and still opens at the right balance.

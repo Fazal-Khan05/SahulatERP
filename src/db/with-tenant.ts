@@ -50,10 +50,16 @@ export async function withTenant<T>(
 ): Promise<T> {
   if (!UUID.test(userId)) throw new Error("withTenant: userId is not a uuid");
   if (tenantId !== null && !UUID.test(tenantId)) throw new Error("withTenant: tenantId is not a uuid");
-  return getConnection().db.transaction(async (tx) => {
-    await enter(tx, userId, tenantId);
-    return fn(tx);
-  });
+  // Read committed, said outright: it is what the database wants (app.enter answers in no other
+  // kind of transaction), and saying it means a connection someone left set to another default
+  // cannot make this transaction one the database refuses.
+  return getConnection().db.transaction(
+    async (tx) => {
+      await enter(tx, userId, tenantId);
+      return fn(tx);
+    },
+    { isolationLevel: "read committed" },
+  );
 }
 
 /**

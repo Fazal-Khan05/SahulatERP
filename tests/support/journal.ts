@@ -1,4 +1,4 @@
-import { randomInt, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import type { Tx } from "@/db";
 import { postJournal, reverseJournal } from "@/modules/ledger/posting";
@@ -12,7 +12,7 @@ import { manualJournals } from "@/modules/manual-journals/schema";
 // refusals come out exactly as they would without the document.
 
 type Who = { userId: string; tenantId: string };
-export type BackedSource = { id?: string; date: string; branchId?: string | null; memo?: string; documentNumber?: string };
+export type BackedSource = { id?: string; date: string; branchId?: string | null; memo?: string };
 
 const AMOUNT = 4;
 
@@ -36,9 +36,10 @@ const WRITE_DOCUMENT = [
 /** Posts one manual-journal source through the engine and writes the manual journal it belongs to. Returns the journal's id. */
 export async function postBacked(tx: Tx, who: Who, source: BackedSource, lines: readonly JournalLineInput[]): Promise<string> {
   const id = source.id ?? randomUUID();
-  // A number of the right shape that no series hands out, unless the test gives its own.
-  const number = source.documentNumber ?? `JV-0000-${String(randomInt(1_000_000_000, 9_999_999_999))}`;
-  const journalId = await postJournal(tx, { type: "manual_journal", id, date: source.date, branchId: source.branchId, memo: source.memo, documentNumber: number }, lines);
+  // The database numbers the journal as it writes it (the next JV number of the company's
+  // series); nobody names one. The document then carries the number the journal was given.
+  const journalId = await postJournal(tx, { type: "manual_journal", id, date: source.date, branchId: source.branchId, memo: source.memo }, lines);
+  const [{ number }] = (await tx.execute<{ number: string }>(sql`select document_number as number from journals where id = ${journalId}::uuid`)) as unknown as { number: string }[];
   // The document, its lines and its posting in one round trip: a test may post a thousand of these.
   const payload = JSON.stringify({
     id,

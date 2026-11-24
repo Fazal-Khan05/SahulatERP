@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb, withTenant } from "@/db";
 import { UserError } from "@/lib/errors";
@@ -7,13 +8,19 @@ import { createWarehouse } from "@/modules/warehouses/commands";
 import { listWarehouses } from "@/modules/warehouses/queries";
 import { warehouses } from "@/modules/warehouses/schema";
 import { adminSql, deleteTenants, hasAdminDb, type AdminSql } from "../../../tests/support/admin-db";
-import { openFiscalYear, setPeriodLocked, takeDocumentNumber } from "./commands";
+import { enterAs } from "../../../tests/support/identity";
+import { openFiscalYear, setPeriodLocked } from "./commands";
 import { listFiscalPeriods, listNumberSeries } from "./queries";
-import { formatDocumentNumber } from "./rules";
+import { formatDocumentNumber, periodRefusal } from "./rules";
 import { fiscalPeriods, numberSeries } from "./schema";
 
 // Fiscal periods, document numbers and warehouses against a real database, through the app's
 // own path (app_runtime, withTenant, row-level security). Skipped when the database URLs are absent.
+//
+// A number is taken by the database function that posts the document, which runs as the owner
+// of the database for the member the transaction says it is. The app's role cannot ask for one
+// (only for a manual journal's, and that one has to be used). So the numbering itself is tried
+// here as those functions call it: on the owner's connection, after saying who the member is.
 
 const hasDb = hasAdminDb() && Boolean(process.env.DATABASE_URL);
 const PREFIX = "zz-number-test";
@@ -42,10 +49,29 @@ async function codeOf(run: () => Promise<unknown>): Promise<string | undefined> 
     return e.cause?.code ?? e.code ?? "unknown";
   }
 }
+type OwnerTx = postgres.TransactionSql;
+let posting: AdminSql;
+/** The next number, as a posting function takes it. A refusal leaves the transaction usable, and reads as the app words it. */
+async function take(tx: OwnerTx, type: string, date: string): Promise<string> {
+  try {
+    const rows = await tx.savepoint((inner) => inner<{ number: string }[]>`select app.next_document_number(${type}, ${date}::date) as number`);
+    return rows[0].number;
+  } catch (error) {
+    const refused = periodRefusal((error as { code?: string }).code, date);
+    if (refused) throw new UserError(refused);
+    throw error;
+  }
+}
+/** One transaction of a posting function, for a member. */
+const posted = <T>(who: { userId: string; tenantId: string }, run: (tx: OwnerTx) => Promise<T>) =>
+  posting.begin(async (tx) => {
+    await enterAs(tx, who.userId, who.tenantId);
+    return run(tx);
+  }) as Promise<T>;
 /** One document's transaction: takes its number and, if told to, fails afterwards. */
-const post = (who: TenantContext, type: "SI" | "PO", date: string, fail = false) =>
-  withTenant(who.userId, who.tenantId, async (tx) => {
-    const number = await takeDocumentNumber(tx, type, date);
+const post = (who: TenantContext, type: string, date: string, fail = false) =>
+  posted(who, async (tx) => {
+    const number = await take(tx, type, date);
     if (fail) throw new Error("the document failed after taking its number");
     return number;
   });
@@ -53,6 +79,7 @@ const post = (who: TenantContext, type: "SI" | "PO", date: string, fail = false)
 describe.skipIf(!hasDb)("fiscal periods, document numbers and warehouses", () => {
   beforeAll(async () => {
     admin = adminSql();
+    posting = postgres(process.env.MIGRATION_DATABASE_URL!, { max: 10, onnotice: () => {} });
     const stale = await admin<{ id: string }[]>`select id from public.tenants where name like ${PREFIX + "%"}`;
     await deleteTenants(admin, stale.map((r) => r.id));
     await admin`insert into public.tenants (id, name, created_by) values (${tenantA}, ${PREFIX + " A"}, ${userIds.owner}), (${tenantB}, ${PREFIX + " B"}, ${ownerB})`;
@@ -65,6 +92,7 @@ describe.skipIf(!hasDb)("fiscal periods, document numbers and warehouses", () =>
 
   afterAll(async () => {
     await deleteTenants(admin, [tenantA, tenantB]);
+    await posting.end();
     await admin.end();
     await closeDb();
   }, 120_000);
@@ -111,7 +139,6 @@ describe.skipIf(!hasDb)("fiscal periods, document numbers and warehouses", () =>
     expect(await post(as.salesperson, "SI", "2027-07-01")).toBe("SI-2728-00001"); // the counter restarts with the year
     expect(await post(as.salesperson, "SI", "2027-06-30")).toBe("SI-2627-00036");
     await expect(post(as.salesperson, "SI", "2028-07-01")).rejects.toThrow("No fiscal period is open for 01-07-2028.");
-    await expect(withTenant(userIds.salesperson, tenantA, (tx) => takeDocumentNumber(tx, "XX" as "SI", D))).rejects.toThrow("A document needs a kind and a date before it can be numbered.");
     // A company on the calendar year writes the year in full.
     await openFiscalYear(otherOwner, { month: "1", year: "2026" });
     expect(await post(otherOwner, "SI", D)).toBe("SI-2026-00001");
@@ -128,9 +155,9 @@ describe.skipIf(!hasDb)("fiscal periods, document numbers and warehouses", () =>
     await setPeriodLocked(as.owner, november.id, true); // twice is once
     await expect(post(as.salesperson, "SI", D)).rejects.toThrow("The period November 2026 is locked. An owner can unlock it under Settings, Fiscal periods.");
     // A refusal leaves the rest of the transaction usable, and other periods are untouched.
-    const number = await withTenant(userIds.salesperson, tenantA, async (tx) => {
-      await expect(takeDocumentNumber(tx, "SI", D)).rejects.toBeInstanceOf(UserError);
-      return takeDocumentNumber(tx, "SI", "2026-10-31");
+    const number = await posted(as.salesperson, async (tx) => {
+      await expect(take(tx, "SI", D)).rejects.toBeInstanceOf(UserError);
+      return take(tx, "SI", "2026-10-31");
     });
     expect(number).toBe("SI-2627-00037");
     await setPeriodLocked(as.owner, november.id, false);
@@ -141,8 +168,8 @@ describe.skipIf(!hasDb)("fiscal periods, document numbers and warehouses", () =>
     const order: string[] = [];
     let numberTaken!: () => void;
     const hasNumber = new Promise<void>((resolve) => (numberTaken = resolve));
-    const slowPost = withTenant(userIds.salesperson, tenantA, async (tx) => {
-      const taken = await takeDocumentNumber(tx, "SI", D);
+    const slowPost = posted(as.salesperson, async (tx) => {
+      const taken = await take(tx, "SI", D);
       numberTaken();
       // The document is still being written while the owner reaches for the lock.
       await new Promise((resolve) => setTimeout(resolve, 3000));
@@ -178,19 +205,19 @@ describe.skipIf(!hasDb)("fiscal periods, document numbers and warehouses", () =>
     await expect(listNumberSeries(as.salesperson)).rejects.toBeInstanceOf(UserError);
     // An auditor takes no numbers; a kind the database does not know is refused.
     expect(await codeOf(() => post(as.auditor, "SI", D))).toBe(DENIED);
-    expect(await codeOf(() => withTenant(owner, tenantA, (tx) => tx.execute(`select app.next_document_number('si', '2026-11-13')`)))).toBe(CHECK);
-    const zz = () => withTenant(owner, tenantA, (tx) => tx.execute(`select app.next_document_number('ZZ', '2026-11-13') as number`));
+    expect(await codeOf(() => post(as.owner, "si", D))).toBe(CHECK);
+    const zz = () => post(as.owner, "ZZ", D);
     expect(await codeOf(zz)).toBe(CHECK);
     // A later step numbers a kind of its own by adding one function (drizzle/0019_journal_documents.sql).
     await admin.unsafe("drop function if exists app.document_type_zz()");
     await admin.unsafe("create function app.document_type_zz() returns text language sql immutable as 'select ''Test document'''");
     try {
-      expect(String((await zz())[0].number)).toMatch(/^ZZ-\d{4}-00001$/);
+      expect(await zz()).toMatch(/^ZZ-\d{4}-00001$/);
     } finally {
       await admin.unsafe("drop function if exists app.document_type_zz()");
     }
     expect(await codeOf(zz)).toBe(CHECK);
-    expect(await codeOf(() => withTenant(owner, tenantA, (tx) => tx.execute(`select app.next_document_number('Z1', '2026-11-13')`)))).toBe(CHECK);
+    expect(await codeOf(() => post(as.owner, "Z1", D))).toBe(CHECK);
     // A period sits only where its year and number put it.
     expect(
       await codeOf(() => withTenant(owner, tenantA, (tx) => tx.insert(fiscalPeriods).values({ tenantId: tenantA, yearStart: "2028-07-01", periodNo: 7, startsOn: "2030-02-01", endsOn: "2030-02-28", createdBy: owner }))),
@@ -206,6 +233,30 @@ describe.skipIf(!hasDb)("fiscal periods, document numbers and warehouses", () =>
     expect(await codeOf(() => withTenant(owner, tenantA, (tx) => tx.delete(fiscalPeriods)))).toBe(DENIED);
     expect(await admin`select count(*)::int as n, count(locked_at)::int as locked from public.fiscal_periods where tenant_id = ${tenantA}`).toEqual([{ n: 24, locked: 0 }]);
     expect((await listNumberSeries(as.owner)).find((s) => s.documentType === "SI" && s.yearCode === "2627")?.nextNumber).toBe(41);
+  }, 120_000);
+
+  it("lets nobody take a number and throw it away, or name one", async () => {
+    // Found by the reviewer of Step 24: any member could call the numbering function and leave a
+    // gap in a series. The app's role can no longer call it at all, whoever is signed in.
+    for (const role of roles) {
+      for (const type of ["SI", "PO", "GR", "JV"]) {
+        expect(await codeOf(() => withTenant(userIds[role], tenantA, (tx) => tx.execute(`select app.next_document_number('${type}', '${D}')`))), `${role} ${type}`).toBe(DENIED);
+      }
+    }
+    const reach = await admin`
+      select r, has_function_privilege(r, 'app.next_document_number(text, date)', 'EXECUTE') as may
+      from unnest(array['app_runtime', 'anon', 'authenticated', 'service_role', 'public']) r where has_function_privilege(r, 'app.next_document_number(text, date)', 'EXECUTE')`;
+    expect(reach).toHaveLength(0);
+    // Every function that does take a number runs as the owner of the database, so it still can.
+    const callers = await admin<{ name: string; definer: boolean }[]>`
+      select p.proname as name, p.prosecdef as definer from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'app' and p.prosrc like '%next_document_number%' and p.proname <> 'next_document_number'`;
+    expect(callers.length).toBeGreaterThan(10);
+    expect(callers.filter((f) => !f.definer).map((f) => f.name)).toEqual([]);
+    // A manual journal is numbered by the function that writes it, and a number cannot be named
+    // or taken apart from a journal: src/modules/ledger/posting.test.ts and
+    // src/modules/manual-journals/journals.test.ts.
+    expect((await listNumberSeries(as.owner)).filter((s) => s.documentType === "JV")).toEqual([]);
   }, 120_000);
 
   it("adds warehouses to branches, seen by members who work in those branches", async () => {
@@ -235,7 +286,7 @@ describe.skipIf(!hasDb)("fiscal periods, document numbers and warehouses", () =>
     // A's owner, asking as if in B, sees and numbers nothing.
     expect(await withTenant(userIds.owner, tenantB, (tx) => tx.select().from(fiscalPeriods))).toEqual([]);
     expect(await withTenant(userIds.owner, tenantB, (tx) => tx.select().from(numberSeries))).toEqual([]);
-    expect(await codeOf(() => withTenant(userIds.owner, tenantB, (tx) => tx.execute(`select app.next_document_number('SI', '2026-11-13')`)))).toBe(DENIED);
+    expect(await codeOf(() => post({ ...as.owner, tenantId: tenantB }, "SI", D))).toBe(DENIED);
     expect(await codeOf(() => withTenant(ownerB, tenantB, (tx) => tx.insert(warehouses).values({ tenantId: tenantB, branchId: mainBranch, name: "Planted", createdBy: ownerB })))).toBe("23503");
     expect((await listNumberSeries(otherOwner)).map((s) => s.nextNumber)).toEqual([2]);
   }, 120_000);

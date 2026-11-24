@@ -18,8 +18,6 @@ export type JournalSource = {
   id: string;
   /** The date the journal carries; it must fall in a fiscal period that is open and not locked. */
   date: string;
-  /** The document's own number, such as JV-2627-00001, shown when the ledger is read. A number names one journal. */
-  documentNumber?: string | null;
   memo?: string | null;
   /** Null for a journal that belongs to the whole company. */
   branchId?: string | null;
@@ -68,7 +66,8 @@ const optionalId = (value: string | null | undefined, what: string): string | nu
 
 /**
  * Posts one journal for a source document, inside the caller's transaction, and returns the
- * journal's id. The lines must balance; the date must fall in an open fiscal period; the source
+ * journal's id. A manual journal is given its number (JV-2627-00001) by the database as it is
+ * written; nothing here, and nothing the caller sends, names a number. The lines must balance; the date must fall in an open fiscal period; the source
  * must not have posted before. A refusal is a UserError and leaves the transaction failed, so
  * the caller's document is not kept either.
  */
@@ -90,12 +89,10 @@ export async function postJournal(tx: Tx, source: JournalSource, lines: readonly
   });
   const memo = (source.memo ?? "").trim();
   if (memo.length > MAX_JOURNAL_MEMO) throw new UserError(`What the journal is for: use at most ${MAX_JOURNAL_MEMO} characters.`);
-  const documentNumber = (source.documentNumber ?? "").trim();
-  if (documentNumber.length > 40) throw new UserError("That document number is too long.");
   const branchId = optionalId(source.branchId, "branch");
   try {
     const rows = await tx.execute<{ id: string }>(
-      sql`select app.post_journal(${source.date}::date, ${source.type}, ${source.id}::uuid, ${JSON.stringify(posted)}::jsonb, ${memo === "" ? null : memo}, ${branchId}::uuid, ${documentNumber === "" ? null : documentNumber}) as id`,
+      sql`select app.post_journal(${source.date}::date, ${source.type}, ${source.id}::uuid, ${JSON.stringify(posted)}::jsonb, ${memo === "" ? null : memo}, ${branchId}::uuid) as id`,
     );
     return rows[0].id;
   } catch (error) {

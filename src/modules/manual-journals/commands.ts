@@ -6,7 +6,6 @@ import { AMOUNT_SCALE } from "@/lib/money";
 import { isIsoDate } from "@/modules/currencies/rules";
 import { postJournal, reverseJournal } from "@/modules/ledger/posting";
 import { checkJournalLines } from "@/modules/ledger/rules";
-import { takeDocumentNumber } from "@/modules/numbering/commands";
 import { can, seesBranch, type TenantContext } from "@/modules/tenant/rules";
 import { branches } from "@/modules/tenant/schema";
 import { accountProblem, selectManualJournal, type ManualJournal } from "./queries";
@@ -128,9 +127,13 @@ export async function postManualJournal(ctx: TenantContext, id: unknown, loadedA
       await requireBranch(tx, ctx, draft.branchId);
       const problem = await accountProblem(tx, ctx, draft);
       if (problem) throw new UserError(problem);
-      // The number is taken here, at posting, so a draft that is thrown away leaves no gap.
-      const number = await takeDocumentNumber(tx, "JV", draft.date);
-      const journalId = await postJournal(tx, { type: "manual_journal", id: journal.id, date: draft.date, documentNumber: number, memo: draft.memo, branchId: draft.branchId }, draft.lines);
+      // The number is taken at posting, so a draft that is thrown away leaves no gap; and by
+      // the database, in the statement that writes the journal, so nobody can name one or take
+      // one and throw it away. It is read back from the journal.
+      const journalId = await postJournal(tx, { type: "manual_journal", id: journal.id, date: draft.date, memo: draft.memo, branchId: draft.branchId }, draft.lines);
+      const [numbered] = await tx.execute<{ number: string | null }>(sql`select document_number as number from journals where tenant_id = ${ctx.tenantId}::uuid and id = ${journalId}::uuid`);
+      const number = numbered?.number;
+      if (!number) throw new Error("The journal was posted without a number.");
       await tx
         .update(manualJournals)
         .set({ status: "posted", number, journalId, postedAt: sql`now()`, postedBy: ctx.userId, updatedAt: sql`now()`, updatedBy: ctx.userId })

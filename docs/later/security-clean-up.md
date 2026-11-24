@@ -140,10 +140,12 @@ shows nothing.
 2. Put the same `IDENTITY_SIGNING_KEY` in the site's settings on Vercel and redeploy. Check the
    site. `npm run db:identity -- status` says whether what a working copy signs with is believed.
 3. `npm run db:identity -- retire-secret --yes` removes the shared secret from the database. It
-   refuses unless the key of this working copy is already installed. It also forgets every
-   proof the database had already checked and closes the app's open connections (the site's
-   next request connects again): a transaction that had said who it was with the secret would
-   otherwise go on being believed until it ended.
+   refuses unless the key of this working copy is already installed. From that moment nothing
+   is believed by the secret, in transactions already open as well: each transaction remembers
+   which key its proof was checked against, and the database asks every time whether that key
+   is still installed. (Found by the reviewer, and then by trying it: a transaction that had
+   said who it was with the secret went on being believed for as long as it was held open, and
+   closing the app's connections from outside cannot be relied on.)
 4. Take `IDENTITY_SIGNING_SECRET` out of Vercel and out of every `.env.local`.
 
 Until step 3, this item is open exactly as before: the secret is still in the database.
@@ -152,10 +154,8 @@ Until step 3, this item is open exactly as before: the secret is still in the da
 its `.env.local` is left out unless asked for (`install --with-secret`). Found by the reviewer:
 otherwise any working copy with an old line would have put the retired secret back.
 
-Known and left: a proof already checked on a connection is taken again on that connection until
-it runs out (ten minutes at most), which is why taking a key out forgets them. And the table of
-public keys takes any odd number of the right length: it is written only by the owner of the
-database, through `install`, which puts in a real key's.
+Known and left: the table of public keys takes any odd number of the right length. It is
+written only by the owner of the database, through `install`, which puts in a real key's.
 
 For going live (Step 51): the real site should start with a key and never have a shared secret;
 and its private key should live only in the host's settings, not on a developer's computer.

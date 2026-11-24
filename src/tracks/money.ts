@@ -37,7 +37,7 @@ export const permissions = {
   "statutory_rate.manage": ["owner", "accountant", "payroll_administrator"],
   // Step 41. A month's run is worked out, reviewed and cancelled by those who keep payroll
   // (payroll.manage), and approved and paid by the owner or an accountant, who keep the books.
-  // The functions in drizzle/0039_payroll_runs.sql name the same roles.
+  // The functions in drizzle/0040_payroll_runs.sql name the same roles.
   "payroll_run.approve": ["owner", "accountant"],
   "payroll_run.pay": ["owner", "accountant"],
 } as const satisfies TrackPermissions;

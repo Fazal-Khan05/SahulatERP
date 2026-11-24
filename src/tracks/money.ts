@@ -37,7 +37,7 @@ export const permissions = {
   "statutory_rate.manage": ["owner", "accountant", "payroll_administrator"],
   // Step 41. A month's run is worked out, reviewed and cancelled by those who keep payroll
   // (payroll.manage), and approved and paid by the owner or an accountant, who keep the books.
-  // The functions in drizzle/0039_payroll_runs.sql name the same roles.
+  // The functions in drizzle/0040_payroll_runs.sql name the same roles.
   "payroll_run.approve": ["owner", "accountant"],
   "payroll_run.pay": ["owner", "accountant"],
   // Step 42. Loans and advances to staff are money out and back in: paid and taken back in cash
@@ -90,6 +90,13 @@ export const documents = {
 
 /** This track's reports, listed on the Reports page under headings of its own. */
 export const reports: readonly ReportSection[] = [
+  {
+    title: "Cash and bank",
+    reports: [
+      // Step 35. Each bank account's statements matched with the books.
+      { label: "Bank reconciliation", href: "/cash-bank/reconcile", about: "Each bank account's statements from the bank, matched with the books: what is still to come through, and whether the books agree with the bank.", permission: "cash_bank.read", module: "cash_bank" },
+    ],
+  },
   {
     title: "Commissions",
     reports: [

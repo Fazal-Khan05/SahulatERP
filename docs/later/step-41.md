@@ -1,6 +1,6 @@
 # Step 41: payroll runs, commission settled with the salary, and payslips
 
-Track C (payroll), built by the Finisher. Migration `0039_payroll_runs` (three tables, their
+Track C (payroll), built by the Finisher. Migration `0040_payroll_runs` (three tables, their
 guards, the run's four acts, one locked account, two kinds of number, and the commission
 statement taught the run's number). Built on Step 40.
 

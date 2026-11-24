@@ -35,6 +35,11 @@ export const permissions = {
   "payroll.read": ["owner", "payroll_administrator", "accountant", "auditor"],
   "payroll.manage": ["owner", "payroll_administrator"],
   "statutory_rate.manage": ["owner", "accountant", "payroll_administrator"],
+  // Step 41. A month's run is worked out, reviewed and cancelled by those who keep payroll
+  // (payroll.manage), and approved and paid by the owner or an accountant, who keep the books.
+  // The functions in drizzle/0040_payroll_runs.sql name the same roles.
+  "payroll_run.approve": ["owner", "accountant"],
+  "payroll_run.pay": ["owner", "accountant"],
 } as const satisfies TrackPermissions;
 
 /**
@@ -47,15 +52,18 @@ export const links = {
   myCommission: "/commissions/earned",
   payroll: "/payroll",
   employees: "/payroll/employees",
-  payrollRuns: null,
-  payslips: null,
+  payrollRuns: "/payroll/runs",
+  payslips: "/payroll/payslips",
 } as const satisfies TrackLinks;
 
 /**
  * Locked accounts this track adds, by what each is for. The account itself is added in the
  * step's migration with a function app.chart_extra_<name>().
  */
-export const controls = {} as const satisfies Record<string, string>;
+export const controls = {
+  // Step 41. What the employer pays on top of salaries: its EOBI and social security.
+  payroll_statutory_expense: "Employer EOBI and social security",
+} as const satisfies Record<string, string>;
 
 /**
  * Kinds of document this track numbers, by their two letters. The migration adds a function
@@ -66,6 +74,9 @@ export const documents = {
   CP: "Commission payment",
   // Step 34: money moved between two of the company's cash and bank accounts.
   TR: "Cash transfer",
+  // Step 41: a month's payroll, numbered when approved, and the payment of its salaries.
+  PR: "Payroll run",
+  SP: "Salary payment",
 } as const satisfies Record<string, string>;
 
 /** This track's reports, listed on the Reports page under headings of its own. */
@@ -78,6 +89,14 @@ export const reports: readonly ReportSection[] = [
       { label: "Commission earned", href: "/commissions/earned", about: "What each person has earned, what the customers' payments have released, what has been paid and what is owed back. Approve and pay here.", permission: "commission_earned.read", module: "commissions" },
       // Step 39. Each person's statement for a period, with its print and PDF.
       { label: "Commission statements", href: "/commissions/statements", about: "Each person's commission over a period: earned, released by the customers' payments, paid, and what is owed. Print or download each as a PDF.", permission: "commission_earned.read", module: "commissions" },
+    ],
+  },
+  {
+    title: "Payroll",
+    reports: [
+      // Step 41. The accountant approves and pays runs from here.
+      { label: "Payroll runs", href: "/payroll/runs", about: "Each month's payroll: what was paid, the tax and EOBI deducted, the commission carried, and its journal. Approve and pay here.", permission: "payroll.read", module: "payroll" },
+      { label: "Payslips", href: "/payroll/payslips", about: "Each person's payslip for a month, to print or download as a PDF.", permission: "payroll.read", module: "payroll" },
     ],
   },
 ];

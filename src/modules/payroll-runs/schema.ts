@@ -33,6 +33,8 @@ export const payrollRuns = pgTable(
     tax: numeric({ precision: 20, scale: 4 }).notNull().default("0"),
     eobiEmployee: numeric("eobi_employee", { precision: 20, scale: 4 }).notNull().default("0"),
     deductions: numeric({ precision: 20, scale: 4 }).notNull().default("0"),
+    // Of the deductions, what came back on loans to staff (Step 42).
+    loanRecovery: numeric("loan_recovery", { precision: 20, scale: 4 }).notNull().default("0"),
     net: numeric({ precision: 20, scale: 4 }).notNull().default("0"),
     employerEobi: numeric("employer_eobi", { precision: 20, scale: 4 }).notNull().default("0"),
     employerSocialSecurity: numeric("employer_social_security", { precision: 20, scale: 4 }).notNull().default("0"),
@@ -76,6 +78,7 @@ export const payrollRuns = pgTable(
         and ${t.employerEobi} >= 0 and ${t.employerSocialSecurity} >= 0 and ${t.net} = ${t.earnings} + ${t.commission} - ${t.tax} - ${t.eobiEmployee} - ${t.deductions}`,
     ),
     check("payroll_runs_approved_is_whole", sql`(${t.status} in ('approved', 'paid')) = (${t.journalId} is not null) and (${t.journalId} is null) = (${t.number} is null) and (${t.journalId} is null) = (${t.approvedAt} is null)`),
+    check("payroll_runs_loan_within_deductions", sql`${t.loanRecovery} >= 0 and ${t.loanRecovery} <= ${t.deductions}`),
     check("payroll_runs_paid_is_whole", sql`(${t.status} = 'paid') = (${t.paidOn} is not null) and (${t.status} = 'paid') = (${t.paidBy} is not null) and (${t.paymentJournalId} is null or ${t.status} = 'paid') and (${t.paymentJournalId} is null) = (${t.paymentNumber} is null)`),
     check("payroll_runs_cancelled_is_whole", sql`(${t.status} = 'cancelled') = (${t.cancelledAt} is not null) and (${t.status} = 'cancelled') = (${t.cancelReason} is not null)`),
   ],
@@ -106,6 +109,8 @@ export const payslips = pgTable(
     tax: numeric({ precision: 20, scale: 4 }).notNull(),
     eobiEmployee: numeric("eobi_employee", { precision: 20, scale: 4 }).notNull(),
     deductions: numeric({ precision: 20, scale: 4 }).notNull(),
+    // Of the deductions, what came back on loans to staff (Step 42).
+    loanRecovery: numeric("loan_recovery", { precision: 20, scale: 4 }).notNull().default("0"),
     net: numeric({ precision: 20, scale: 4 }).notNull(),
     employerEobi: numeric("employer_eobi", { precision: 20, scale: 4 }).notNull(),
     employerSocialSecurity: numeric("employer_social_security", { precision: 20, scale: 4 }).notNull(),
@@ -136,6 +141,7 @@ export const payslips = pgTable(
     foreignKey({ name: "payslips_employee_fk", columns: [t.tenantId, t.employeeId], foreignColumns: [employees.tenantId, employees.id] }),
     index("payslips_tenant_employee_idx").on(t.tenantId, t.employeeId),
     check("payslips_pay_basis_known", sql`${t.payBasis} in ('monthly', 'daily')`),
+    check("payslips_loan_within_deductions", sql`${t.loanRecovery} >= 0 and ${t.loanRecovery} <= ${t.deductions}`),
     // Commission is carried only for someone who signs in: it is that login's.
     check("payslips_commission_needs_login", sql`${t.userId} is not null or (${t.commission} = 0 and ${t.commissionRecovered} = 0 and ${t.commissionBasis} = '{}'::jsonb)`),
     check(
@@ -167,6 +173,8 @@ export const payslipLines = pgTable(
     code: text().notNull(),
     label: text().notNull(),
     amount: numeric({ precision: 20, scale: 4 }).notNull(),
+    // The loan an instalment line takes back (Step 42; its key is in drizzle/0042_payroll_extras.sql).
+    loanId: uuid("loan_id"),
   },
   (t) => [
     unique("payslip_lines_tenant_id_id_key").on(t.tenantId, t.id),
@@ -174,5 +182,6 @@ export const payslipLines = pgTable(
     foreignKey({ name: "payslip_lines_payslip_fk", columns: [t.tenantId, t.payslipId], foreignColumns: [payslips.tenantId, payslips.id] }),
     check("payslip_lines_kind_known", sql`${t.kind} in ('earning', 'deduction', 'employer')`),
     check("payslip_lines_amount_sane", sql`${t.amount} >= 0 and ${t.amount} < 1e16 and ${t.lineNo} between 1 and 40`),
+    check("payslip_lines_loan_named", sql`(${t.code} = 'loan') = (${t.loanId} is not null)`),
   ],
 );

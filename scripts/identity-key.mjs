@@ -1,23 +1,38 @@
 // npm run db:identity -- status
-// npm run db:identity -- generate [file]     (default .env.local)
-// npm run db:identity -- install
-// npm run db:identity -- remove <slot> --yes
+// npm run db:identity -- generate-key [file]   a private key for the app (default file .env.local)
+// npm run db:identity -- generate [file]       a shared secret, the older way
+// npm run db:identity -- install               puts what this working copy signs with into the database
+// npm run db:identity -- retire-secret --yes   removes the shared secret from the database
+// npm run db:identity -- remove <slot> --yes        removes one shared secret
+// npm run db:identity -- remove-key <slot> --yes    removes one public key
 //
-// The secret behind the proof of who is signed in (drizzle/0031_identity_proof.sql). The web app
-// signs with IDENTITY_SIGNING_SECRET; the database checks with the same secret, kept in
-// app.identity_keys where the app's role cannot read it. Until a key is installed in a database,
-// that database takes the app's word, as it did before.
+// What is behind the proof of who is signed in (drizzle/0031_identity_proof.sql and the security
+// clean-up after Step 47). The web app signs every transaction's "this is user U in company T";
+// the database checks the signature and believes nothing else. A database with nothing installed
+// shows nothing to anyone.
 //
-// The order on a deployed site: generate the secret, give it to the deployed app and redeploy,
-// and only then install it in the database. The other way round, the deployed app has no proof
-// to show and every page comes back empty.
+// Two ways to sign, and a database can accept both at once:
 //
-// Nothing here ever prints the secret. The database is the one named by MIGRATION_DATABASE_URL.
-import { createHmac, randomBytes } from "node:crypto";
+//   IDENTITY_SIGNING_KEY     a private key, held by the app only. The database gets its public
+//                            half (app.identity_public_keys), which is no secret: whoever reads
+//                            the database can check a proof and cannot make one.
+//   IDENTITY_SIGNING_SECRET  a secret held by both (app.identity_keys). Whoever can read every
+//                            table of the database can read it there and sign with it.
+//
+// Moving a deployed site from the secret to the key, with no moment in which it shows nothing:
+//   1. generate-key, then install            (the database now accepts both)
+//   2. give the deployed app IDENTITY_SIGNING_KEY and redeploy; check the site
+//   3. retire-secret --yes                   (the database now accepts the key only)
+//   4. take IDENTITY_SIGNING_SECRET out of the deployed app's settings and out of .env.local
+//
+// Nothing here ever prints a secret or a private key. The database is the one named by
+// MIGRATION_DATABASE_URL.
+import { createHmac, createPrivateKey, createPublicKey, createSign, generateKeyPairSync, randomBytes } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import postgres from "postgres";
 
-const NAME = "IDENTITY_SIGNING_SECRET";
+const SECRET_NAME = "IDENTITY_SIGNING_SECRET";
+const KEY_NAME = "IDENTITY_SIGNING_KEY";
 const SECRET = /^[0-9a-f]{64}$/;
 const [action, ...rest] = process.argv.slice(2);
 
@@ -33,10 +48,28 @@ function halves(secretHex) {
 }
 
 function secretFromEnv() {
-  const secret = process.env[NAME];
+  const secret = process.env[SECRET_NAME];
   if (!secret) return null;
-  if (!SECRET.test(secret)) fail(`${NAME} must be 64 lower-case hexadecimal characters (32 bytes).`);
+  if (!SECRET.test(secret)) fail(`${SECRET_NAME} must be 64 lower-case hexadecimal characters (32 bytes).`);
   return secret;
+}
+
+/** The private key of this working copy, with the public half as the database keeps it: the modulus as a whole number, and its length. */
+function keyFromEnv() {
+  const encoded = process.env[KEY_NAME];
+  if (!encoded) return null;
+  let key;
+  try {
+    key = createPrivateKey({ key: Buffer.from(encoded, "base64"), format: "der", type: "pkcs8" });
+  } catch {
+    fail(`${KEY_NAME} is not a private key. Make one with: npm run db:identity -- generate-key`);
+  }
+  const details = key.asymmetricKeyDetails;
+  if (key.asymmetricKeyType !== "rsa" || ![2048, 3072, 4096].includes(details?.modulusLength) || details?.publicExponent !== 65537n) {
+    fail(`${KEY_NAME} must be an RSA key of 2048, 3072 or 4096 bits with the exponent 65537. Make one with: npm run db:identity -- generate-key`);
+  }
+  const modulus = Buffer.from(createPublicKey(key).export({ format: "jwk" }).n, "base64url");
+  return { key, bytes: modulus.length, modulus: BigInt(`0x${modulus.toString("hex")}`).toString(10) };
 }
 
 function database() {
@@ -47,71 +80,117 @@ function database() {
   return { sql: postgres(url, { max: 1, onnotice: () => {} }), name };
 }
 
-if (action === "generate") {
-  const file = rest[0] ?? ".env.local";
-  const has = existsSync(file) && readFileSync(file, "utf8").split("\n").some((line) => line.startsWith(`${NAME}=`));
-  if (has) {
-    console.log(`${file} already has ${NAME}; left as it is.`);
-  } else {
-    const before = existsSync(file) ? readFileSync(file, "utf8") : "";
-    appendFileSync(file, `${before === "" || before.endsWith("\n") ? "" : "\n"}${NAME}=${randomBytes(32).toString("hex")}\n`, { mode: 0o600 });
-    console.log(`A new ${NAME} was written to ${file}. It was not shown and is not in Git.`);
+/** Appends NAME=value to a settings file that does not have it yet. The value is never shown. */
+function writeSetting(file, name, make) {
+  const before = existsSync(file) ? readFileSync(file, "utf8") : "";
+  if (before.split("\n").some((line) => line.startsWith(`${name}=`) && line.length > name.length + 1)) {
+    console.log(`${file} already has ${name}; left as it is.`);
+    return;
   }
+  appendFileSync(file, `${before === "" || before.endsWith("\n") ? "" : "\n"}${name}=${make()}\n`, { mode: 0o600 });
+  console.log(`A new ${name} was written to ${file}. It was not shown and is not in Git.`);
+}
+
+const sameSecret = (row, mine) => Buffer.compare(row.inner_key, mine.inner) === 0 && Buffer.compare(row.outer_key, mine.outer) === 0;
+
+if (action === "generate") {
+  writeSetting(rest[0] ?? ".env.local", SECRET_NAME, () => randomBytes(32).toString("hex"));
+} else if (action === "generate-key") {
+  writeSetting(rest[0] ?? ".env.local", KEY_NAME, () =>
+    generateKeyPairSync("rsa", { modulusLength: 2048, publicExponent: 65537 }).privateKey.export({ format: "der", type: "pkcs8" }).toString("base64"),
+  );
 } else if (action === "status") {
   const { sql, name } = database();
-  const keys = await sql`select slot, inner_key, outer_key, created_at from app.identity_keys order by slot`;
-  const [{ flag }] = await sql`select last_value::int as flag from app.identity_proof_flag`;
+  const secrets = await sql`select slot, inner_key, outer_key from app.identity_keys order by slot`;
+  const keys = await sql`select slot, modulus::text as modulus, bytes from app.identity_public_keys order by slot`;
   await sql.end();
   const secret = secretFromEnv();
+  const mine = keyFromEnv();
   console.log(`Database: ${name}`);
-  if ((flag > 1) !== (keys.length > 0)) console.log(`WARNING: the flag says a proof is ${flag > 1 ? "wanted" : "not wanted"}, but ${keys.length} key(s) are installed. Run install (or remove) again to put the two in step.`);
-  console.log(keys.length === 0 ? "No key installed: this database takes the app's word for who is signed in." : `Key installed (slot ${keys.map((k) => k.slot).join(" and ")}): this database wants the proof.`);
-  if (!secret) {
-    console.log(`${NAME} is not set here${keys.length ? ": an app started with these settings would be shown nothing." : "."}`);
-  } else {
-    const mine = halves(secret);
-    const match = keys.some((k) => Buffer.compare(k.inner_key, mine.inner) === 0 && Buffer.compare(k.outer_key, mine.outer) === 0);
-    console.log(keys.length === 0 ? `${NAME} is set here, and not installed in the database.` : match ? `${NAME} here matches a key in the database.` : `${NAME} here does NOT match any key in the database.`);
-  }
+  console.log(keys.length === 0 ? "No public key installed." : `Public key installed (slot ${keys.map((k) => k.slot).join(" and ")}): nothing secret about it.`);
+  console.log(secrets.length === 0 ? "No shared secret installed." : `Shared secret installed (slot ${secrets.map((k) => k.slot).join(" and ")}): whoever can read every table of this database can read it.`);
+  if (keys.length === 0 && secrets.length === 0) console.log("With nothing installed, this database shows nothing to anyone. Run install.");
+  if (mine) console.log(keys.some((k) => k.modulus === mine.modulus) ? `${KEY_NAME} here matches a public key in the database.` : `${KEY_NAME} here does NOT match any public key in the database.`);
+  else console.log(`${KEY_NAME} is not set here.`);
+  if (secret) console.log(secrets.some((k) => sameSecret(k, halves(secret))) ? `${SECRET_NAME} here matches a shared secret in the database.` : `${SECRET_NAME} here does NOT match any shared secret in the database.`);
+  else console.log(`${SECRET_NAME} is not set here.`);
+  const works = (mine && keys.some((k) => k.modulus === mine.modulus)) || (!mine && secret && secrets.some((k) => sameSecret(k, halves(secret))));
+  console.log(works ? "An app started with these settings is believed by this database." : "An app started with these settings would be shown nothing by this database.");
 } else if (action === "install") {
-  const secret = secretFromEnv() ?? fail(`${NAME} is not set. Run "npm run db:identity -- generate" first.`);
-  const mine = halves(secret);
-  // The halves must give what Node's own HMAC gives, or nothing the app signs would be accepted.
+  const secret = secretFromEnv();
+  const mine = keyFromEnv();
+  if (!secret && !mine) fail(`Neither ${KEY_NAME} nor ${SECRET_NAME} is set. Run "npm run db:identity -- generate-key" first.`);
   const { sql, name } = database();
-  const probe = "sahulaterp-identity-v1|probe";
-  const [{ ok }] = await sql`select encode(sha256(${mine.outer}::bytea || sha256(${mine.inner}::bytea || convert_to(${probe}, 'UTF8'))), 'hex') = ${createHmac("sha256", Buffer.from(secret, "hex")).update(probe).digest("hex")} as ok`;
-  if (!ok) {
-    await sql.end();
-    fail("The database does not compute the same signature as this program; nothing was installed.");
-  }
-  const keys = await sql`select slot, inner_key, outer_key from app.identity_keys order by slot`;
-  if (keys.some((k) => Buffer.compare(k.inner_key, mine.inner) === 0 && Buffer.compare(k.outer_key, mine.outer) === 0)) {
-    await sql`select setval('app.identity_proof_flag', 2)`;
-    console.log(`Database ${name}: this key is already installed. Nothing changed.`);
-  } else {
-    const slot = [1, 2].find((n) => !keys.some((k) => k.slot === n));
-    if (!slot) {
+  const freeSlot = (rows) => [1, 2].find((n) => !rows.some((k) => k.slot === n));
+  if (mine) {
+    // The database must accept what Node signs with this key and refuse the same signature of
+    // another text, or nothing the app signs would be accepted, or anything would.
+    const probe = "sahulaterp-identity-v2|probe";
+    const signature = createSign("RSA-SHA256").update(probe).sign(mine.key);
+    const [{ good, bad }] = await sql`
+      select app.identity_signature_valid(${mine.modulus}::numeric, ${mine.bytes}::int, convert_to(${probe}, 'UTF8'), ${signature}::bytea) as good,
+             app.identity_signature_valid(${mine.modulus}::numeric, ${mine.bytes}::int, convert_to(${probe + "x"}, 'UTF8'), ${signature}::bytea) as bad`;
+    if (!good || bad) {
       await sql.end();
-      fail(`Database ${name}: both slots hold other keys. Remove the old one first ("npm run db:identity -- remove <slot> --yes").`);
+      fail("The database does not check this key's signatures as this program makes them; nothing was installed.");
     }
-    // The flag first: every transaction sees it at once, also one that was open before the key
-    // went in, and from this moment nothing unproven is believed. For the instant until the key
-    // is in, nothing is accepted at all, which is the safe way round; if this stops in between,
-    // run install again.
-    await sql`select setval('app.identity_proof_flag', 2)`;
-    await sql`insert into app.identity_keys (slot, inner_key, outer_key) values (${slot}, ${mine.inner}, ${mine.outer})`;
-    console.log(`Database ${name}: key installed in slot ${slot}. From now on this database wants the proof of who is signed in.`);
+    const keys = await sql`select slot, modulus::text as modulus from app.identity_public_keys order by slot`;
+    if (keys.some((k) => k.modulus === mine.modulus)) {
+      console.log(`Database ${name}: this public key is already installed.`);
+    } else {
+      const slot = freeSlot(keys);
+      if (!slot) {
+        await sql.end();
+        fail(`Database ${name}: both slots hold other public keys. Remove the old one first ("npm run db:identity -- remove-key <slot> --yes").`);
+      }
+      await sql`insert into app.identity_public_keys (slot, modulus, bytes) values (${slot}, ${mine.modulus}::numeric, ${mine.bytes})`;
+      console.log(`Database ${name}: public key installed in slot ${slot}.`);
+    }
+  }
+  if (secret) {
+    const halved = halves(secret);
+    // The halves must give what Node's own HMAC gives, or nothing the app signs would be accepted.
+    const probe = "sahulaterp-identity-v1|probe";
+    const [{ ok }] = await sql`select encode(sha256(${halved.outer}::bytea || sha256(${halved.inner}::bytea || convert_to(${probe}, 'UTF8'))), 'hex') = ${createHmac("sha256", Buffer.from(secret, "hex")).update(probe).digest("hex")} as ok`;
+    if (!ok) {
+      await sql.end();
+      fail("The database does not compute the same signature as this program; the shared secret was not installed.");
+    }
+    const secrets = await sql`select slot, inner_key, outer_key from app.identity_keys order by slot`;
+    if (secrets.some((k) => sameSecret(k, halved))) {
+      console.log(`Database ${name}: this shared secret is already installed.`);
+    } else {
+      const slot = freeSlot(secrets);
+      if (!slot) {
+        await sql.end();
+        fail(`Database ${name}: both slots hold other shared secrets. Remove the old one first ("npm run db:identity -- remove <slot> --yes").`);
+      }
+      await sql`insert into app.identity_keys (slot, inner_key, outer_key) values (${slot}, ${halved.inner}, ${halved.outer})`;
+      console.log(`Database ${name}: shared secret installed in slot ${slot}.`);
+    }
   }
   await sql.end();
-} else if (action === "remove") {
-  const slot = Number(rest[0]);
-  if (![1, 2].includes(slot) || !rest.includes("--yes")) fail('Usage: npm run db:identity -- remove <1|2> --yes   (with no key left, the database takes the app\'s word again)');
+} else if (action === "retire-secret") {
+  if (!rest.includes("--yes")) fail("Usage: npm run db:identity -- retire-secret --yes   (removes every shared secret; the app must already be signing with its private key)");
+  const mine = keyFromEnv() ?? fail(`${KEY_NAME} is not set here: with the shared secret gone and no key, nothing would be believed.`);
   const { sql, name } = database();
-  const gone = await sql`delete from app.identity_keys where slot = ${slot} returning slot`;
-  const [{ left }] = await sql`select count(*)::int as left from app.identity_keys`;
-  if (left === 0) await sql`select setval('app.identity_proof_flag', 1)`;
+  const keys = await sql`select modulus::text as modulus from app.identity_public_keys`;
+  if (!keys.some((k) => k.modulus === mine.modulus)) {
+    await sql.end();
+    fail(`Database ${name}: ${KEY_NAME} here does not match a public key in the database. Run install first; nothing was removed.`);
+  }
+  const gone = await sql`delete from app.identity_keys returning slot`;
   await sql.end();
-  console.log(gone.length === 0 ? `Database ${name}: slot ${slot} was empty.` : `Database ${name}: key removed from slot ${slot}. ${left === 0 ? "No key is left: this database takes the app's word again." : "One key is still installed."}`);
+  console.log(gone.length === 0 ? `Database ${name}: no shared secret was installed.` : `Database ${name}: the shared secret is removed (${gone.length} slot${gone.length === 1 ? "" : "s"}). From now on only a proof signed with the private key is believed. Take ${SECRET_NAME} out of the deployed app's settings and out of .env.local.`);
+} else if (action === "remove" || action === "remove-key") {
+  const slot = Number(rest[0]);
+  if (![1, 2].includes(slot) || !rest.includes("--yes")) fail(`Usage: npm run db:identity -- ${action} <1|2> --yes   (with nothing left installed, the database shows nothing to anyone)`);
+  const { sql, name } = database();
+  const gone = action === "remove" ? await sql`delete from app.identity_keys where slot = ${slot} returning slot` : await sql`delete from app.identity_public_keys where slot = ${slot} returning slot`;
+  const [{ left }] = await sql`select (select count(*) from app.identity_keys)::int + (select count(*) from app.identity_public_keys)::int as left`;
+  await sql.end();
+  const what = action === "remove" ? "shared secret" : "public key";
+  console.log(gone.length === 0 ? `Database ${name}: slot ${slot} held no ${what}.` : `Database ${name}: ${what} removed from slot ${slot}.${left === 0 ? " Nothing is left installed: this database now shows nothing to anyone." : ""}`);
 } else {
-  fail("Usage: npm run db:identity -- status | generate [file] | install | remove <slot> --yes");
+  fail("Usage: npm run db:identity -- status | generate-key [file] | generate [file] | install | retire-secret --yes | remove <slot> --yes | remove-key <slot> --yes");
 }

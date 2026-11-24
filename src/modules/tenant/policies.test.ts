@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, randomUUID } from "node:crypto";
+import { constants, createHmac, createPublicKey, createSign, generateKeyPairSync, randomBytes, randomUUID, sign as signWith, type KeyObject } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -42,6 +42,7 @@ async function codeOf(run: () => Promise<unknown>): Promise<string | undefined> 
   }
 }
 
+const CHECK = "23514"; // check_violation
 const DENIED = "42501"; // insufficient_privilege: a missing grant or a row-level security refusal
 
 describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
@@ -230,18 +231,28 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
     expect(unsafe.map((f) => `${f.fn}: ${f.has}`)).toEqual([]);
   });
 
-  // drizzle/0031_identity_proof.sql. The app used to tell the database who was signed in by
-  // writing two settings, which any session of the app's role can write. The database now wants
-  // a signature made with a secret it shares with the web app. The key is put in here inside one
-  // transaction that is rolled back, so no other test and no other session ever sees it; that
+  // drizzle/0031_identity_proof.sql and the security clean-up after Step 47. The app used to tell
+  // the database who was signed in by writing two settings, which any session of the app's role
+  // can write. The database now wants a signature: made with a secret it shares with the web
+  // app, or with a private key whose public half it holds. The keys are put in here inside one
+  // transaction that is rolled back, so no other test and no other session ever sees them; that
   // transaction is the migration connection's, and the functions answer the same whoever asks.
-  it("takes nobody's word for who is signed in once a key is installed", async () => {
+  const publicHalf = (key: KeyObject) => {
+    const modulus = Buffer.from(createPublicKey(key).export({ format: "jwk" }).n as string, "base64url");
+    return { modulus: BigInt(`0x${modulus.toString("hex")}`).toString(10), bytes: modulus.length };
+  };
+  const newKey = (bits = 2048) => generateKeyPairSync("rsa", { modulusLength: bits, publicExponent: 65537 }).privateKey;
+
+  it("takes nobody's word for who is signed in", async () => {
     const secret = randomBytes(32);
     const padded = Buffer.concat([secret, Buffer.alloc(32)]);
     const inner = Buffer.from(padded.map((b) => b ^ 0x36));
     const outer = Buffer.from(padded.map((b) => b ^ 0x5c));
     const sign = (user: string, tenant: string | null, expires: number, key: Buffer = secret) =>
       createHmac("sha256", key).update(identityMessage(user, tenant, expires)).digest("hex");
+    const key = newKey();
+    const signed = (user: string, tenant: string | null, expires: number, by: KeyObject = key, version: 1 | 2 = 2) =>
+      createSign("RSA-SHA256").update(identityMessage(user, tenant, expires, version)).sign(by).toString("hex");
     const soon = Math.floor(Date.now() / 1000) + 300;
     const undone = new Error("undo");
     const seen: Record<string, unknown> = {};
@@ -249,7 +260,7 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
     await admin
       .begin(async (tx) => {
         await tx`delete from app.identity_keys`;
-        await tx`insert into app.identity_keys (slot, inner_key, outer_key) values (1, ${inner}, ${outer})`;
+        await tx`delete from app.identity_public_keys`;
         const who = async () => ({ ...(await tx`select app.current_user_id() as "user", app.tenant_id() as tenant, app.tenant_role() as role, (select count(*)::int from app.member_tenant_ids()) as companies`)[0] });
         const enter = (user: string, tenant: string | null, expires: number, signature: string) =>
           tx.savepoint((sp) => sp`select app.enter(${user}::uuid, ${tenant}::uuid, ${expires}::bigint, ${signature}::text)`).then(
@@ -257,8 +268,13 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
             (error: { code?: string }) => error.code,
           );
 
-        // The two settings mean nothing now.
+        // A database with nothing installed believes nobody: not the settings, not a call with
+        // no proof, not a proof that would be right if its key were here.
         await tx`select set_config('app.user_id', ${ownerA}, true), set_config('app.tenant_id', ${tenantA}, true)`;
+        seen.noKey = [await who(), await enter(ownerA, tenantA, 0, ""), await enter(ownerA, tenantA, soon, sign(ownerA, tenantA, soon)), await enter(ownerA, tenantA, soon, signed(ownerA, tenantA, soon)), await who()];
+
+        // ── the shared secret ──
+        await tx`insert into app.identity_keys (slot, inner_key, outer_key) values (1, ${inner}, ${outer})`;
         seen.settings = await who();
         // No proof, somebody else's proof, a proof for another company, one made with another
         // secret, one that is out of date and one that claims to be good for an hour.
@@ -270,6 +286,8 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
           await enter(ownerA, tenantA, soon - 400, sign(ownerA, tenantA, soon - 400)),
           await enter(ownerA, tenantA, soon + 3600, sign(ownerA, tenantA, soon + 3600)),
           await enter(ownerA, tenantA, soon, sign(ownerA, tenantA, soon).toUpperCase()),
+          // With no public key installed, a proof signed with a private key is nothing.
+          await enter(ownerA, tenantA, soon, signed(ownerA, tenantA, soon)),
         ];
         seen.afterRefusals = await who();
         // The real thing is believed, and a signed move to no company or to a company the user
@@ -280,6 +298,41 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
         seen.nowhere = await who();
         await enter(ownerA, tenantB, soon, sign(ownerA, tenantB, soon));
         seen.elsewhere = await who();
+
+        // ── the public key, with the secret gone: nothing left in the database can sign ──
+        await tx`delete from app.identity_keys`;
+        const mine = publicHalf(key);
+        await tx`insert into app.identity_public_keys (slot, modulus, bytes) values (1, ${mine.modulus}::numeric, ${mine.bytes})`;
+        const other = newKey();
+        const good = signed(ownerA, tenantA, soon);
+        const flipped = good.slice(0, 200) + (good[200] === "0" ? "1" : "0") + good.slice(201);
+        seen.keyRefused = [
+          await enter(ownerA, tenantA, soon, sign(ownerA, tenantA, soon)), // the secret's signature, now that the secret is gone
+          await enter(ownerA, tenantA, soon, signed(ownerB, tenantB, soon)),
+          await enter(ownerA, tenantA, soon, signed(ownerA, tenantB, soon)),
+          await enter(ownerA, tenantA, soon, signed(ownerA, tenantA, soon, other)),
+          await enter(ownerA, tenantA, soon, signed(ownerA, tenantA, soon, key, 1)), // the right key over the other way's text
+          await enter(ownerA, tenantA, soon - 400, signed(ownerA, tenantA, soon - 400)),
+          await enter(ownerA, tenantA, soon + 3600, signed(ownerA, tenantA, soon + 3600)),
+          await enter(ownerA, tenantA, soon, flipped),
+          await enter(ownerA, tenantA, soon, good.toUpperCase()),
+          await enter(ownerA, tenantA, soon, good.slice(2)),
+          await enter(ownerA, tenantA, soon, "00".repeat(256)),
+          await enter(ownerA, tenantA, soon, signed(ownerA, tenantA, soon, newKey(3072))),
+        ];
+        seen.afterKeyRefusals = await who();
+        seen.keyEntered = await enter(ownerA, tenantA, soon, good);
+        seen.keyOwner = await who();
+        // Shown again on the same connection it is not worked out again, and is good for the same
+        // user and company only: the same signature does not carry anyone else in.
+        seen.again = [await enter(ownerA, tenantA, soon, good), await enter(ownerB, tenantA, soon, good), await enter(ownerA, tenantB, soon, good), await enter(ownerA, tenantA, soon + 1, good)];
+        seen.afterAgain = await who();
+        await enter(ownerA, null, soon, signed(ownerA, null, soon));
+        seen.keyNowhere = await who();
+        // A second key in the other slot is accepted beside the first (how a key is changed).
+        const next = publicHalf(other);
+        await tx`insert into app.identity_public_keys (slot, modulus, bytes) values (2, ${next.modulus}::numeric, ${next.bytes})`;
+        seen.both = [await enter(ownerB, tenantB, soon, signed(ownerB, tenantB, soon, other)), (await who()).user, await enter(ownerA, tenantA, soon, signed(ownerA, tenantA, soon)), (await who()).user];
         throw undone;
       })
       .catch((error) => {
@@ -287,36 +340,99 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
       });
 
     const nobody = { user: null, tenant: null, role: null, companies: 0 };
+    expect(seen.noKey).toEqual([nobody, DENIED, DENIED, DENIED, nobody]);
     expect(seen.settings).toEqual(nobody);
-    expect(seen.refused).toEqual([DENIED, DENIED, DENIED, DENIED, DENIED, DENIED, DENIED]);
+    expect(seen.refused).toEqual(Array(8).fill(DENIED));
     expect(seen.afterRefusals).toEqual(nobody);
     expect(seen.entered).toBeUndefined();
     expect(seen.owner).toEqual({ user: ownerA, tenant: tenantA, role: "owner", companies: 1 });
     expect(seen.nowhere).toEqual({ user: ownerA, tenant: null, role: null, companies: 1 });
     expect(seen.elsewhere).toEqual({ user: ownerA, tenant: null, role: null, companies: 1 });
-    // The key never left that transaction.
+    expect(seen.keyRefused).toEqual(Array(12).fill(DENIED));
+    // A refusal leaves the transaction as whoever it last proved it was: the move to company B above.
+    expect(seen.afterKeyRefusals).toEqual({ user: ownerA, tenant: null, role: null, companies: 1 });
+    expect(seen.keyEntered).toBeUndefined();
+    expect(seen.keyOwner).toEqual({ user: ownerA, tenant: tenantA, role: "owner", companies: 1 });
+    expect(seen.again).toEqual([undefined, DENIED, DENIED, DENIED]);
+    expect(seen.afterAgain).toEqual({ user: ownerA, tenant: tenantA, role: "owner", companies: 1 });
+    expect(seen.keyNowhere).toEqual({ user: ownerA, tenant: null, role: null, companies: 1 });
+    expect(seen.both).toEqual([undefined, ownerB, undefined, ownerA]);
+    // Neither key ever left that transaction.
     expect(await admin`select 1 from app.identity_keys where inner_key = ${inner}`).toHaveLength(0);
+    expect(await admin`select 1 from app.identity_public_keys where modulus = ${publicHalf(key).modulus}::numeric`).toHaveLength(0);
 
-    // The app's roles reach neither the secret nor the record of who each transaction is, and
-    // cannot ask the function behind the five that answer.
+    // The app's roles reach neither the keys nor the record of who each transaction is, and
+    // cannot ask the functions behind the five that answer.
     const attempt = (statement: string) => codeOf(() => withTenant(ownerA, tenantA, (tx) => tx.execute(sql.raw(statement))));
     expect(await attempt("select 1 from app.identity_keys")).toBe(DENIED);
+    expect(await attempt("select 1 from app.identity_public_keys")).toBe(DENIED);
+    expect(await attempt("insert into app.identity_public_keys (slot, modulus, bytes) values (2, 3, 256)")).toBe(DENIED);
     expect(await attempt("select 1 from app.identity_sessions")).toBe(DENIED);
     expect(await attempt("update app.identity_sessions set user_id = user_id")).toBe(DENIED);
     expect(await attempt("delete from app.identity_keys")).toBe(DENIED);
     expect(await attempt("select * from app.identity_now()")).toBe(DENIED);
-    expect(await attempt("select app.identity_proof_wanted()")).toBe(DENIED);
-    expect(await attempt("select setval('app.identity_proof_flag', 1)")).toBe(DENIED);
-    expect(await attempt("select last_value from app.identity_proof_flag")).toBe(DENIED);
+    expect(await attempt("select app.identity_signature_valid(3, 256, ''::bytea, ''::bytea)")).toBe(DENIED);
+    expect(await attempt("select app.identity_number(''::bytea)")).toBe(DENIED);
     const [reach] = await admin`
       select bool_or(has_table_privilege(r, 'app.identity_keys', 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER')
+                  or has_table_privilege(r, 'app.identity_public_keys', 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER')
                   or has_table_privilege(r, 'app.identity_sessions', 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER')
-                  or has_sequence_privilege(r, 'app.identity_proof_flag', 'USAGE, SELECT, UPDATE')
-                  or has_function_privilege(r, 'app.identity_proof_wanted()', 'EXECUTE')
+                  or has_function_privilege(r, 'app.identity_signature_valid(numeric, integer, bytea, bytea)', 'EXECUTE')
+                  or has_function_privilege(r, 'app.identity_number(bytea)', 'EXECUTE')
                   or has_function_privilege(r, 'app.identity_now()', 'EXECUTE')) as any,
              bool_or(has_function_privilege(r, 'app.enter(uuid, uuid, bigint, text)', 'EXECUTE')) filter (where r <> 'app_runtime') as others_enter
       from unnest(array['app_runtime', 'anon', 'authenticated', 'service_role', 'public']) r`;
     expect({ ...reach }).toEqual({ any: false, others_enter: false });
+    // What asked "is a proof wanted?" is gone: one is always wanted.
+    expect(await admin`select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'app' and p.proname = 'identity_proof_wanted' union all select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'app' and c.relname = 'identity_proof_flag'`).toHaveLength(0);
+  });
+
+  it("checks a private key's signature whole, and takes nothing that only resembles one", async () => {
+    const key = newKey();
+    const { modulus, bytes } = publicHalf(key);
+    const message = Buffer.from(identityMessage(ownerA, tenantA, 1_800_000_000, 2));
+    const valid = async (signature: Buffer, over: Buffer = message, n: string = modulus, length: number | null = bytes) =>
+      (await admin<{ ok: boolean | null }[]>`select app.identity_signature_valid(${n}::numeric, ${length}::int, ${over}::bytea, ${signature}::bytea) as ok`)[0].ok;
+    const good = createSign("RSA-SHA256").update(message).sign(key);
+    expect(await valid(good)).toBe(true);
+    // Twenty more texts, each with its own signature: all taken, and none taken for another's.
+    for (let n = 0; n < 20; n += 1) {
+      const text = Buffer.from(`sahulaterp-identity-v2|${randomBytes(8).toString("hex")}|${n}`);
+      const signature = createSign("RSA-SHA256").update(text).sign(key);
+      expect([await valid(signature, text), await valid(signature, message), await valid(good, text)], String(n)).toEqual([true, false, false]);
+    }
+    const asNumber = (buffer: Buffer) => BigInt(`0x${buffer.toString("hex")}`);
+    const asBytes = (value: bigint, length: number) => Buffer.from(value.toString(16).padStart(length * 2, "0"), "hex");
+    const n = BigInt(modulus);
+    const refused: Record<string, Buffer> = {
+      "one bit changed": Buffer.from(good.map((b, at) => (at === 100 ? b ^ 1 : b))),
+      "another key's": createSign("RSA-SHA256").update(message).sign(newKey()),
+      "the same key, another hash (SHA-1)": createSign("RSA-SHA1").update(message).sign(key),
+      "the same key, another hash (SHA-512)": createSign("RSA-SHA512").update(message).sign(key),
+      "the same key, the other padding (PSS)": signWith("sha256", message, { key, padding: constants.RSA_PKCS1_PSS_PADDING }),
+      "nothing": Buffer.alloc(0),
+      "all zeros": Buffer.alloc(bytes),
+      "one": asBytes(BigInt(1), bytes),
+      "the modulus less one": asBytes(n - BigInt(1), bytes),
+      "the modulus": asBytes(n, bytes),
+      // The same number as the real signature once the modulus is taken off: too big, or too long.
+      "the signature plus the modulus, a byte longer": asBytes(asNumber(good) + n, bytes + 1),
+      "a byte short": good.subarray(1),
+      "a byte long": Buffer.concat([Buffer.alloc(1), good]),
+    };
+    for (const [what, signature] of Object.entries(refused)) expect(await valid(signature), what).toBe(false);
+    // A key of another size is asked for by its own size only; and nothing missing is taken for anything.
+    const big = newKey(3072);
+    const bigHalf = publicHalf(big);
+    const bigSignature = createSign("RSA-SHA256").update(message).sign(big);
+    expect([await valid(bigSignature, message, bigHalf.modulus, bigHalf.bytes), await valid(bigSignature, message, bigHalf.modulus, 256), await valid(good, message, modulus, 384), await valid(good, message, modulus, 100), await valid(good, message, modulus, null)]).toEqual([true, false, false, false, false]);
+    // The table takes only a modulus of the length it says, and odd.
+    const plant = (value: string, length: number) => codeOf(() => admin.begin(async (tx) => {
+      await tx`delete from app.identity_public_keys`;
+      await tx`insert into app.identity_public_keys (slot, modulus, bytes) values (1, ${value}::numeric, ${length})`;
+      throw Object.assign(new Error("undo"), { code: "undone" });
+    }));
+    expect([await plant(modulus, 256), await plant("3", 256), await plant((n + BigInt(1)).toString(), 256), await plant(modulus, 384), await plant(modulus, 128), await plant(`${modulus}.5`, 256)]).toEqual(["undone", CHECK, CHECK, CHECK, CHECK, CHECK]);
   });
 
   it("believes who a transaction is only until that transaction ends", async () => {
@@ -359,68 +475,35 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
     }
   });
 
-  // Found by the reviewer of drizzle/0031_identity_proof.sql: a transaction that was open before
-  // the key went in sees no key in its own picture of the database, and would have gone on being
-  // believed. This installs and removes a key for real, so it runs on a local database only: on
-  // a hosted one it would shut the app out for a moment, and for good if it stopped half-way.
-  const local = hasDb && new URL(process.env.MIGRATION_DATABASE_URL!).hostname === "127.0.0.1";
-  it.skipIf(!local)("stops believing a transaction that was open before the key was installed", async () => {
-    // What a run of this test that died half-way left behind (its key is marked by its date).
-    await admin`delete from app.identity_keys where slot = 2 and created_at = 'epoch'`;
-    await admin`select setval('app.identity_proof_flag', 1) where not exists (select 1 from app.identity_keys)`;
-    const [{ keyed }] = await admin<{ keyed: boolean }[]>`select app.identity_proof_wanted() as keyed`;
-    if (keyed) return; // This database already wants the proof: there is no "before" to test.
-    const secret = randomBytes(32);
-    const padded = Buffer.concat([secret, Buffer.alloc(32)]);
-    const old = postgres(process.env.DATABASE_URL!, { max: 1 });
-    const borrower = postgres(process.env.DATABASE_URL!, { max: 1 });
-    const who = (tx: postgres.TransactionSql) => tx`select app.current_user_id() as "user", app.tenant_role() as role, (select count(*)::int from public.branches) as branches`.then((rows) => ({ ...rows[0] }));
-    const seen: Record<string, unknown> = {};
+  // Before the security clean-up, a database with no key installed took the app's word, and
+  // marked what it wrote down that way as not proven. Nothing not proven is believed now,
+  // wherever it came from: a row left by a transaction that was open while the migration went
+  // in, say. (The row is written here as the owner of the database; the app's role cannot.)
+  it("believes only what was proven", async () => {
+    const direct = postgres(process.env.DATABASE_URL!, { max: 1 });
     try {
-      await old.begin("isolation level repeatable read", async (tx) => {
-        // Believed, as any transaction is while no key is installed; and its picture is lent out.
-        await tx`select set_config('app.user_id', ${ownerA}, true), set_config('app.tenant_id', ${tenantA}, true)`;
-        seen.before = await who(tx);
-        const [{ snapshot }] = await tx<{ snapshot: string }[]>`select pg_export_snapshot() as snapshot`;
-        // A second one that said who it was through app.enter, unsigned, as was allowed then.
-        const entered = postgres(process.env.DATABASE_URL!, { max: 1 });
-        try {
-          await entered.begin(async (early) => {
-            await early`select app.enter(${ownerA}::uuid, ${tenantA}::uuid, 0, '')`;
-            seen.enteredBefore = await who(early);
-            // As the install does it: the flag, then the key.
-            await admin`select setval('app.identity_proof_flag', 2)`;
-            seen.betweenFlagAndKey = await who(tx);
-            await admin`insert into app.identity_keys (slot, inner_key, outer_key, created_at) values (2, ${Buffer.from(padded.map((b) => b ^ 0x36))}, ${Buffer.from(padded.map((b) => b ^ 0x5c))}, 'epoch')`;
-            seen.enteredAfter = await who(early);
-          });
-        } finally {
-          await entered.end();
-        }
-        // The first transaction, after the key: by the settings, and by an unsigned app.enter.
-        seen.after = await who(tx);
-        seen.unsigned = await tx.savepoint((sp) => sp`select app.enter(${ownerA}::uuid, ${tenantA}::uuid, 0, '')`).then(() => undefined, (error: { code?: string }) => error.code);
-        // Another session that borrows the old picture.
-        seen.borrowed = await borrower.begin("isolation level repeatable read", async (other) => {
-          await other.unsafe(`set transaction snapshot '${snapshot.replace(/[^0-9A-Fa-f-]/g, "")}'`);
-          await other`select set_config('app.user_id', ${ownerA}, true), set_config('app.tenant_id', ${tenantA}, true)`;
-          return who(other);
-        });
+      const seen = await direct.begin(async (tx) => {
+        const [{ pid, xid }] = await tx<{ pid: number; xid: string }[]>`select pg_backend_pid() as pid, pg_current_xact_id()::text as xid`;
+        const who = () => tx`select app.current_user_id() as "user", app.tenant_role() as role, (select count(*)::int from public.branches) as branches`.then((rows) => ({ ...rows[0] }));
+        const write = (proven: boolean) => admin`
+          insert into app.identity_sessions (pid, xid, user_id, tenant_id, proven) values (${pid}, ${xid}::xid8, ${ownerA}, ${tenantA}, ${proven})
+          on conflict (pid) do update set xid = excluded.xid, user_id = excluded.user_id, tenant_id = excluded.tenant_id, proven = excluded.proven, proof = null, proof_expires = null`;
+        await write(false);
+        const unproven = await who();
+        // The same row marked proven is believed, so it was the mark that decided.
+        await write(true);
+        const proven = await who();
+        // And a call with no proof is refused, whatever the row says.
+        const unsigned = await tx.savepoint((sp) => sp`select app.enter(${ownerA}::uuid, ${tenantA}::uuid, 0, '')`).then(() => undefined, (error: { code?: string }) => error.code);
+        return { unproven, proven, unsigned };
       });
+      expect(seen.unproven).toEqual({ user: null, role: null, branches: 0 });
+      expect(seen.proven).toMatchObject({ user: ownerA, role: "owner" });
+      expect(seen.unsigned).toBe(DENIED);
     } finally {
-      await admin`delete from app.identity_keys where slot = 2`;
-      await admin`select setval('app.identity_proof_flag', 1)`;
-      await old.end();
-      await borrower.end();
+      await admin`delete from app.identity_sessions where user_id = ${ownerA} and proof is null`;
+      await direct.end();
     }
-    const nobody = { user: null, role: null, branches: 0 };
-    expect(seen.before).toMatchObject({ user: ownerA, role: "owner" });
-    expect(seen.enteredBefore).toMatchObject({ user: ownerA, role: "owner" });
-    expect(seen.betweenFlagAndKey).toEqual(nobody);
-    expect(seen.enteredAfter).toEqual(nobody);
-    expect(seen.after).toEqual(nobody);
-    expect(seen.unsigned).toBe(DENIED);
-    expect(seen.borrowed).toEqual(nobody);
   });
 
   it("lets an owner add a branch and writes the audit row in the same transaction", async () => {

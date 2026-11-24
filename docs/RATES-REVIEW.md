@@ -213,6 +213,20 @@ seen and added to in the product under Payroll, Statutory rates.
 | Minimum wages | |
 | Social security, employer's share | |
 
+## Payroll runs (Step 41)
+
+No new rate. How a month's payroll applies the tables above is worked in
+[examples/step-41.md](examples/step-41.md); the choices are in [later/step-41.md](later/step-41.md).
+**Checked by Claude, not an accountant.** For the accountant:
+
+| Question | Accountant agrees |
+| --- | --- |
+| s.149: the year's tax on pay so far plus this month plus regular pay for the months left, less tax deducted, spread over the months left; commission counted once, in the month paid | |
+| Months of the tax year before payroll was run here taken as paid the present pay and taxed evenly | |
+| Tax over-deducted (a leaver) not refunded through payroll | |
+| EOBI charged for the whole of a month someone was employed for part of | |
+| The approval journal: fixed deductions against Salaries and wages; the employer's EOBI and social security to their own expense account; salary tax to Income tax withheld payable | |
+
 ## Sign-off
 
 | Date | Reviewed by | What was reviewed | Changes asked for |

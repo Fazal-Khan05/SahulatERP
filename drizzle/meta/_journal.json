@@ -267,6 +267,34 @@
       "when": 1795021439529,
       "tag": "0037_payroll_employees",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1795355759127,
+      "tag": "0038_cash_bank",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1795373673696,
+      "tag": "0039_sales_tax_return",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1795519486109,
+      "tag": "0040_payroll_runs",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1795520799259,
+      "tag": "0041_bank_reconciliation",
+      "breakpoints": true
     }
   ]
 }

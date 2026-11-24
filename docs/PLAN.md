@@ -162,8 +162,8 @@ Fifty-two steps in nine phases. Phases finish in order; steps inside a phase mos
 | 31 | Reports: stock valuation, stock movement, stock ageing, low stock, item profitability (margin) | Valuation equals the inventory control account | Done 2026-11-15 |
 | 32 | Receipts (bank, cash, cheque) allocated across invoices; cheque lifecycle received → deposited → cleared/bounced; bounce reverses allocation, AR and commission release in one transaction; cheques-in-hand register; bank charges on receipt | Bouncing a cheque restores the invoice balance and reverses the released commission | Done 2026-11-15 (the commission part comes with Step 38) |
 | 33 | Recovery: follow-ups, promise-to-pay with broken-promise list, customer statement print and email, aged receivables | Overdue list matches ageing report | Done 2026-11-15, except emailing the statement: no email service chosen yet (docs/later/step-33.md) |
-| 34 | Bank and cash accounts, transfers, expenses, petty cash; archive only at zero balance | Expense with provincial services tax withholding posts correctly | |
-| 35 | Bank statement import (CSV/Excel from HBL, Meezan, UBL formats; generic column mapper), matching rules, reconciliation screen, unreconcile | 90% of a sample statement auto-matches; reconciled balance equals ledger | |
+| 34 | Bank and cash accounts, transfers, expenses, petty cash; archive only at zero balance | Expense with provincial services tax withholding posts correctly | Done 2026-11-22 (cash and bank accounts, transfers, expenses with withholding, petty cash as a cash account) |
+| 35 | Bank statement import (CSV/Excel from HBL, Meezan, UBL formats; generic column mapper), matching rules, reconciliation screen, unreconcile | 90% of a sample statement auto-matches; reconciled balance equals ledger | Done 2026-11-24 (CSV and Excel .xlsx statements; HBL, Meezan and UBL read by their column names, to try on real files; matching, unmatching, the reconciliation; 9 of the sample's 10 lines match by themselves) |
 | 36 | Cash-flow statement; owner dashboard with date and branch filters | Cash-flow net equals change in bank and cash | Done 2026-11-18 (the cash-flow statement by the direct method, and the owner's figures on Home) |
 
 ### Phase 6: Commissions and payroll
@@ -174,7 +174,7 @@ Fifty-two steps in nine phases. Phases finish in order; steps inside a phase mos
 | 38 | Accrual on invoice, release on collection (partial), reversal on bounce/return, approval, payment, recovery from later pay; immutable movements | Port the old workflow tests; every movement sums to the accrual | Done 2026-11-15 |
 | 39 | Commission statements per salesperson (print/PDF), approval screen, manager override percentage | Statement equals movements for the period | Done 2026-11-15 |
 | 40 | Employees, pay components, attendance (CSV), statutory rate tables seeded (TY2027 slabs, EOBI on minimum wage by province, social security) with effective dates | Tax on a Rs 150,000/month salary matches the slab calculation by hand | Done 2026-11-18 (employees, pay, attendance and the statutory tables; payroll runs are Step 41's) |
-| 41 | Payroll runs draft → reviewed → approved → paid, cancel; commission settlement without double expensing; payslips PDF and email | Approving a run after a commission changed is refused | |
+| 41 | Payroll runs draft → reviewed → approved → paid, cancel; commission settlement without double expensing; payslips PDF and email | Approving a run after a commission changed is refused | Done 2026-11-22 (runs from draft to paid or cancelled, commission settled with the salary, payslips as PDF; emailing them waits for the email service) |
 | 42 | Salary bank-transfer file (per-bank layout, starts with one bank), s.149 annual statement export, loans/advances with instalments, final settlement | Bank file validates against the bank's sample | |
 
 ### Phase 7: FBR digital invoicing (module)
@@ -184,7 +184,7 @@ Fifty-two steps in nine phases. Phases finish in order; steps inside a phase mos
 | 43 | FBR settings: enable toggle, token (encrypted at rest), sandbox/production, seller details; PRAL client for `validateinvoicedata` and `postinvoicedata`; reference-data sync (provinces, UoM, HS codes, sale types, SRO schedules) into tables | Validate call succeeds against the sandbox with a seeded invoice | |
 | 44 | Submission pipeline: on invoice submit, enqueue job; store full payload and response; FBR invoice number on the document; failure states and retry; ambiguous-timeout rule (never blind resubmit; query first); offline flag with 24-hour re-upload job; credit/debit notes through the same path | Sandbox scenarios SN001–SN028 pass for the tenant's sector; a killed worker mid-submit does not double-submit | |
 | 45 | Print: FBR invoice number, DI logo, QR code on invoices with a number; invoice cannot be printed as a tax invoice without one when the module is on; ATL check via `statl` on customer save | QR decodes to the FBR number | |
-| 46 | Sales-tax return exports: Annex-A, B, C, C1, H1 as SQL views and Excel files in FBR layout | Annex-C total equals output tax in the ledger for the month | |
+| 46 | Sales-tax return exports: Annex-A, B, C, C1, H1 as SQL views and Excel files in FBR layout | Annex-C total equals output tax in the ledger for the month | Done 2026-11-24 |
 
 ### Phase 8: Operations and launch readiness
 

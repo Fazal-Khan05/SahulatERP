@@ -129,6 +129,9 @@ export const auditLog = pgTable(
     unique("audit_log_tenant_id_id_key").on(t.tenantId, t.id),
     index("audit_log_tenant_id_at_idx").on(t.tenantId, t.at.desc()),
     check("audit_log_actor_is_whole", sql`(${t.actorUserId} is null) = (${t.actorRole} is null)`),
+    // One shape for an action: lower-case words joined by full stops. A name that only looks
+    // like one the database writes itself (a space, a capital, another alphabet) is refused.
+    check("audit_log_action_format", sql`${t.action} ~ '^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$' and length(${t.action}) <= 80`),
   ],
 );
 

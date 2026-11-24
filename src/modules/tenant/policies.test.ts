@@ -327,6 +327,12 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
         // user and company only: the same signature does not carry anyone else in.
         seen.again = [await enter(ownerA, tenantA, soon, good), await enter(ownerB, tenantA, soon, good), await enter(ownerA, tenantB, soon, good), await enter(ownerA, tenantA, soon + 1, good)];
         seen.afterAgain = await who();
+        // The key taken out and put back in the same slot is another key to the database: what
+        // was believed is not, and the proof shown again is checked again (and is good again).
+        await tx`delete from app.identity_public_keys`;
+        seen.keyGone = [await who(), await enter(ownerA, tenantA, soon, good)];
+        await tx`insert into app.identity_public_keys (slot, modulus, bytes) values (1, ${mine.modulus}::numeric, ${mine.bytes})`;
+        seen.keyBack = [await who(), await enter(ownerA, tenantA, soon, good), await who()];
         await enter(ownerA, null, soon, signed(ownerA, null, soon));
         seen.keyNowhere = await who();
         // A second key in the other slot is accepted beside the first (how a key is changed).
@@ -349,12 +355,16 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
     expect(seen.nowhere).toEqual({ user: ownerA, tenant: null, role: null, companies: 1 });
     expect(seen.elsewhere).toEqual({ user: ownerA, tenant: null, role: null, companies: 1 });
     expect(seen.keyRefused).toEqual(Array(12).fill(DENIED));
-    // A refusal leaves the transaction as whoever it last proved it was: the move to company B above.
-    expect(seen.afterKeyRefusals).toEqual({ user: ownerA, tenant: null, role: null, companies: 1 });
+    // Whoever the transaction had proved it was, it proved with the secret, and the secret was
+    // then taken out: from that statement on it is nobody, though it never ended. (Found by the
+    // reviewer of the security clean-up: it used to go on being believed for as long as it stayed open.)
+    expect(seen.afterKeyRefusals).toEqual(nobody);
     expect(seen.keyEntered).toBeUndefined();
     expect(seen.keyOwner).toEqual({ user: ownerA, tenant: tenantA, role: "owner", companies: 1 });
     expect(seen.again).toEqual([undefined, DENIED, DENIED, DENIED]);
     expect(seen.afterAgain).toEqual({ user: ownerA, tenant: tenantA, role: "owner", companies: 1 });
+    expect(seen.keyGone).toEqual([nobody, DENIED]);
+    expect(seen.keyBack).toEqual([nobody, undefined, { user: ownerA, tenant: tenantA, role: "owner", companies: 1 }]);
     expect(seen.keyNowhere).toEqual({ user: ownerA, tenant: null, role: null, companies: 1 });
     expect(seen.both).toEqual([undefined, ownerB, undefined, ownerA]);
     // Neither key ever left that transaction.
@@ -512,25 +522,32 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
   // marked what it wrote down that way as not proven. Nothing not proven is believed now,
   // wherever it came from: a row left by a transaction that was open while the migration went
   // in, say. (The row is written here as the owner of the database; the app's role cannot.)
-  it("believes only what was proven", async () => {
+  it("believes only what was proven, against a key that is still installed", async () => {
     const direct = postgres(process.env.DATABASE_URL!, { max: 1 });
     try {
+      const [installed] = await admin<{ id: string }[]>`select id from app.identity_keys union all select id from app.identity_public_keys limit 1`;
       const seen = await direct.begin(async (tx) => {
         const [{ pid, xid }] = await tx<{ pid: number; xid: string }[]>`select pg_backend_pid() as pid, pg_current_xact_id()::text as xid`;
         const who = () => tx`select app.current_user_id() as "user", app.tenant_role() as role, (select count(*)::int from public.branches) as branches`.then((rows) => ({ ...rows[0] }));
-        const write = (proven: boolean) => admin`
-          insert into app.identity_sessions (pid, xid, user_id, tenant_id, proven) values (${pid}, ${xid}::xid8, ${ownerA}, ${tenantA}, ${proven})
-          on conflict (pid) do update set xid = excluded.xid, user_id = excluded.user_id, tenant_id = excluded.tenant_id, proven = excluded.proven, proof = null, proof_expires = null`;
-        await write(false);
+        const write = (proven: boolean, key: string | null) => admin`
+          insert into app.identity_sessions (pid, xid, user_id, tenant_id, proven, key_id) values (${pid}, ${xid}::xid8, ${ownerA}, ${tenantA}, ${proven}, ${key})
+          on conflict (pid) do update set xid = excluded.xid, user_id = excluded.user_id, tenant_id = excluded.tenant_id, proven = excluded.proven, key_id = excluded.key_id, proof = null, proof_expires = null`;
+        // Not proven; proven with no key named (a row from before the migration); proven against a key that is not installed.
+        await write(false, installed.id);
         const unproven = await who();
-        // The same row marked proven is believed, so it was the mark that decided.
-        await write(true);
+        await write(true, null);
+        const unnamed = await who();
+        await write(true, randomUUID());
+        const gone = await who();
+        // The same row, proven against a key that is installed, is believed: so those were what decided.
+        await write(true, installed.id);
         const proven = await who();
         // And a call with no proof is refused, whatever the row says.
         const unsigned = await tx.savepoint((sp) => sp`select app.enter(${ownerA}::uuid, ${tenantA}::uuid, 0, '')`).then(() => undefined, (error: { code?: string }) => error.code);
-        return { unproven, proven, unsigned };
+        return { unproven, unnamed, gone, proven, unsigned };
       });
-      expect(seen.unproven).toEqual({ user: null, role: null, branches: 0 });
+      const nobody = { user: null, role: null, branches: 0 };
+      expect([seen.unproven, seen.unnamed, seen.gone]).toEqual([nobody, nobody, nobody]);
       expect(seen.proven).toMatchObject({ user: ownerA, role: "owner" });
       expect(seen.unsigned).toBe(DENIED);
     } finally {

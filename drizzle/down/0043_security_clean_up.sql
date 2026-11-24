@@ -97,7 +97,9 @@ AS $function$
 DROP FUNCTION app.identity_signature_valid(numeric, integer, bytea, bytea);
 DROP FUNCTION app.identity_number(bytea);
 DROP TABLE app.identity_public_keys;
-ALTER TABLE app.identity_sessions DROP COLUMN proof, DROP COLUMN proof_expires;
+ALTER TABLE app.identity_sessions DROP COLUMN proof, DROP COLUMN proof_expires, DROP COLUMN key_id;
+ALTER TABLE app.identity_keys DROP CONSTRAINT identity_keys_id_key;
+ALTER TABLE app.identity_keys DROP COLUMN id;
 
 -- 3: the role's limits in this database.
 DO $$

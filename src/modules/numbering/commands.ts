@@ -1,10 +1,9 @@
 import "server-only";
 import { and, desc, eq, sql } from "drizzle-orm";
-import { audit, isUuid, withTenant, type Tx } from "@/db";
+import { audit, isUuid, withTenant } from "@/db";
 import { UserError, pgCode } from "@/lib/errors";
-import { isIsoDate } from "@/modules/currencies/rules";
 import { can, type TenantContext } from "@/modules/tenant/rules";
-import { firstYearProblem, fiscalYearLabel, monthlyPeriods, nextDay, periodName, periodRefusal, readFirstYear } from "./rules";
+import { firstYearProblem, fiscalYearLabel, monthlyPeriods, nextDay, periodName, readFirstYear } from "./rules";
 import { fiscalPeriods } from "./schema";
 
 /**

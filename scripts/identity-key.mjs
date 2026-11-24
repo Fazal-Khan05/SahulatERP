@@ -27,9 +27,9 @@
 //   3. retire-secret --yes                   (the database now accepts the key only)
 //   4. take IDENTITY_SIGNING_SECRET out of the deployed app's settings and out of .env.local
 //
-// Taking a key or a secret out also forgets every proof the database had already checked and
-// closes the app's open connections: a transaction that had said who it was with it would
-// otherwise go on being believed until it ended. The site's next request connects again.
+// Taking a key or a secret out ends, from the very next statement, whatever was believed by it:
+// every transaction remembers which key its proof was checked against, and the database asks
+// each time whether that key is still installed.
 //
 // Nothing here ever prints a secret or a private key. The database is the one named by
 // MIGRATION_DATABASE_URL.
@@ -95,23 +95,6 @@ function writeSetting(file, name, make) {
   }
   appendFileSync(file, `${before === "" || before.endsWith("\n") ? "" : "\n"}${name}=${make()}\n`, { mode: 0o600 });
   console.log(`A new ${name} was written to ${file}. It was not shown and is not in Git.`);
-}
-
-/**
- * After something was taken out: the proofs already checked are forgotten (inside the caller's
- * transaction), and the app's connections are closed once it has committed. Says what it could
- * not do, for a database whose owner may not close other roles' connections.
- */
-async function forgetProofs(tx) {
-  await tx`delete from app.identity_sessions`;
-}
-async function closeAppConnections(sql) {
-  try {
-    const closed = await sql`select count(*) filter (where pg_terminate_backend(pid))::int as n from pg_stat_activity where usename = 'app_runtime' and pid <> pg_backend_pid()`;
-    return `${closed[0].n} open connection${closed[0].n === 1 ? "" : "s"} of the app closed.`;
-  } catch {
-    return "The app's open connections could NOT be closed from here: a transaction already open may go on being believed until it ends. Restart the app, or close them in the database's dashboard.";
-  }
 }
 
 const sameSecret = (row, mine) => Buffer.compare(row.inner_key, mine.inner) === 0 && Buffer.compare(row.outer_key, mine.outer) === 0;
@@ -206,28 +189,18 @@ if (action === "generate") {
     await sql.end();
     fail(`Database ${name}: ${KEY_NAME} here does not match a public key in the database. Run install first; nothing was removed.`);
   }
-  const gone = await sql.begin(async (tx) => {
-    const rows = await tx`delete from app.identity_keys returning slot`;
-    if (rows.length > 0) await forgetProofs(tx);
-    return rows;
-  });
-  const closed = gone.length > 0 ? await closeAppConnections(sql) : "";
+  const gone = await sql`delete from app.identity_keys returning slot`;
   await sql.end();
-  console.log(gone.length === 0 ? `Database ${name}: no shared secret was installed.` : `Database ${name}: the shared secret is removed (${gone.length} slot${gone.length === 1 ? "" : "s"}). ${closed} From now on a new transaction is believed only with a proof signed with the private key. Take ${SECRET_NAME} out of the deployed app's settings and out of every .env.local.`);
+  console.log(gone.length === 0 ? `Database ${name}: no shared secret was installed.` : `Database ${name}: the shared secret is removed (${gone.length} slot${gone.length === 1 ? "" : "s"}). From this moment only a proof signed with the private key is believed, in transactions already open as well. Take ${SECRET_NAME} out of the deployed app's settings and out of every .env.local.`);
 } else if (action === "remove" || action === "remove-key") {
   const slot = Number(rest[0]);
   if (![1, 2].includes(slot) || !rest.includes("--yes")) fail(`Usage: npm run db:identity -- ${action} <1|2> --yes   (with nothing left installed, the database shows nothing to anyone)`);
   const { sql, name } = database();
-  const gone = await sql.begin(async (tx) => {
-    const rows = action === "remove" ? await tx`delete from app.identity_keys where slot = ${slot} returning slot` : await tx`delete from app.identity_public_keys where slot = ${slot} returning slot`;
-    if (rows.length > 0) await forgetProofs(tx);
-    return rows;
-  });
-  const closed = gone.length > 0 ? await closeAppConnections(sql) : "";
+  const gone = action === "remove" ? await sql`delete from app.identity_keys where slot = ${slot} returning slot` : await sql`delete from app.identity_public_keys where slot = ${slot} returning slot`;
   const [{ left }] = await sql`select (select count(*) from app.identity_keys)::int + (select count(*) from app.identity_public_keys)::int as left`;
   await sql.end();
   const what = action === "remove" ? "shared secret" : "public key";
-  console.log(gone.length === 0 ? `Database ${name}: slot ${slot} held no ${what}.` : `Database ${name}: ${what} removed from slot ${slot}. ${closed}${left === 0 ? " Nothing is left installed: this database now shows nothing to anyone." : ""}`);
+  console.log(gone.length === 0 ? `Database ${name}: slot ${slot} held no ${what}.` : `Database ${name}: ${what} removed from slot ${slot}. Nothing is believed by it any more, in transactions already open as well.${left === 0 ? " Nothing is left installed: this database now shows nothing to anyone." : ""}`);
 } else {
   fail("Usage: npm run db:identity -- status | generate-key [file] | generate [file] | install [--with-secret] | retire-secret --yes | remove <slot> --yes | remove-key <slot> --yes");
 }

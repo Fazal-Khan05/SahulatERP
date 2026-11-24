@@ -188,6 +188,8 @@ END $$;
 -- (npm run db:identity).
 CREATE TABLE app.identity_public_keys (
   slot smallint PRIMARY KEY CHECK (slot IN (1, 2)),
+  -- What a transaction believed by this key remembers it by (see app.identity_now, below).
+  id uuid NOT NULL DEFAULT gen_random_uuid() UNIQUE,
   modulus numeric NOT NULL,
   bytes integer NOT NULL CHECK (bytes IN (256, 384, 512)),
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -200,10 +202,22 @@ ALTER TABLE app.identity_public_keys ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE app.identity_public_keys FROM PUBLIC, app_runtime, anon, authenticated, service_role;
 --> statement-breakpoint
 
--- The proof last checked on each connection: the hash of its signature and when it runs out.
--- The same proof shown again on the same connection is not worked out again (the app shows one
--- proof for a minute, and checking a public-key signature takes about a millisecond).
-ALTER TABLE app.identity_sessions ADD COLUMN proof bytea, ADD COLUMN proof_expires bigint;
+-- Every key and every secret gets a name of its own that is never used again, and each
+-- transaction remembers which one its proof was checked against. So what was believed by a key
+-- stops being believed when the key is taken out, from the very next statement, without anyone
+-- having to find and close the transactions that were open (found by this migration's reviewer:
+-- a transaction that had said who it was with a secret went on being believed after the secret
+-- was retired, for as long as it stayed open). A slot filled again is a different key.
+ALTER TABLE app.identity_keys ADD COLUMN id uuid NOT NULL DEFAULT gen_random_uuid();
+--> statement-breakpoint
+ALTER TABLE app.identity_keys ADD CONSTRAINT identity_keys_id_key UNIQUE (id);
+--> statement-breakpoint
+
+-- The proof last checked on each connection: the hash of its signature, when it runs out, and
+-- the key it was checked against. The same proof shown again on the same connection is not
+-- worked out again (the app shows one proof for a minute, and checking a public-key signature
+-- takes about a millisecond). A row written before this migration names no key and is not believed.
+ALTER TABLE app.identity_sessions ADD COLUMN proof bytea, ADD COLUMN proof_expires bigint, ADD COLUMN key_id uuid;
 --> statement-breakpoint
 
 -- Bytes as a whole number, most significant first. For app.identity_signature_valid only.
@@ -290,7 +304,7 @@ DECLARE
   v_message bytea;
   v_given bytea;
   v_proof bytea;
-  v_valid boolean := false;
+  v_key uuid;
   k record;
 BEGIN
   IF p_user IS NULL THEN
@@ -314,49 +328,52 @@ BEGIN
   v_given := decode(p_signature, 'hex');
   v_proof := sha256(v_given);
   -- The proof this connection checked last, shown again for the same user and company: it was
-  -- valid then and has not run out. (Whoever shows it has it; a proof is good wherever it is shown.)
-  SELECT true INTO v_valid FROM app.identity_sessions s
+  -- valid then, has not run out, and the key it was checked against is still installed.
+  -- (Whoever shows it has it; a proof is good wherever it is shown.)
+  SELECT s.key_id INTO v_key FROM app.identity_sessions s
     WHERE s.pid = pg_backend_pid() AND s.proven AND s.user_id = p_user AND s.tenant_id IS NOT DISTINCT FROM p_tenant
-      AND s.proof_expires = p_expires AND s.proof = v_proof;
-  IF v_valid IS NOT TRUE THEN
-    v_valid := false;
+      AND s.proof_expires = p_expires AND s.proof = v_proof
+      AND (EXISTS (SELECT 1 FROM app.identity_keys i WHERE i.id = s.key_id) OR EXISTS (SELECT 1 FROM app.identity_public_keys i WHERE i.id = s.key_id));
+  IF v_key IS NULL THEN
     IF octet_length(v_given) = 32 THEN
       v_message := convert_to(format('sahulaterp-identity-v1|%s|%s|%s', p_user::text, coalesce(p_tenant::text, ''), p_expires::text), 'UTF8');
       -- Every key is tried and the two are compared by their hashes, so the time this takes says
       -- nothing about how much of a guessed signature was right.
-      FOR k IN SELECT inner_key, outer_key FROM app.identity_keys LOOP
+      FOR k IN SELECT id, inner_key, outer_key FROM app.identity_keys LOOP
         IF sha256(sha256(k.outer_key || sha256(k.inner_key || v_message))) = v_proof THEN
-          v_valid := true;
+          v_key := k.id;
         END IF;
       END LOOP;
     ELSE
       v_message := convert_to(format('sahulaterp-identity-v2|%s|%s|%s', p_user::text, coalesce(p_tenant::text, ''), p_expires::text), 'UTF8');
-      FOR k IN SELECT modulus, bytes FROM app.identity_public_keys LOOP
+      FOR k IN SELECT id, modulus, bytes FROM app.identity_public_keys LOOP
         IF app.identity_signature_valid(k.modulus, k.bytes, v_message, v_given) THEN
-          v_valid := true;
+          v_key := k.id;
         END IF;
       END LOOP;
     END IF;
   END IF;
-  IF NOT v_valid THEN
+  IF v_key IS NULL THEN
     RAISE EXCEPTION 'the proof of who is signed in is not valid' USING ERRCODE = 'insufficient_privilege';
   END IF;
-  INSERT INTO app.identity_sessions AS s (pid, xid, user_id, tenant_id, proven, proof, proof_expires)
-  VALUES (pg_backend_pid(), pg_current_xact_id(), p_user, p_tenant, true, v_proof, p_expires)
-  ON CONFLICT (pid) DO UPDATE SET xid = excluded.xid, user_id = excluded.user_id, tenant_id = excluded.tenant_id, proven = true, proof = excluded.proof, proof_expires = excluded.proof_expires;
+  INSERT INTO app.identity_sessions AS s (pid, xid, user_id, tenant_id, proven, proof, proof_expires, key_id)
+  VALUES (pg_backend_pid(), pg_current_xact_id(), p_user, p_tenant, true, v_proof, p_expires, v_key)
+  ON CONFLICT (pid) DO UPDATE SET xid = excluded.xid, user_id = excluded.user_id, tenant_id = excluded.tenant_id, proven = true, proof = excluded.proof, proof_expires = excluded.proof_expires, key_id = excluded.key_id;
   RETURN coalesce(p_tenant::text, '');
 END $$;
 --> statement-breakpoint
 
--- Who this transaction is: the row app.enter wrote for it, after checking a proof. Nothing else
--- is believed: not the two settings of before 0031, and not a row written before this migration
--- without a proof. Always one row; both columns null for nobody.
+-- Who this transaction is: the row app.enter wrote for it, after checking a proof, for as long
+-- as the key the proof was checked against is installed. Nothing else is believed: not the two
+-- settings of before 0031, not a row written before this migration, and not a row whose key has
+-- since been taken out. Always one row; both columns null for nobody.
 CREATE OR REPLACE FUNCTION app.identity_now() RETURNS TABLE (user_id uuid, tenant_id uuid)
   LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
   AS $$
     SELECT s.user_id, s.tenant_id
     FROM (SELECT 1) one
     LEFT JOIN app.identity_sessions s ON s.pid = pg_backend_pid() AND s.xid = pg_current_xact_id_if_assigned() AND s.proven
+      AND (EXISTS (SELECT 1 FROM app.identity_keys i WHERE i.id = s.key_id) OR EXISTS (SELECT 1 FROM app.identity_public_keys i WHERE i.id = s.key_id))
   $$;
 --> statement-breakpoint
 -- "Is a proof wanted?" has one answer now, so nothing asks.

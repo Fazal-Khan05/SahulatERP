@@ -100,9 +100,9 @@ are now refused one step earlier, on saying who they are, and say so.
 **What every working copy has to do**, because the tests run on databases that had no key:
 - A local database: `npm run db:local -- <name>` now installs what `.env.local` signs with, and
   says so. Run it once for each local database after this migration reaches it.
-- The second development project (the Finisher's): `npm run db:identity -- generate-key` (or
-  `generate`), then `npm run db:identity -- install`, **before** this migration is applied
-  there. After it, a database with nothing installed fails every database test.
+- The second development project (the Finisher's): a shared secret installed **before** this
+  migration is applied there (the commands are under "A database that does not have this
+  migration yet", below). After it, a database with nothing installed fails every database test.
 - The shared development database already has its key and is not affected.
 
 **The file that reverses this migration refuses to run on a database with no shared secret
@@ -177,6 +177,44 @@ signatures and against thirteen things that resemble one (another key, another h
 padding, a bit changed, zero, one, the modulus, the signature plus the modulus, too short, too
 long), and it was read by an independent reviewer. It only ever adds a second way in beside the
 first; if it were ever doubted, removing the public key (`remove-key`) turns it off.
+
+## If the site shows nothing after this migration
+
+`npm run db:identity -- remove <slot> --yes` used to mean "back to taking the app's word". It
+no longer does: with nothing installed, nobody is believed. **Never use it to back out.**
+
+1. Look first: `npm run db:identity -- status`, with the settings the site runs with. It says
+   what the database holds, and whether an app with these settings is believed.
+2. If the database holds nothing, or not what the site signs with: `npm run db:identity -- install`
+   with the site's `IDENTITY_SIGNING_SECRET` in `.env.local` puts it in, and the site works from
+   the next request. Nothing else needs touching.
+3. If the database holds the right thing and the site still shows nothing, the migration is at
+   fault. Back out in this order:
+   1. Put the previous deployment of the site back (Vercel, Promote the one before).
+   2. Run `drizzle/down/0044_security_clean_up.sql` as `postgres`, after showing it and getting a
+      yes: `psql "$MIGRATION_DATABASE_URL" -v ON_ERROR_STOP=1 -f drizzle/down/0044_security_clean_up.sql`.
+      It refuses unless a shared secret is installed (step 2), because what it puts back takes
+      anyone's word when there is none.
+   Either order keeps sign-in working, since both versions of the app sign with the shared
+   secret and both versions of the database check it. Only posting a manual journal fails
+   while the app and the database are of different versions.
+
+## A database that does not have this migration yet (the second development project)
+
+It must be given something to check a proof against before the migration reaches it. Before the
+migration a database can only check a shared secret, so, in the working copy whose `.env.local`
+points at it, with main merged in:
+
+```
+npm run db:identity -- status      # what the database holds, and what this working copy signs with
+npm run db:identity -- generate    # only if status says IDENTITY_SIGNING_SECRET is not set here
+npm run db:identity -- install     # puts the secret into the database
+npm run db:identity -- status      # must end: "An app started with these settings is believed by this database."
+npm run db:migrate                 # now the migration
+```
+
+A local database: `npm run db:local -- <name>` does the install; then `npm run db:migrate` for
+one that already existed.
 
 ## Decided without the founder (to confirm)
 

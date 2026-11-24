@@ -7,7 +7,7 @@ import { tenants } from "../tenant/schema";
 // the bank says against what the books say. A match ties statement lines to journal lines on the
 // same account whose amounts add up to the same: one to one, or several to one (a deposit of
 // many cheques). Everything here is written by the database's own functions
-// (drizzle/00xx_bank_reconciliation.sql); the app's role reads it.
+// (drizzle/0041_bank_reconciliation.sql); the app's role reads it.
 
 /** One file imported for one bank account. */
 export const bankStatements = pgTable(

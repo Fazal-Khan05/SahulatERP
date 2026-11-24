@@ -288,6 +288,13 @@
       "when": 1795519486109,
       "tag": "0040_payroll_runs",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1795520799259,
+      "tag": "0041_bank_reconciliation",
+      "breakpoints": true
     }
   ]
 }

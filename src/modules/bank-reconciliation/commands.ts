@@ -9,7 +9,7 @@ import { autoMatch, isLayout, readStatement, type ColumnNames, type Role } from 
 import { readStatementFile } from "./statement-file";
 
 // The commands behind the reconciliation screen (Step 35). Importing, matching, unmatching and
-// removing an import are the database's own acts (drizzle/00xx_bank_reconciliation.sql); the app
+// removing an import are the database's own acts (drizzle/0041_bank_reconciliation.sql); the app
 // reads the bank's file and finds what matches.
 
 function requireReconciler(ctx: TenantContext): void {

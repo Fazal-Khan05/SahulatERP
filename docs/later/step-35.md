@@ -1,8 +1,9 @@
 # Step 35: bank statements, matching and reconciliation
 
 Track C, built by the Finisher while the founder was away (2026-11-18). Migration
-`0033_bank_reconciliation` (four tables and the functions that import, match, unmatch and remove),
-built on Step 34 and renumbered at merge. Nothing here posts to the books.
+`0041_bank_reconciliation` (four tables and the functions that import, match, unmatch and remove),
+built on Step 34, renumbered at merge; the coordinator applies it to the shared database once
+merged. Nothing here posts to the books.
 
 ## What is built
 

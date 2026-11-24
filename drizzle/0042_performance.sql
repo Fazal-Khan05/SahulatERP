@@ -1,8 +1,26 @@
--- DRAFT of Step 50's migration, not yet numbered (it takes its number after Step 46's is in).
+-- Step 50: the performance pass. What a company of 100,000 invoices showed (docs/later/step-50.md).
 -- track: joint
 --
--- What the performance company (scripts/perf) showed. Nothing here changes what any function
--- answers; each is the same question asked in a way the indexes can serve.
+-- Three indexes (Drizzle's; the rest is hand-written), three functions of earlier steps written
+-- again to answer the same in a way the indexes can serve, and six new functions that read a
+-- whole company's rows for a list or a report. Nothing here changes what any of them answers,
+-- and no row is changed. Reverse with drizzle/down/0042_performance.sql.
+--
+-- Replaced, each answering as before (src/db/performance.test.ts and
+-- src/modules/commission-ledger/ledger.test.ts set each beside the question as it was):
+--   app.order_progress(uuid)                       of drizzle/0018_sales_invoices.sql
+--   app.customer_credit(uuid, uuid)                of drizzle/0018_sales_invoices.sql
+--   app.commission_month_sales(uuid, uuid, date)   of drizzle/0027_commission_ledger.sql
+--
+-- New, each refusing for itself whoever the tables' own policies refuse:
+--   app.orders_to_deliver(), app.open_order_quantities(uuid), app.item_profit(date, date, uuid),
+--   app.receivables_open_all(), app.ledger_totals(date, date, uuid, text[]),
+--   app.goods_received_not_billed()
+--
+-- Why functions: read through row-level security, the planner cannot tell how many rows a
+-- policy lets through, takes each table for a row or two, and loops where it should hash. A
+-- function that first checks who is asking and then reads as the tables' owner is planned with
+-- the tables' real sizes.
 
 -- ── indexes ─────────────────────────────────────────────────────────────────────────────────────
 -- Who sold a document's lines was found by reading every line share of the company.
@@ -455,4 +473,3 @@ END $$;
 REVOKE ALL ON FUNCTION app.goods_received_not_billed() FROM PUBLIC;
 --> statement-breakpoint
 GRANT EXECUTE ON FUNCTION app.goods_received_not_billed() TO app_runtime;
---> statement-breakpoint

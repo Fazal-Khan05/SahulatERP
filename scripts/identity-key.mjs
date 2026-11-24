@@ -29,7 +29,8 @@
 //
 // Taking a key or a secret out ends, from the very next statement, whatever was believed by it:
 // every transaction remembers which key its proof was checked against, and the database asks
-// each time whether that key is still installed.
+// each time whether that key is still installed. (A statement already running finishes, and a
+// cursor already open can still be read from; nothing new can be started.)
 //
 // Nothing here ever prints a secret or a private key. The database is the one named by
 // MIGRATION_DATABASE_URL.
@@ -196,7 +197,7 @@ if (action === "generate") {
   }
   const gone = await sql`delete from app.identity_keys returning slot`;
   await sql.end();
-  console.log(gone.length === 0 ? `Database ${name}: no shared secret was installed.` : `Database ${name}: the shared secret is removed (${gone.length} slot${gone.length === 1 ? "" : "s"}). From this moment only a proof signed with the private key is believed, in transactions already open as well. Take ${SECRET_NAME} out of the deployed app's settings and out of every .env.local.`);
+  console.log(gone.length === 0 ? `Database ${name}: no shared secret was installed.` : `Database ${name}: the shared secret is removed (${gone.length} slot${gone.length === 1 ? "" : "s"}). From now on only a proof signed with the private key is believed; a transaction already open is stopped at its next statement. Take ${SECRET_NAME} out of the deployed app's settings and out of every .env.local.`);
 } else if (action === "remove" || action === "remove-key") {
   const slot = Number(rest[0]);
   if (![1, 2].includes(slot) || !rest.includes("--yes")) fail(`Usage: npm run db:identity -- ${action} <1|2> --yes   (with nothing left installed, the database shows nothing to anyone)`);
@@ -205,7 +206,7 @@ if (action === "generate") {
   const [{ left }] = await sql`select (select count(*) from app.identity_keys)::int + (select count(*) from app.identity_public_keys)::int as left`;
   await sql.end();
   const what = action === "remove" ? "shared secret" : "public key";
-  console.log(gone.length === 0 ? `Database ${name}: slot ${slot} held no ${what}.` : `Database ${name}: ${what} removed from slot ${slot}. Nothing is believed by it any more, in transactions already open as well.${left === 0 ? " Nothing is left installed: this database now shows nothing to anyone." : ""}`);
+  console.log(gone.length === 0 ? `Database ${name}: slot ${slot} held no ${what}.` : `Database ${name}: ${what} removed from slot ${slot}. Nothing new is believed by it, and a transaction already open is stopped at its next statement.${left === 0 ? " Nothing is left installed: this database now shows nothing to anyone." : ""}`);
 } else {
   fail("Usage: npm run db:identity -- status | generate-key [file] | generate [file] | install [--with-secret] | retire-secret --yes | remove <slot> --yes | remove-key <slot> --yes");
 }

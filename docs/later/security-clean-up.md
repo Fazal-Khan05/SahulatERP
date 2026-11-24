@@ -140,8 +140,10 @@ shows nothing.
 2. Put the same `IDENTITY_SIGNING_KEY` in the site's settings on Vercel and redeploy. Check the
    site. `npm run db:identity -- status` says whether what a working copy signs with is believed.
 3. `npm run db:identity -- retire-secret --yes` removes the shared secret from the database. It
-   refuses unless the key of this working copy is already installed. From that moment nothing
-   is believed by the secret, in transactions already open as well: each transaction remembers
+   refuses unless the key of this working copy is already installed. From then on nothing new
+   is believed by the secret, and a transaction already open is stopped at its next statement
+   (a statement already running finishes; a cursor already open can still be read from): each
+   transaction remembers
    which key its proof was checked against, and the database asks every time whether that key
    is still installed. (Found by the reviewer, and then by trying it: a transaction that had
    said who it was with the secret went on being believed for as long as it was held open, and
@@ -215,6 +217,13 @@ first; if it were ever doubted, removing the public key (`remove-key`) turns it 
   putting a retired secret back; the key check failing (safely) in a session that had changed
   how it reads backslashes; no time limit on the migration's own wait for a lock; no time limit
   on a whole transaction.
+- The same reviewer looked twice more, at each round of changes, the last time at the final
+  text with real separate sessions: a key taken out while a transaction is open (four ways),
+  whether the stop can be turned on anyone else, the reversing file, and `install` in all
+  sixteen combinations of what a working copy has and what a database holds. Nothing broke.
+  Their closing judgement: nothing here should stop it going to the shared development database.
+- Not covered by a test: that the app's saying "read committed" outright gets it past a
+  connection left with another default (the reviewer tried it by hand, and it does).
 - Local database: migration rules, types, lint and the full test run pass; and the full test
   run passes again with the app signing by private key against a database holding only the
   public half.

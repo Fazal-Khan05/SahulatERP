@@ -637,11 +637,20 @@ describe.skipIf(!hasDb)("commission earned, released, taken back and paid", { ti
       select count(*)::int as n from public.commission_movements m join public.commission_accruals a on a.tenant_id = m.tenant_id and a.id = m.accrual_id
       where m.tenant_id = ${tenantA} and m.base <> 0 and date_trunc('month', m.movement_date) > date_trunc('month', a.invoice_date)`;
     expect(late.n).toBeGreaterThan(0);
-    // And a line's first movement is always on the invoice's own date, which the second part leans on.
+    // A line's first movement is always on the invoice's own date, which the second part leans
+    // on; and the database holds whoever writes one to it, the owner of the database included.
     const [apart] = await admin<{ n: number }[]>`
       select count(*)::int as n from public.commission_movements m join public.commission_accruals a on a.tenant_id = m.tenant_id and a.id = m.accrual_id
       where m.tenant_id in (${tenantA}, ${tenantT}) and m.type = 'accrued' and m.movement_date <> a.invoice_date`;
     expect(apart.n).toBe(0);
+    const [one] = await admin<{ id: string; invoice_date: string; created_by: string }[]>`select id, invoice_date::text, created_by from public.commission_accruals where tenant_id = ${tenantA} and kind = 'own' limit 1`;
+    const write = (date: string) =>
+      admin.begin(async (tx) => {
+        await tx`insert into public.commission_movements (tenant_id, accrual_id, type, amount, base, movement_date, source_type, source_id, created_by) values (${tenantA}, ${one.id}, 'accrued', 0, 0, ${date}::date, 'sales_invoice', ${one.id}, ${one.created_by})`;
+        throw Object.assign(new Error("undo"), { code: "written" });
+      }).catch((error: { code?: string }) => error.code);
+    const dayAfter = new Date(Date.parse(one.invoice_date) + 86_400_000).toISOString().slice(0, 10);
+    expect([await write(dayAfter), await write(one.invoice_date)]).toEqual(["SE316", "written"]);
   });
 
   it("is read by those it concerns and written by nobody but the database's own functions", async () => {

@@ -4,6 +4,8 @@
 -- of Step 50 calls the six, so put the earlier app back first, or its lists and reports fail.
 
 BEGIN;
+DROP TRIGGER commission_movements_first_on_invoice_date ON public.commission_movements;
+DROP FUNCTION app.check_commission_first_movement();
 DROP FUNCTION app.goods_received_not_billed();
 DROP FUNCTION app.ledger_totals(date, date, uuid, text[]);
 DROP FUNCTION app.receivables_open_all();

@@ -39,15 +39,26 @@ export const PERF_COMPANY = "Perf Distributors (Seed)";
 const FIRST_DAY = "2026-07-01";
 const WORKERS = 5; // the app's pool holds five connections
 
-/** A local database, or one the person running this has named as safe to fill. */
+/**
+ * A local database, or one the person running this has named as safe to fill: PERF_DATABASE_OK
+ * lists hosts, or Supabase project references, exactly as they stand in the address. An address
+ * that names its host a second time (?host=, which the driver would follow and this would not
+ * see) is refused outright.
+ */
 export function assertSafeDatabase(): void {
+  const named = (process.env.PERF_DATABASE_OK ?? "").split(",").map((part) => part.trim()).filter(Boolean);
   for (const name of ["DATABASE_URL", "MIGRATION_DATABASE_URL"] as const) {
     const url = process.env[name];
     if (!url) throw new Error(`${name} is not set.`);
-    const host = new URL(url).hostname;
-    const local = host === "127.0.0.1" || host === "localhost" || host === "::1";
-    const named = (process.env.PERF_DATABASE_OK ?? "").split(",").map((part) => part.trim()).filter(Boolean);
-    if (!local && !named.some((ok) => url.includes(ok))) {
+    const address = new URL(url);
+    if (["host", "hostaddr", "port"].some((key) => address.searchParams.has(key))) {
+      throw new Error(`${name} names its host or port a second time after the "?". The performance seed will not guess which database that is.`);
+    }
+    const host = address.hostname;
+    const local = host === "127.0.0.1" || host === "localhost" || host === "[::1]";
+    // A Supabase pooler's user is "role.project": the project is the part after the full stop.
+    const project = decodeURIComponent(address.username).split(".")[1] ?? "";
+    if (!local && !named.includes(host) && !(project !== "" && named.includes(project))) {
       throw new Error(`${name} is not a local database. The performance seed fills a database with 100,000 invoices: run it against one made by npm run db:local.`);
     }
   }

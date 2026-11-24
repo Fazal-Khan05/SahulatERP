@@ -2,8 +2,9 @@
 -- track: joint
 --
 -- Three indexes (Drizzle's; the rest is hand-written), three functions of earlier steps written
--- again to answer the same in a way the indexes can serve, and six new functions that read a
--- whole company's rows for a list or a report. Nothing here changes what any of them answers,
+-- again to answer the same in a way the indexes can serve, one trigger that holds a rule the
+-- third of them leans on, and six new functions that read a whole company's rows for a list or
+-- a report. Nothing here changes what any of them answers,
 -- and no row is changed. Reverse with drizzle/down/0042_performance.sql.
 --
 -- Replaced, each answering as before (src/db/performance.test.ts and
@@ -47,7 +48,8 @@ CREATE INDEX commission_movements_returns_idx ON public.commission_movements (te
 --   in the month on each (commission_movements_accrual_idx);
 --   what came back in the month (commission_movements_returns_idx) of a line of the seller's
 --   invoiced in another month. A line's first movement, 'accrued', is written once, with the
---   line, on the invoice's date (app.commission_after_document), so it is never one of these;
+--   line, on the invoice's date (app.commission_after_document), so it is never one of these:
+--   the trigger below this function holds every later writer to that;
 --   and a movement with no base, or none of it, adds nothing.
 CREATE OR REPLACE FUNCTION app.commission_month_sales(p_tenant uuid, p_user uuid, p_date date) RETURNS numeric
   LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
@@ -74,6 +76,31 @@ CREATE OR REPLACE FUNCTION app.commission_month_sales(p_tenant uuid, p_user uuid
           AND NOT (a.invoice_date >= month.first_day AND a.invoice_date < month.next_month)), 0),
       0)
   $$;
+--> statement-breakpoint
+-- A line's first movement is dated on its invoice's date. The sum above leans on it, and until
+-- now only the one function that writes such movements kept to it (found by this step's
+-- reviewer: a later writer, an import of old commission say, that dated one otherwise would have
+-- had it left out of the month with no error). Asked as each such movement is written.
+CREATE FUNCTION app.check_commission_first_movement() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+  AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.commission_accruals a
+    WHERE a.tenant_id = NEW.tenant_id AND a.id = NEW.accrual_id AND a.invoice_date = NEW.movement_date
+  ) THEN
+    RAISE EXCEPTION 'a commission is first written on the date of its invoice' USING ERRCODE = 'SE316';
+  END IF;
+  RETURN NEW;
+END $$;
+--> statement-breakpoint
+REVOKE ALL ON FUNCTION app.check_commission_first_movement() FROM PUBLIC;
+--> statement-breakpoint
+CREATE TRIGGER commission_movements_first_on_invoice_date
+  BEFORE INSERT ON public.commission_movements
+  FOR EACH ROW WHEN (NEW.type = 'accrued') EXECUTE FUNCTION app.check_commission_first_movement();
+--> statement-breakpoint
+ALTER TABLE public.commission_movements ENABLE ALWAYS TRIGGER commission_movements_first_on_invoice_date;
 --> statement-breakpoint
 
 -- ── how far an order has gone ───────────────────────────────────────────────────────────────────
@@ -423,6 +450,7 @@ END $$;
 REVOKE ALL ON FUNCTION app.ledger_totals(date, date, uuid, text[]) FROM PUBLIC;
 --> statement-breakpoint
 GRANT EXECUTE ON FUNCTION app.ledger_totals(date, date, uuid, text[]) TO app_runtime;
+--> statement-breakpoint
 
 -- ── goods received, not yet billed ──────────────────────────────────────────────────────────────
 -- The lines of posted goods received notes that supplier bills have not billed in full, with

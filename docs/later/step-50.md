@@ -67,6 +67,9 @@ questions could still be waited for; at 100,000 most of them would not have come
 
 **In the database** (the migration):
 
+- One rule the database now holds, which the third function below leans on and which until now
+  only its one writer kept: a commission line's first movement is dated on its invoice's date
+  (a trigger on `commission_movements`; found by this step's reviewer).
 - Three indexes: who sold a document's lines (`sales_line_salespeople (tenant_id, document_id)`),
   the stock move of a line (`stock_moves (tenant_id, source_line_id)`), and what came back in a
   month for commission (`commission_movements (tenant_id, movement_date)`, only movements that
@@ -87,15 +90,20 @@ numbers. Each of the six says in its own words who it answers, and its test asks
 kind of member and as another company.
 
 **In the app**: the lists and reports above call those functions; the commission list asks for
-its limit before reading. `vercel.json` now runs the site's functions in Mumbai (`bom1`), next
-to the database, instead of Washington: the founder's answer, "Yes, move to Mumbai."
+its limit before reading.
 
-### A difference on purpose
+### Two differences on purpose
 
-Low stock, for a warehouse manager only: an order that was invoiced straight from the order
-used to be counted as still to deliver, because a warehouse manager does not read invoices and
-so could not see that the goods had left. It now counts for them as it does for everyone:
-what has left has left.
+Both are in low stock ("what open orders still have to deliver"), and both for a member who
+reads an order but not the documents that delivered it. Such an order used to count for them
+as wholly still to deliver. It now counts for them as it does for everyone: what has left has
+left. Nothing new is told to them: the order's own page already shows what was delivered.
+
+- **A warehouse manager** does not read invoices, so an order invoiced straight from the order
+  looked undelivered.
+- **A salesperson who wrote an order that another salesperson leads** reads the order, but its
+  delivery note and invoice are filed under the lead. (Found by this step's reviewer; the test
+  has such an order.)
 
 ### Tried and not kept
 
@@ -188,16 +196,33 @@ gets older. None was changed, because none was over the bar.
 
 ## Decided without the founder (to confirm)
 
-- The size and shape of the invented company (above), and that it is built through the app's
-  own commands and never by writing rows.
+- The size and shape of the invented company (above), and that everything it trades is posted
+  through the app's own commands. Its frame (the company, its members, branches and warehouses)
+  is written as rows, as the tests do, because the app makes those through sign-in and invites.
 - That the seed and the timings run only on a local database, never the shared one.
 - The three functions replaced, and the six added, rather than SQL in the app.
-- The warehouse manager's low stock (above).
+- The two differences in low stock (above).
+- The three indexes are built in the ordinary way, which holds writes to their tables while
+  each is built: a moment on a database of today's size. On a large live database they would be
+  built without holding writes, outside a migration.
 - That nothing under the bar was changed, however it grows.
 
 ## Mumbai
 
-__MUMBAI__
+The site's functions ran in Washington (`iad1`) and the database is in Mumbai, so every question
+a page asks crossed two oceans. The founder's answer was "Yes, move to Mumbai": one line in
+`vercel.json`.
+
+It is **not in this step's pull request**. It is on its own in pull request #43, waiting for
+him, because it was to be checked signed in on a preview before merging, and that could only be
+half done without him:
+
+- Done: Vercel's own record of the deployments shows the preview with the line running in
+  `bom1` and production in `iad1`. The line does move the functions.
+- Not done: that a signed-in page works from there, and the page times before and after. Every
+  preview is behind Vercel's own sign-in; getting past it without him means creating a bypass
+  secret or a share link on the project, which changes a security setting. Nothing was created.
+  Pull request #43 says what to look at; it takes him two minutes.
 
 ## How to run it
 
@@ -210,6 +235,9 @@ DATABASE_URL=... MIGRATION_DATABASE_URL=... PERF_REPORT=report.md npm run perf:m
 A smaller company: `PERF_INVOICES=8000`. Four processes at once: `PERF_SHARDS=4` and
 `PERF_SHARD=0` to `3`, one command each. What was left out and why: the table
 `perf_seed.failures`.
+
+`npm run perf:reset` removes the company and its rows in `perf_seed`; the two small tables of
+that schema stay.
 
 ## Every list and report, on 100,475 invoices
 

@@ -417,4 +417,23 @@ describe.skipIf(!hasDb)("the performance pass answers as before", { timeout: 600
       expect(await read(who, sql`select * from app.goods_received_not_billed()`), who.email).toEqual([]);
     }
   });
+
+  it("low stock for a salesperson who wrote an order another salesperson leads: what has left has left", async () => {
+    // Found by this step's reviewer. The first salesperson writes an order for seven brake pads
+    // that the second leads; five are delivered and invoiced. The writer reads the order, not
+    // the delivery note or the invoice, and used to be told all seven were still to deliver.
+    const { id } = await saveSalesDraft(as.salesperson, null, {
+      kind: "order", date: TO, customerId: khan, warehouseId: mainStore,
+      lines: [{ itemId: (await read(as.owner, sql`select id::text from public.items where code = 'BR-1'`))[0].id as string, quantity: "7", unitId: "", unitPrice: "", discountPercent: "", description: "" }],
+      shares: [{ userId: secondSeller, percent: "100" }],
+    });
+    await submitSalesDocument(as.salesperson, id);
+    const [brake] = await read(as.owner, sql`select id::text from public.items where code = 'BR-1'`);
+    await bill(await deliver(id, TO, { [brake.id as string]: "5" }), TO);
+    const open = async (who: TenantContext) => (await read(who, sql`select q.open::text from app.open_order_quantities() q where q.item_id = ${brake.id}::uuid`))[0]?.open;
+    expect([await open(as.owner), await open(as.salesperson), await open(seller2), await open(as.warehouse_manager)]).toEqual(["2.0000", "2.0000", "2.0000", "2.0000"]);
+    // As it was asked before, through the policies: right for the owner, seven for the writer.
+    const before = async (who: TenantContext) => (await read(who, openQuantitiesBefore(tenantA, null))).find((row) => row.item_id === brake.id)?.open;
+    expect([await before(as.owner), await before(as.salesperson)]).toEqual(["2.0000", "7.0000"]);
+  });
 });

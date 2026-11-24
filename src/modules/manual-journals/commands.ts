@@ -6,7 +6,7 @@ import { AMOUNT_SCALE } from "@/lib/money";
 import { isIsoDate } from "@/modules/currencies/rules";
 import { postJournal, reverseJournal } from "@/modules/ledger/posting";
 import { checkJournalLines } from "@/modules/ledger/rules";
-import { takeDocumentNumber } from "@/modules/numbering/commands";
+import { takeJournalNumber } from "@/modules/numbering/commands";
 import { can, seesBranch, type TenantContext } from "@/modules/tenant/rules";
 import { branches } from "@/modules/tenant/schema";
 import { accountProblem, selectManualJournal, type ManualJournal } from "./queries";
@@ -129,7 +129,7 @@ export async function postManualJournal(ctx: TenantContext, id: unknown, loadedA
       const problem = await accountProblem(tx, ctx, draft);
       if (problem) throw new UserError(problem);
       // The number is taken here, at posting, so a draft that is thrown away leaves no gap.
-      const number = await takeDocumentNumber(tx, "JV", draft.date);
+      const number = await takeJournalNumber(tx, draft.date);
       const journalId = await postJournal(tx, { type: "manual_journal", id: journal.id, date: draft.date, documentNumber: number, memo: draft.memo, branchId: draft.branchId }, draft.lines);
       await tx
         .update(manualJournals)

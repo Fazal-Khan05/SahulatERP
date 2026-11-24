@@ -4,22 +4,24 @@ import { audit, isUuid, withTenant, type Tx } from "@/db";
 import { UserError, pgCode } from "@/lib/errors";
 import { isIsoDate } from "@/modules/currencies/rules";
 import { can, type TenantContext } from "@/modules/tenant/rules";
-import { firstYearProblem, fiscalYearLabel, isDocumentType, monthlyPeriods, nextDay, periodName, periodRefusal, readFirstYear, type DocumentType } from "./rules";
+import { firstYearProblem, fiscalYearLabel, monthlyPeriods, nextDay, periodName, periodRefusal, readFirstYear } from "./rules";
 import { fiscalPeriods } from "./schema";
 
 /**
- * Takes the next number for a document, such as SI-2627-00001. It must be called inside the
- * transaction that writes the document: the database holds the counter until that transaction
- * ends, so numbers are consecutive, and a document that fails gives its number back.
+ * Takes the next number for a manual journal, such as JV-2627-00001. It must be called inside
+ * the transaction that writes the journal: the database holds the counter until that transaction
+ * ends, so numbers are consecutive, and a journal that fails gives its number back.
  *
- * Nothing in the app computes a number; this asks the database function
- * app.next_document_number, which also refuses a date with no open fiscal period.
+ * This is the only number the app takes for itself; every other document is numbered by the
+ * database function that posts it. The database refuses to keep a number taken here unless a
+ * journal carries it when the transaction ends, so a number cannot be taken and thrown away
+ * (app.next_journal_number). It also refuses a date with no open fiscal period.
  */
-export async function takeDocumentNumber(tx: Tx, type: DocumentType, date: string): Promise<string> {
-  if (!isDocumentType(type) || !isIsoDate(date)) throw new UserError("A document needs a kind and a date before it can be numbered.");
+export async function takeJournalNumber(tx: Tx, date: string): Promise<string> {
+  if (!isIsoDate(date)) throw new UserError("A journal needs a date before it can be numbered.");
   try {
     // A savepoint, so a refusal here leaves the caller's transaction usable.
-    const rows = await tx.transaction((inner) => inner.execute<{ number: string }>(sql`select app.next_document_number(${type}, ${date}::date) as number`));
+    const rows = await tx.transaction((inner) => inner.execute<{ number: string }>(sql`select app.next_journal_number(${date}::date) as number`));
     return rows[0].number;
   } catch (error) {
     const refused = periodRefusal(pgCode(error), date);

@@ -5,7 +5,7 @@
 -- again to answer the same in a way the indexes can serve, one trigger that holds a rule the
 -- third of them leans on, and six new functions that read a whole company's rows for a list or
 -- a report. Nothing here changes what any of them answers,
--- and no row is changed. Reverse with drizzle/down/0042_performance.sql.
+-- and no row is changed. Reverse with drizzle/down/0043_performance.sql.
 --
 -- Replaced, each answering as before (src/db/performance.test.ts and
 -- src/modules/commission-ledger/ledger.test.ts set each beside the question as it was):

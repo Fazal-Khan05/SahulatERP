@@ -1,4 +1,4 @@
--- Reverses drizzle/0042_performance.sql. Never run automatically. Run it by hand, as postgres,
+-- Reverses drizzle/0043_performance.sql. Never run automatically. Run it by hand, as postgres,
 -- only after showing it to the founder and getting a yes. No row of any company changes: it
 -- puts three functions back as they were, and removes six functions and three indexes. The app
 -- of Step 50 calls the six, so put the earlier app back first, or its lists and reports fail.
@@ -114,6 +114,6 @@ AS $function$
 DROP INDEX public.sales_line_salespeople_tenant_document_idx;
 DROP INDEX public.stock_moves_tenant_source_line_idx;
 DROP INDEX public.commission_movements_returns_idx;
--- The row drizzle-kit wrote for 0042_performance (its "when" in drizzle/meta/_journal.json).
-DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1795528744258;
+-- The row drizzle-kit wrote for 0043_performance (its "when" in drizzle/meta/_journal.json).
+DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1795529777604;
 COMMIT;

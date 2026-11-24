@@ -184,7 +184,7 @@ Fifty-two steps in nine phases. Phases finish in order; steps inside a phase mos
 | 43 | FBR settings: enable toggle, token (encrypted at rest), sandbox/production, seller details; PRAL client for `validateinvoicedata` and `postinvoicedata`; reference-data sync (provinces, UoM, HS codes, sale types, SRO schedules) into tables | Validate call succeeds against the sandbox with a seeded invoice | |
 | 44 | Submission pipeline: on invoice submit, enqueue job; store full payload and response; FBR invoice number on the document; failure states and retry; ambiguous-timeout rule (never blind resubmit; query first); offline flag with 24-hour re-upload job; credit/debit notes through the same path | Sandbox scenarios SN001–SN028 pass for the tenant's sector; a killed worker mid-submit does not double-submit | |
 | 45 | Print: FBR invoice number, DI logo, QR code on invoices with a number; invoice cannot be printed as a tax invoice without one when the module is on; ATL check via `statl` on customer save | QR decodes to the FBR number | |
-| 46 | Sales-tax return exports: Annex-A, B, C, C1, H1 as SQL views and Excel files in FBR layout | Annex-C total equals output tax in the ledger for the month | |
+| 46 | Sales-tax return exports: Annex-A, B, C, C1, H1 as SQL views and Excel files in FBR layout | Annex-C total equals output tax in the ledger for the month | Done 2026-11-24 |
 
 ### Phase 8: Operations and launch readiness
 

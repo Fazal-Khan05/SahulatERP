@@ -1,4 +1,4 @@
--- Reverses drizzle/0034_payroll_extras.sql. Never run automatically. Run it by hand, as postgres,
+-- Reverses drizzle/0042_payroll_extras.sql. Never run automatically. Run it by hand, as postgres,
 -- only after showing it to the founder and getting a yes. It refuses to run once any loan to staff
 -- has been made: its journal cannot be removed. It DELETES every person's bank details, and the
 -- account Loans and advances to staff from every chart.
@@ -12,7 +12,7 @@ BEGIN
   END IF;
 END $$;
 
--- drizzle/0033_payroll_runs.sql's approval, as it was.
+-- drizzle/0040_payroll_runs.sql's approval, as it was.
 CREATE OR REPLACE FUNCTION app.approve_payroll_run(p_run uuid) RETURNS text
   LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
   AS $$
@@ -226,7 +226,7 @@ ALTER TABLE public.payslip_lines DROP CONSTRAINT payslip_lines_loan_fk, DROP CON
 ALTER TABLE public.payslips DROP CONSTRAINT payslips_loan_within_deductions, DROP COLUMN loan_recovery;
 ALTER TABLE public.payroll_runs DROP CONSTRAINT payroll_runs_loan_within_deductions, DROP COLUMN loan_recovery;
 DROP TABLE public.staff_loan_movements, public.staff_loans;
--- The row drizzle-kit wrote for 0034_payroll_extras (its "when" in drizzle/meta/_journal.json).
-DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1795009276787;
+-- The row drizzle-kit wrote for 0042_payroll_extras (its "when" in drizzle/meta/_journal.json).
+DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1795521570450;
 
 COMMIT;

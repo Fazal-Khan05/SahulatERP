@@ -10,7 +10,7 @@ import { readBankAccount, readLoan, readRepayment, type RawBankAccount, type Raw
 
 // Step 42's commands: a person's bank account (kept by those who keep payroll), and loans to staff
 // and their repayment in cash (the owner's or an accountant's, as money out and in; the
-// database's own acts, drizzle/0034_payroll_extras.sql).
+// database's own acts, drizzle/0042_payroll_extras.sql).
 
 function refusal(error: unknown, date: string): UserError | null {
   const code = pgCode(error);

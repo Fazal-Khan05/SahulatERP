@@ -42,7 +42,7 @@ export const permissions = {
   "payroll_run.pay": ["owner", "accountant"],
   // Step 42. Loans and advances to staff are money out and back in: paid and taken back in cash
   // by the owner or an accountant, as runs are paid. The functions in
-  // drizzle/0034_payroll_extras.sql name the same roles.
+  // drizzle/0042_payroll_extras.sql name the same roles.
   "staff_loan.manage": ["owner", "accountant"],
 } as const satisfies TrackPermissions;
 

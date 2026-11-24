@@ -345,7 +345,7 @@ INSERT INTO public.accounts (tenant_id, parent_id, code, name, type, is_group, i
 --> statement-breakpoint
 
 -- ── hand-written: approving a payroll run, with loans ───────────────────────────────────────────
--- drizzle/0033_payroll_runs.sql's approval, with one thing added: each instalment on a loan is
+-- drizzle/0040_payroll_runs.sql's approval, with one thing added: each instalment on a loan is
 -- taken off that loan (held, and never more than is owed on it), and the run's journal credits
 -- Loans and advances to staff with them instead of taking them off the salaries' cost.
 CREATE OR REPLACE FUNCTION app.approve_payroll_run(p_run uuid) RETURNS text

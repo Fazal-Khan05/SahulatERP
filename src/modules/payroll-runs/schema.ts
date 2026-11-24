@@ -173,7 +173,7 @@ export const payslipLines = pgTable(
     code: text().notNull(),
     label: text().notNull(),
     amount: numeric({ precision: 20, scale: 4 }).notNull(),
-    // The loan an instalment line takes back (Step 42; its key is in drizzle/0034_payroll_extras.sql).
+    // The loan an instalment line takes back (Step 42; its key is in drizzle/0042_payroll_extras.sql).
     loanId: uuid("loan_id"),
   },
   (t) => [

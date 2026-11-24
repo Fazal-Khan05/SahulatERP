@@ -9,7 +9,7 @@ import { tenants } from "../tenant/schema";
 // paid into. A loan is paid out of a cash or bank account (SL-2627-00001), comes back by an
 // instalment taken from each month's pay, and the rest in cash when they choose or when they
 // leave. Everything but the bank details is written by the database's own functions
-// (drizzle/0034_payroll_extras.sql).
+// (drizzle/0042_payroll_extras.sql).
 
 /** The bank account a person's salary is paid into. */
 export const employeeBankAccounts = pgTable(

@@ -1,8 +1,9 @@
 # Step 42: the salary bank file, the year's statement, loans to staff and final settlement
 
 Track C (payroll), built by the Finisher while the founder was away (2026-11-18). Migration
-`0034_payroll_extras` (three tables, a guard, two functions, one locked account, two kinds of
-number, and the run's approval taught to recover loans). Built on Step 41 and renumbered at merge.
+`0042_payroll_extras` (three tables, a guard, two functions, one locked account, two kinds of
+number, and the run's approval taught to recover loans). Built on Step 41, renumbered at merge;
+the coordinator applies it to the shared database once merged.
 
 ## What is built
 

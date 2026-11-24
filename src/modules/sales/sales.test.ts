@@ -426,9 +426,11 @@ describe.skipIf(!hasDb)("quotations and sales orders", () => {
           { isolationLevel: "repeatable read" },
         ),
       );
-    expect(await old((tx) => tx.update(salesDocuments).set(submitting).where(mine))).toBe("SE056");
-    expect(await old((tx) => tx.delete(salesLines).where(and(eq(salesLines.tenantId, tenantA), eq(salesLines.documentId, big.id))))).toBe("SE056");
-    expect(await old((tx) => tx.insert(salesDocuments).values(draft))).toBe("SE056");
+    // Since the security clean-up nobody is anybody in a transaction that keeps an old picture:
+    // it is refused when it says who it is, before it reaches the guards (SE056) behind that.
+    expect(await old((tx) => tx.update(salesDocuments).set(submitting).where(mine))).toBe("42501");
+    expect(await old((tx) => tx.delete(salesLines).where(and(eq(salesLines.tenantId, tenantA), eq(salesLines.documentId, big.id))))).toBe("42501");
+    expect(await old((tx) => tx.insert(salesDocuments).values(draft))).toBe("42501");
     expect((await getSalesDocument(as.salesperson, big.id))!.status).toBe("draft");
     await discardSalesDraft(as.salesperson, big.id);
 
@@ -502,6 +504,12 @@ describe.skipIf(!hasDb)("quotations and sales orders", () => {
     const fake = { tenantId: tenantA, actorUserId: userIds.salesperson, actorRole: "salesperson" as const, entity: "sales_document", entityId: done.id };
     for (const action of ["sales_order.credit_override", "sales_order.submit", "sales_quotation.cancel", "journal.post", "customer.credit_limit"]) {
       expect(await codeOf(() => withTenant(userIds.salesperson, tenantA, (tx) => tx.insert(auditLog).values({ ...fake, action }))), action).toBe("42501");
+    }
+    // Nor by a name that only looks like one of them. An action has one shape: lower-case words
+    // joined by full stops, and nothing else (a space, a capital, a line end, a letter of another
+    // alphabet, a mark that cannot be seen).
+    for (const action of ["journal.post ", " journal.post", "Journal.post", "journal.POST", "journal.post\n", "journal.p\u043Est", "journal.post\u200B", "journal..post", "journal.post.", ".journal.post", "journal", "journal post", `a.${"b".repeat(79)}`]) {
+      expect(await codeOf(() => withTenant(userIds.salesperson, tenantA, (tx) => tx.insert(auditLog).values({ ...fake, action }))), JSON.stringify(action)).toBe("23514");
     }
     await withTenant(userIds.salesperson, tenantA, (tx) => tx.insert(auditLog).values({ ...fake, action: "sales_order.note", at: new Date("2020-01-01T00:00:00Z") }));
     expect((await admin`select (at > now() - interval '1 minute') as fresh from public.audit_log where entity_id = ${done.id} and action = 'sales_order.note'`)[0].fresh).toBe(true);

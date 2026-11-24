@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { createHmac, createPublicKey, createVerify, generateKeyPairSync } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -12,14 +12,20 @@ const SECRET = "0f".repeat(32);
 const USER = "11111111-1111-4111-8111-111111111111";
 const TENANT = "22222222-2222-4222-8222-222222222222";
 const before = process.env.IDENTITY_SIGNING_SECRET;
+const beforeKey = process.env.IDENTITY_SIGNING_KEY;
+const newKey = (bits = 2048) => generateKeyPairSync("rsa", { modulusLength: bits, publicExponent: 65537 }).privateKey;
+const encoded = (key: ReturnType<typeof newKey>) => key.export({ format: "der", type: "pkcs8" }).toString("base64");
 
 afterEach(() => {
   if (before === undefined) delete process.env.IDENTITY_SIGNING_SECRET;
   else process.env.IDENTITY_SIGNING_SECRET = before;
+  if (beforeKey === undefined) delete process.env.IDENTITY_SIGNING_KEY;
+  else process.env.IDENTITY_SIGNING_KEY = beforeKey;
 });
 
 describe("the proof of who is signed in", () => {
   it("signs the user, the company and the time it is good until", () => {
+    delete process.env.IDENTITY_SIGNING_KEY;
     process.env.IDENTITY_SIGNING_SECRET = SECRET;
     const proof = identityProof(USER, TENANT, 1_800_000_000_000);
     expect(proof.expires).toBe(1_800_000_300);
@@ -29,6 +35,7 @@ describe("the proof of who is signed in", () => {
   });
 
   it("signs a different thing for another user, another company, no company and another time", () => {
+    delete process.env.IDENTITY_SIGNING_KEY;
     process.env.IDENTITY_SIGNING_SECRET = SECRET;
     const at = 1_800_000_000_000;
     const signatures = [
@@ -45,6 +52,7 @@ describe("the proof of who is signed in", () => {
 
   it("is empty without a secret, and refuses a secret of the wrong shape", () => {
     delete process.env.IDENTITY_SIGNING_SECRET;
+    delete process.env.IDENTITY_SIGNING_KEY;
     expect(identityProof(USER, TENANT)).toEqual({ expires: 0, signature: "" });
     for (const bad of ["short", "0F".repeat(32), "zz".repeat(32), SECRET + "00"]) {
       process.env.IDENTITY_SIGNING_SECRET = bad;
@@ -52,7 +60,51 @@ describe("the proof of who is signed in", () => {
     }
   });
 
+  it("signs with the private key when it has one, over a text of its own, and shows one proof for a minute", () => {
+    const key = newKey();
+    process.env.IDENTITY_SIGNING_SECRET = SECRET;
+    process.env.IDENTITY_SIGNING_KEY = encoded(key);
+    const at = 1_800_000_000_000;
+    const proof = identityProof(USER, TENANT, at);
+    expect(proof.expires).toBe(1_800_000_300);
+    // 256 bytes for a key of 2048 bits, in lower-case hexadecimal: how the database tells it from the secret's 32.
+    expect(proof.signature).toMatch(/^[0-9a-f]{512}$/);
+    expect(identityMessage(USER, TENANT, proof.expires, 2)).toBe(`sahulaterp-identity-v2|${USER}|${TENANT}|1800000300`);
+    const checks = (text: string) => createVerify("RSA-SHA256").update(text).verify(createPublicKey(key), Buffer.from(proof.signature, "hex"));
+    expect([checks(identityMessage(USER, TENANT, proof.expires, 2)), checks(identityMessage(USER, TENANT, proof.expires, 1)), checks(identityMessage(USER, null, proof.expires, 2))]).toEqual([true, false, false]);
+    // The same proof for the same user and company for a minute; a new one after, and for anyone else at once.
+    expect(identityProof(USER, TENANT, at + 59_000)).toBe(proof);
+    expect(identityProof(USER.toUpperCase(), TENANT.toUpperCase(), at + 1_000)).toBe(proof);
+    const later = identityProof(USER, TENANT, at + 61_000);
+    expect([later.expires, later.signature === proof.signature]).toEqual([1_800_000_361, false]);
+    expect(identityProof(USER, null, at + 1_000).signature).not.toBe(proof.signature);
+    expect(identityProof(TENANT, USER, at + 1_000).signature).not.toBe(proof.signature);
+    // A clock that went back does not bring back an old proof with a later end.
+    expect(identityProof(USER, TENANT, at - 5_000).expires).toBe(1_800_000_295);
+    // Another key signs afresh, at once.
+    process.env.IDENTITY_SIGNING_KEY = encoded(newKey());
+    expect(identityProof(USER, TENANT, at - 4_000).signature).not.toBe(identityProof(USER, TENANT, at - 5_000).signature);
+  });
+
+  it("refuses a key it cannot sign with, and says nothing of what it was", () => {
+    delete process.env.IDENTITY_SIGNING_SECRET;
+    const small = generateKeyPairSync("rsa", { modulusLength: 1024, publicExponent: 65537 }).privateKey;
+    const odd = generateKeyPairSync("rsa", { modulusLength: 2048, publicExponent: 3 }).privateKey;
+    const curve = generateKeyPairSync("ed25519").privateKey;
+    for (const bad of ["short", "not base64 !!".repeat(20), "A".repeat(400), encoded(small), encoded(odd), curve.export({ format: "der", type: "pkcs8" }).toString("base64").repeat(3)]) {
+      process.env.IDENTITY_SIGNING_KEY = bad;
+      let message = "";
+      try {
+        identityProof(USER, TENANT);
+      } catch (error) {
+        message = (error as Error).message;
+      }
+      expect(message, bad.slice(0, 12)).toBe("IDENTITY_SIGNING_KEY is not a key this app can sign with; make one with: npm run db:identity -- generate-key");
+    }
+  });
+
   it("keeps the signature out of the error when the database refuses it", async () => {
+    delete process.env.IDENTITY_SIGNING_KEY;
     process.env.IDENTITY_SIGNING_SECRET = SECRET;
     // Drizzle's error for a failed statement, as it comes: the parameters are in its message.
     let sent: unknown[] = [];

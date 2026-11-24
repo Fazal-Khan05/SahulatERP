@@ -53,8 +53,8 @@ async function codeOf(run: () => Promise<unknown>): Promise<string | undefined> 
 }
 
 /** Posts one manual-journal source in its own transaction, with its manual journal behind it, as the app would. */
-const post = (who: TenantContext, lines: JournalLineInput[], more: { id?: string; date?: string; branchId?: string | null; memo?: string; documentNumber?: string } = {}) =>
-  withTenant(who.userId, who.tenantId, (tx) => postBacked(tx, who, { id: more.id, date: more.date ?? D, branchId: more.branchId, memo: more.memo, documentNumber: more.documentNumber }, lines));
+const post = (who: TenantContext, lines: JournalLineInput[], more: { id?: string; date?: string; branchId?: string | null; memo?: string } = {}) =>
+  withTenant(who.userId, who.tenantId, (tx) => postBacked(tx, who, { id: more.id, date: more.date ?? D, branchId: more.branchId, memo: more.memo }, lines));
 const reverse = (who: TenantContext, journalId: string, date = D, memo?: string) => withTenant(who.userId, who.tenantId, (tx) => reverseBacked(tx, who, journalId, { date, memo }));
 /** Calls the database function directly, past the app's own checks. */
 const rawPost = (who: TenantContext, lines: unknown, sourceType = "manual_journal", date = D) =>
@@ -251,9 +251,11 @@ describe.skipIf(!hasDb)("the posting engine", () => {
   });
 
   it("never changes or removes a posted journal, whoever asks", async () => {
-    const id = await post(as.accountant, rent("40000"), { memo: "  November rent ", documentNumber: "JV-2627-00001" });
+    const id = await post(as.accountant, rent("40000"), { memo: "  November rent " });
     const stored = await getJournal(as.auditor, id);
-    expect(stored).toMatchObject({ date: D, sourceType: "manual_journal", memo: "November rent", documentNumber: "JV-2627-00001", branchId: null, reversesJournalId: null, reversedByJournalId: null });
+    expect(stored).toMatchObject({ date: D, sourceType: "manual_journal", memo: "November rent", branchId: null, reversesJournalId: null, reversedByJournalId: null });
+    // Numbered by the database as it was written: the next of the company's JV series.
+    expect(stored?.documentNumber).toMatch(/^JV-2627-\d{5}$/);
     expect(stored?.lines.map((l) => `${l.lineNo} ${l.accountCode} ${l.debit.toFixed(2)} ${l.credit.toFixed(2)} ${l.description ?? ""}`)).toEqual(["1 5230 40000.00 0.00 Shop rent", "2 1111 0.00 40000.00 "]);
 
     // The app has no way to write the ledger except the posting function.
@@ -308,7 +310,7 @@ describe.skipIf(!hasDb)("the posting engine", () => {
   });
 
   it("reverses a journal once, with every debit and credit swapped", async () => {
-    const id = await post(as.accountant, [{ accountId: account("5230"), debit: d("1250.5") }, { accountId: account("5810"), debit: d("49.5") }, { accountId: account("1111"), credit: d("1300") }], { branchId: cityBranch, documentNumber: "JV-2627-00009" });
+    const id = await post(as.accountant, [{ accountId: account("5230"), debit: d("1250.5") }, { accountId: account("5810"), debit: d("49.5") }, { accountId: account("1111"), credit: d("1300") }], { branchId: cityBranch });
     await expect(reverse(as.owner, id, "2026-11-12")).rejects.toThrow("A reversal is dated on or after the journal it reverses.");
     await expect(reverse(as.auditor, id)).rejects.toThrow("Your role cannot reverse this.");
     await expect(reverse(as.owner, randomUUID())).rejects.toThrow("That journal is not in this company.");
@@ -329,7 +331,9 @@ describe.skipIf(!hasDb)("the posting engine", () => {
     await expect(reverse(as.owner, id)).rejects.toThrow("That journal has already been reversed.");
     await expect(reverse(as.owner, reversalId)).rejects.toThrow("A reversal cannot be reversed. Post the journal again instead.");
     const [audited] = await admin`select actor_role, after from public.audit_log where tenant_id = ${tenantA} and action = 'journal.reverse' and entity_id = ${reversalId}`;
-    expect(audited.after).toEqual({ date: "2026-11-20", reverses: id, source: "manual_journal", reversesNumber: "JV-2627-00009", lines: 3, total: "1300.0000" });
+    const reversedNumber = (await getJournal(as.auditor, id))?.documentNumber;
+    expect(reversedNumber).toMatch(/^JV-2627-\d{5}$/);
+    expect(audited.after).toEqual({ date: "2026-11-20", reverses: id, source: "manual_journal", reversesNumber: reversedNumber, lines: 3, total: "1300.0000" });
   });
 
   it("refuses a date with no open period, and a locked one", async () => {
@@ -359,9 +363,22 @@ describe.skipIf(!hasDb)("the posting engine", () => {
     // Another company's account is not this company's, even by its real id.
     const theirs = (await listAccounts(otherOwner)).find((a) => a.code === "5230")!.id;
     await expect(post(as.owner, [{ accountId: theirs, debit: d("5") }, { accountId: account("1111"), credit: d("5") }])).rejects.toThrow("is not in this company");
-    // A document number names one journal.
-    await post(as.owner, rent("21"), { documentNumber: "JV-2627-00777" });
-    await expect(post(as.owner, rent("22"), { documentNumber: "JV-2627-00777" })).rejects.toThrow("This has already been posted.");
+    // A document number names one journal, and is never the caller's to choose: the next two
+    // journals take the next two numbers, and one that names its own number is refused. (An owner
+    // running SQL of their own could post under a number never taken, and stop the series there.)
+    const serial = (number: string | null | undefined) => Number(number?.split("-")[2]);
+    const first = (await getJournal(as.auditor, await post(as.owner, rent("20"))))?.documentNumber;
+    const next = (await getJournal(as.auditor, await post(as.owner, rent("21"))))?.documentNumber;
+    const after = (await getJournal(as.auditor, await post(as.owner, rent("22"))))?.documentNumber;
+    expect(first).toMatch(/^JV-2627-\d{5}$/);
+    expect([serial(next) - serial(first), serial(after) - serial(next)]).toEqual([1, 1]);
+    const lines = JSON.stringify([{ account_id: account("5230"), debit: "5" }, { account_id: account("1111"), credit: "5" }]);
+    for (const kind of ["manual_journal", "opening_balance"]) {
+      for (const named of ["JV-2627-00777", "JV-2627-00001", "SI-2627-00001", "x"]) {
+        const refused = await withTenant(as.owner.userId, tenantA, (tx) => tx.execute(sql`select app.post_journal(${D}::date, ${kind}, ${randomUUID()}::uuid, ${lines}::jsonb, 'x', null, ${named})`)).then(() => "posted", (error: { cause?: { code?: string; message?: string } }) => `${error.cause?.code} ${error.cause?.message}`);
+        expect(refused, `${kind} ${named}`).toBe("23514 a journal is numbered by the database, not by whoever posts it");
+      }
+    }
     // A line on receivables names its customer, whoever writes it.
     expect(
       await codeOf(() =>

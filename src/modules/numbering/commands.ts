@@ -1,32 +1,10 @@
 import "server-only";
 import { and, desc, eq, sql } from "drizzle-orm";
-import { audit, isUuid, withTenant, type Tx } from "@/db";
+import { audit, isUuid, withTenant } from "@/db";
 import { UserError, pgCode } from "@/lib/errors";
-import { isIsoDate } from "@/modules/currencies/rules";
 import { can, type TenantContext } from "@/modules/tenant/rules";
-import { firstYearProblem, fiscalYearLabel, isDocumentType, monthlyPeriods, nextDay, periodName, periodRefusal, readFirstYear, type DocumentType } from "./rules";
+import { firstYearProblem, fiscalYearLabel, monthlyPeriods, nextDay, periodName, readFirstYear } from "./rules";
 import { fiscalPeriods } from "./schema";
-
-/**
- * Takes the next number for a document, such as SI-2627-00001. It must be called inside the
- * transaction that writes the document: the database holds the counter until that transaction
- * ends, so numbers are consecutive, and a document that fails gives its number back.
- *
- * Nothing in the app computes a number; this asks the database function
- * app.next_document_number, which also refuses a date with no open fiscal period.
- */
-export async function takeDocumentNumber(tx: Tx, type: DocumentType, date: string): Promise<string> {
-  if (!isDocumentType(type) || !isIsoDate(date)) throw new UserError("A document needs a kind and a date before it can be numbered.");
-  try {
-    // A savepoint, so a refusal here leaves the caller's transaction usable.
-    const rows = await tx.transaction((inner) => inner.execute<{ number: string }>(sql`select app.next_document_number(${type}, ${date}::date) as number`));
-    return rows[0].number;
-  } catch (error) {
-    const refused = periodRefusal(pgCode(error), date);
-    if (refused) throw new UserError(refused);
-    throw error;
-  }
-}
 
 /**
  * Opens a fiscal year: twelve monthly periods. The company's first year starts in the month and

@@ -256,7 +256,7 @@ describe.skipIf(!hasDb)("delivery notes", () => {
     expect(await codeOf(() => getConnection().db.transaction(async (tx) => {
       await tx.execute(sql`select ${enterSql(userIds.salesperson, tenantA)}`);
       await tx.execute(sql`select * from app.post_delivery(${id}::uuid)`);
-    }, { isolationLevel: "repeatable read" }))).toBe("SE056");
+    }, { isolationLevel: "repeatable read" }))).toBe("42501"); // refused on saying who it is, since the security clean-up; the guard (SE056) is behind that
     // A line that is not a line of the order, or in another unit, never gets onto the note.
     expect(await codeOf(() => withTenant(userIds.salesperson, tenantA, (tx) => tx.execute(sql`insert into public.sales_lines (tenant_id, document_id, line_no, item_id, description, unit_id, quantity, base_quantity, unit_price, value, total, created_by)
       select ${tenantA}, ${id}, 9, ${helmet}, 'Extra', base_unit_id, 1, 1, 1000, 1000, 1000, ${userIds.salesperson} from public.items where id = ${helmet}`)))).toBe("SE052");

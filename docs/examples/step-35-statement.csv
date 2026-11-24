@@ -6,7 +6,7 @@ Transaction Date,Value Date,Transaction Details,Cheque No.,Debit,Credit,Balance
 01-Nov-2026,,Opening Balance,,,,0.00
 02-Nov-2026,02-Nov-2026,Cash deposit,,,"50,000.00","50,000.00"
 05-Nov-2026,05-Nov-2026,Clearing cheque,000412,"20,000.00",,"30,000.00"
-06-Nov-2026,06-Nov-2026,IBFT JV-2627-90003 Corner Shop,,,"15,000.00","45,000.00"
+06-Nov-2026,06-Nov-2026,IBFT JV-2627-00003 Corner Shop,,,"15,000.00","45,000.00"
 09-Nov-2026,09-Nov-2026,Online transfer received,,,"7,500.00","52,500.00"
 10-Nov-2026,10-Nov-2026,Standing instruction rent,,"30,000.00",,"22,500.00"
 13-Nov-2026,13-Nov-2026,IBFT received,,,"12,345.67","34,845.67"

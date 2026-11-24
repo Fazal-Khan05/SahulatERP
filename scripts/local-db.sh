@@ -11,8 +11,12 @@
 # The command starts the server if it is not running (it does not start by itself after the
 # computer restarts), makes the database if it is missing, and prints the two addresses to put
 # in front of a test command. The data is kept in ~/.sahulaterp-localdb, outside the project and
-# outside the temporary folders a restart empties. Nothing here holds real data or a secret:
-# the server listens on this computer only and asks for no password.
+# outside the temporary folders a restart empties. Nothing here holds real data. The server
+# listens on this computer only and asks for no password, so anything in it can be read by any
+# program running on this computer, whatever the permissions on .env.local. While a working copy
+# still signs with the shared secret, a copy of that secret sits in its local database, and it
+# is the same secret the shared development database accepts. A working copy that has
+# IDENTITY_SIGNING_KEY leaves only the key's public half here, which is no secret.
 set -eu
 
 NAME="${1:-}"
@@ -93,6 +97,18 @@ if ! exists "$NAME"; then
   echo "Made the database $NAME."
 fi
 
+# ── what this working copy signs with, installed in its database ────────────────────────────────
+# A database believes nobody without a proof of who is signed in (drizzle/0031_identity_proof.sql
+# and the security clean-up after it), so a database with nothing installed shows nothing and
+# every test against it fails. This puts in what .env.local signs with (the public half of
+# IDENTITY_SIGNING_KEY, or IDENTITY_SIGNING_SECRET); it says so and changes nothing when it is
+# already there. Run this command again after "npm run db:identity -- generate-key".
+if (cd "$ROOT" && MIGRATION_DATABASE_URL="postgres://postgres@127.0.0.1:$PORT/$NAME" node --env-file-if-exists=.env.local scripts/identity-key.mjs install >/dev/null 2>&1); then
+  echo "What .env.local signs with is installed in $NAME."
+else
+  echo "NOTHING TO SIGN WITH IS INSTALLED IN $NAME: it will show nothing, and tests against it will fail."
+  echo "  .env.local needs IDENTITY_SIGNING_KEY (npm run db:identity -- generate-key) or IDENTITY_SIGNING_SECRET; then run this command again."
+fi
 echo "Migrations in $NAME: $(sql -U postgres -d "$NAME" -Atc "select count(*) from drizzle.__drizzle_migrations")"
 echo
 echo "Put these in front of a test command (they win over .env.local for that command only):"

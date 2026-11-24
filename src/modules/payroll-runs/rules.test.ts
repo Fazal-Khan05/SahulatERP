@@ -168,6 +168,7 @@ describe("the worked example: November 2026", () => {
       tax: "6096.25",
       eobiEmployee: "407.00",
       deductions: "5000.00",
+      loanRecovery: "0.00",
       net: "388996.75",
       employerEobi: "2035.00",
       employerSocialSecurity: "4980.00",
@@ -251,5 +252,48 @@ describe("working a payslip out", () => {
     expect(why({ employee: person({ eobi: true }), rates: RATES.filter((r) => r.kind !== "eobi_wage") })).toMatch(/EOBI/);
     expect(why({ employee: person({ socialSecurity: true, province: "balochistan" }) })).toMatch(/social security/);
     expect(why({ employee: person({ joinedOn: "2026-12-01" }) })).toBe("was not employed in this month.");
+  });
+});
+
+describe("loans to staff (Step 42)", () => {
+  const loan = (id: string, instalment: number, owed: number) => ({ id, number: `SL-${id}`, instalment: d(instalment), owed: d(owed) });
+  const loanLines = (slip: ReturnType<typeof worked>) => slip.lines.filter((l) => l.code === "loan").map((l) => [l.label, money(l.amount), l.loanId]);
+
+  it("takes each loan's instalment, oldest first, or what is left on it if less, and credits it back to the loans", () => {
+    const slip = worked({ loans: [loan("1", 10000, 4000), loan("2", 5000, 50000)] });
+    expect(loanLines(slip)).toEqual([
+      ["Loan SL-1", "4000.00", "1"],
+      ["Loan SL-2", "5000.00", "2"],
+    ]);
+    expect([slip.loanRecovery, slip.deductions].map(money)).toEqual(["9000.00", "9000.00"]);
+    expect(money(slip.net)).toBe(money(slip.earnings.minus(slip.tax).minus(9000)));
+    // The whole pay is the salaries' cost; the instalments go back to the loans.
+    const journal = approvalJournal(runTotals([slip]));
+    expect(journal.filter((l) => l.account === "Salaries and wages" || l.account === "Loans and advances to staff").map((l) => [l.account, money(l.debit), money(l.credit)])).toEqual([
+      ["Salaries and wages", money(slip.earnings), "0.00"],
+      ["Loans and advances to staff", "0.00", "9000.00"],
+    ]);
+    const debits = journal.reduce((t, l) => t.plus(l.debit), d(0));
+    expect(money(debits)).toBe(money(journal.reduce((t, l) => t.plus(l.credit), d(0))));
+  });
+
+  it("takes an instalment only as far as the pay goes, after tax and fixed deductions", () => {
+    const slip = worked({ pay: pay([["basic", 100000], ["fixed_deduction", 2000]]), attendance: { daysWorked: d(0), unpaidDays: d(29) }, loans: [loan("1", 5000, 20000)] });
+    // One day of 100,000 in a 30-day month is 3,333.33: after the tax and the 2,000, the rest goes to the loan.
+    const taken = slip.earnings.minus(slip.tax).minus(2000);
+    expect(loanLines(slip)).toEqual([[`Loan SL-1, ${taken.toFixed(2)} of 5000.00`, taken.toFixed(2), "1"]]);
+    expect(money(slip.net)).toBe("0.00");
+  });
+
+  it("final settlement: in the month they leave, all that is owed is taken, as far as the pay goes", () => {
+    const slip = worked({ employee: person({ leftOn: "2026-11-15" }), loans: [loan("1", 5000, 30000), loan("2", 1000, 40000)] });
+    // Half of November's 100,000; the first loan is taken whole, the second as far as the rest goes.
+    expect(money(slip.earnings)).toBe("50000.00");
+    const rest = slip.earnings.minus(slip.tax).minus(30000);
+    expect(loanLines(slip)).toEqual([
+      ["Loan SL-1", "30000.00", "1"],
+      [`Loan SL-2, ${rest.toFixed(2)} of 40000.00`, rest.toFixed(2), "2"],
+    ]);
+    expect(money(slip.net)).toBe("0.00");
   });
 });

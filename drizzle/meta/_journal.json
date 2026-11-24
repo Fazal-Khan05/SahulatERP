@@ -295,6 +295,13 @@
       "when": 1795520799259,
       "tag": "0041_bank_reconciliation",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1795521570450,
+      "tag": "0042_payroll_extras",
+      "breakpoints": true
     }
   ]
 }

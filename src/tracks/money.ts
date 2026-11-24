@@ -40,6 +40,10 @@ export const permissions = {
   // The functions in drizzle/0040_payroll_runs.sql name the same roles.
   "payroll_run.approve": ["owner", "accountant"],
   "payroll_run.pay": ["owner", "accountant"],
+  // Step 42. Loans and advances to staff are money out and back in: paid and taken back in cash
+  // by the owner or an accountant, as runs are paid. The functions in
+  // drizzle/0042_payroll_extras.sql name the same roles.
+  "staff_loan.manage": ["owner", "accountant"],
 } as const satisfies TrackPermissions;
 
 /**
@@ -63,6 +67,8 @@ export const links = {
 export const controls = {
   // Step 41. What the employer pays on top of salaries: its EOBI and social security.
   payroll_statutory_expense: "Employer EOBI and social security",
+  // Step 42. What staff owe the company: loans and advances, taken back from pay.
+  staff_advances: "Loans and advances to staff",
 } as const satisfies Record<string, string>;
 
 /**
@@ -77,6 +83,9 @@ export const documents = {
   // Step 41: a month's payroll, numbered when approved, and the payment of its salaries.
   PR: "Payroll run",
   SP: "Salary payment",
+  // Step 42: a loan to staff, and what is repaid on it in cash.
+  SL: "Staff loan",
+  LR: "Staff loan repayment",
 } as const satisfies Record<string, string>;
 
 /** This track's reports, listed on the Reports page under headings of its own. */
@@ -104,6 +113,9 @@ export const reports: readonly ReportSection[] = [
       // Step 41. The accountant approves and pays runs from here.
       { label: "Payroll runs", href: "/payroll/runs", about: "Each month's payroll: what was paid, the tax and EOBI deducted, the commission carried, and its journal. Approve and pay here.", permission: "payroll.read", module: "payroll" },
       { label: "Payslips", href: "/payroll/payslips", about: "Each person's payslip for a month, to print or download as a PDF.", permission: "payroll.read", module: "payroll" },
+      // Step 42.
+      { label: "Loans and advances", href: "/payroll/loans", about: "What the company has lent its people, the instalment taken from each month's pay, and what is still owed.", permission: "payroll.read", module: "payroll" },
+      { label: "Salary statement", href: "/payroll/annual", about: "The year's pay and the income tax deducted from it for each person (s.149), to download.", permission: "payroll.read", module: "payroll" },
     ],
   },
 ];

@@ -98,6 +98,15 @@ function writeSetting(file, name, make) {
   console.log(`A new ${name} was written to ${file}. It was not shown and is not in Git.`);
 }
 
+/**
+ * Whether the database can check a proof against a public key yet: it can from the security
+ * clean-up's migration on. Before that it knows only the shared secret, and a database must be
+ * given one BEFORE that migration is applied to it (after it, nothing is believed without).
+ */
+async function checksPublicKeys(sql) {
+  return (await sql`select to_regclass('app.identity_public_keys') is not null as yes`)[0].yes;
+}
+
 const sameSecret = (row, mine) => Buffer.compare(row.inner_key, mine.inner) === 0 && Buffer.compare(row.outer_key, mine.outer) === 0;
 
 if (action === "generate") {
@@ -109,19 +118,23 @@ if (action === "generate") {
 } else if (action === "status") {
   const { sql, name } = database();
   const secrets = await sql`select slot, inner_key, outer_key from app.identity_keys order by slot`;
-  const keys = await sql`select slot, modulus::text as modulus, bytes from app.identity_public_keys order by slot`;
+  const modern = await checksPublicKeys(sql);
+  const keys = modern ? await sql`select slot, modulus::text as modulus, bytes from app.identity_public_keys order by slot` : [];
   await sql.end();
   const secret = secretFromEnv();
   const mine = keyFromEnv();
   console.log(`Database: ${name}`);
+  if (!modern) console.log("This database does not have the security clean-up's migration yet: it can check a shared secret only, and until one is installed it takes the app's word. Install a secret BEFORE applying that migration.");
   console.log(keys.length === 0 ? "No public key installed." : `Public key installed (slot ${keys.map((k) => k.slot).join(" and ")}): nothing secret about it.`);
   console.log(secrets.length === 0 ? "No shared secret installed." : `Shared secret installed (slot ${secrets.map((k) => k.slot).join(" and ")}): whoever can read every table of this database can read it.`);
-  if (keys.length === 0 && secrets.length === 0) console.log("With nothing installed, this database shows nothing to anyone. Run install.");
+  if (modern && keys.length === 0 && secrets.length === 0) console.log("With nothing installed, this database shows nothing to anyone. Run install.");
   if (mine) console.log(keys.some((k) => k.modulus === mine.modulus) ? `${KEY_NAME} here matches a public key in the database.` : `${KEY_NAME} here does NOT match any public key in the database.`);
   else console.log(`${KEY_NAME} is not set here.`);
   if (secret) console.log(secrets.some((k) => sameSecret(k, halves(secret))) ? `${SECRET_NAME} here matches a shared secret in the database.` : `${SECRET_NAME} here does NOT match any shared secret in the database.`);
   else console.log(`${SECRET_NAME} is not set here.`);
-  const works = (mine && keys.some((k) => k.modulus === mine.modulus)) || (!mine && secret && secrets.some((k) => sameSecret(k, halves(secret))));
+  const works = !modern
+    ? secrets.length === 0 || (!mine && secret && secrets.some((k) => sameSecret(k, halves(secret))))
+    : (mine && keys.some((k) => k.modulus === mine.modulus)) || (!mine && secret && secrets.some((k) => sameSecret(k, halves(secret))));
   console.log(works ? "An app started with these settings is believed by this database." : "An app started with these settings would be shown nothing by this database.");
 } else if (action === "install") {
   const secret = secretFromEnv();
@@ -129,7 +142,15 @@ if (action === "generate") {
   if (!secret && !mine) fail(`Neither ${KEY_NAME} nor ${SECRET_NAME} is set. Run "npm run db:identity -- generate-key" first.`);
   const { sql, name } = database();
   const freeSlot = (rows) => [1, 2].find((n) => !rows.some((k) => k.slot === n));
-  if (mine) {
+  const modern = await checksPublicKeys(sql);
+  if (mine && !modern) {
+    if (!secret) {
+      await sql.end();
+      fail(`Database ${name} does not have the security clean-up's migration yet, so it cannot check a public key. Give it a shared secret first (npm run db:identity -- generate, then install), apply the migration, and then install the key.`);
+    }
+    console.log(`Database ${name} cannot check a public key yet (it does not have the security clean-up's migration): the key was left out. Run install again after the migration.`);
+  }
+  if (mine && modern) {
     // The database must accept what Node signs with this key and refuse the same signature of
     // another text, or nothing the app signs would be accepted, or anything would.
     const probe = "sahulaterp-identity-v2|probe";
@@ -157,8 +178,8 @@ if (action === "generate") {
   // The secret is not put in (or put back, after it was retired) unless asked, where a key is
   // in play: in a working copy that has a key, or in a database that holds a public key and no
   // secret. A working copy whose .env.local still has the old line must not undo the retirement.
-  const keyOnly = secret && !rest.includes("--with-secret") && (await sql`select (select count(*) from app.identity_public_keys)::int as keys, (select count(*) from app.identity_keys)::int as secrets`).some((row) => row.keys > 0 && row.secrets === 0);
-  if (secret && mine && !rest.includes("--with-secret")) {
+  const keyOnly = modern && secret && !rest.includes("--with-secret") && (await sql`select (select count(*) from app.identity_public_keys)::int as keys, (select count(*) from app.identity_keys)::int as secrets`).some((row) => row.keys > 0 && row.secrets === 0);
+  if (secret && mine && modern && !rest.includes("--with-secret")) {
     console.log(`Database ${name}: ${SECRET_NAME} is also set here and was left out: the key is what this working copy signs with. (install --with-secret puts the secret in as well.)`);
   } else if (keyOnly) {
     await sql.end();

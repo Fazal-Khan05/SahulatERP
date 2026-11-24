@@ -120,6 +120,8 @@ export const commissionMovements = pgTable(
     unique("commission_movements_seq_key").on(t.seq),
     index("commission_movements_accrual_idx").on(t.tenantId, t.accrualId, t.seq),
     index("commission_movements_source_idx").on(t.tenantId, t.sourceType, t.sourceId),
+    // What came back in a month, for a seller's sales of the month (app.commission_month_sales).
+    index("commission_movements_returns_idx").on(t.tenantId, t.movementDate).where(sql`${t.type} <> 'accrued' and ${t.base} <> 0`),
     check("commission_movements_type_known", sql`${t.type} in ('accrued', 'entitlement_adjusted', 'released', 'release_reversed', 'paid', 'recovery_recorded')`),
     check("commission_movements_source_type_format", sql`${t.sourceType} ~ '^[a-z_]{2,40}$'`),
     // Goods coming back bring the amount and the month's sales down; everything else is above nothing.

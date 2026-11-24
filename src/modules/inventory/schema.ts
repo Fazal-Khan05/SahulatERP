@@ -55,6 +55,8 @@ export const stockMoves = pgTable(
     unique("stock_moves_reverses_key").on(t.tenantId, t.reversesMoveId),
     index("stock_moves_tenant_item_idx").on(t.tenantId, t.itemId, t.warehouseId, t.createdAt),
     index("stock_moves_tenant_source_idx").on(t.tenantId, t.sourceType, t.sourceId),
+    // What a line's goods cost, asked by the line they left stock for (Step 50).
+    index("stock_moves_tenant_source_line_idx").on(t.tenantId, t.sourceLineId).where(sql`${t.sourceLineId} is not null`),
     check("stock_moves_source_type_format", sql`${t.sourceType} ~ '^[a-z_]{2,40}$'`),
     // "Not a number" passes ">= 0"; the bounds refuse it. A move with no quantity changes only
     // what the goods held are worth: import charges spread over a shipment's goods (Step 28).

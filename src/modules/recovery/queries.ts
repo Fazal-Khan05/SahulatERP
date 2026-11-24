@@ -40,9 +40,9 @@ export async function listCustomerAgeing(ctx: TenantContext, today: string): Pro
     tx.execute<OpenRow>(sql`
       select c.id as customer_id, c.code, c.name, r.kind, r.id as item_id, r.number, r.document_date::text, r.due_date::text,
         r.total::text, r.settled::text, r.outstanding::text
-      from public.customers c cross join lateral app.receivables_open(c.id) r
-      where c.tenant_id = ${ctx.tenantId}
-      order by c.id, r.due_date`),
+      from app.receivables_open_all() r
+      join public.customers c on c.tenant_id = ${ctx.tenantId} and c.id = r.customer_id
+      order by c.id, r.due_date, r.document_date, r.number`),
   );
   const byCustomer = new Map<string, { customer: { customerId: string; code: string | null; name: string }; items: OpenItem[] }>();
   for (const row of rows) {

@@ -704,15 +704,10 @@ export async function getDeliveryRows(ctx: TenantContext, delivery: Pick<SalesDo
 export async function listOrdersToDeliver(ctx: TenantContext): Promise<{ id: string; number: string | null; date: string; customerName: string; lines: number }[]> {
   requireDocumentAccess(ctx);
   const rows = await withTenant(ctx.userId, ctx.tenantId, (tx) =>
+    // One pass over the company's order lines, in the database (drizzle: app.orders_to_deliver): asking how far
+    // each order has gone, one order at a time, took minutes once a company had a few thousand orders.
     tx.execute<{ id: string; number: string | null; date: string; customer_name: string; lines: number }>(sql`
-      select o.id, o.number, o.document_date::text as date, coalesce(o.buyer_name, '') as customer_name, count(*)::int as lines
-      from public.sales_documents o
-      join public.sales_lines l on l.tenant_id = o.tenant_id and l.document_id = o.id
-      where o.tenant_id = ${ctx.tenantId} and o.kind = 'order' and o.status = 'submitted'
-        and l.base_quantity > coalesce((select d.delivered_base from app.order_progress(o.id) d where d.line_id = l.id), 0)
-      group by o.id, o.number, o.document_date, o.buyer_name, o.created_at
-      order by o.document_date, o.created_at
-      limit 200`),
+      select id, number, document_date::text as date, customer_name, lines from app.orders_to_deliver()`),
   );
   return rows.map((row) => ({ id: row.id, number: row.number, date: row.date, customerName: row.customer_name, lines: row.lines }));
 }

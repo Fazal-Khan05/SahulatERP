@@ -11,6 +11,52 @@ CREATE INDEX sales_line_salespeople_tenant_document_idx ON public.sales_line_sal
 -- What an invoice's goods cost is asked by the line they left stock for.
 CREATE INDEX stock_moves_tenant_source_line_idx ON public.stock_moves (tenant_id, source_line_id) WHERE source_line_id IS NOT NULL;
 --> statement-breakpoint
+-- What came back in a month, for a seller's sales of the month (app.commission_month_sales below):
+-- the few movements that are not a line's first, and change what was sold.
+CREATE INDEX commission_movements_returns_idx ON public.commission_movements (tenant_id, movement_date) WHERE type <> 'accrued' AND base <> 0;
+--> statement-breakpoint
+
+-- ── what a salesperson has sold in a month ──────────────────────────────────────────────────────
+-- app.commission_month_sales of drizzle/0027_commission_ledger.sql, answering the same. It is
+-- asked for every line of every invoice as the invoice is posted, inside the turn the invoice
+-- takes for its number, and it read every commission movement of the company dated in the
+-- month: at 60,000 invoices that was a quarter of a second a line, and nobody else in the
+-- company could post until it was done.
+--
+-- The same sum in two parts, each by index. A movement dated in the month belongs to a line
+-- invoiced in the month or in another one:
+--   the seller's lines invoiced in the month (commission_accruals_user_idx), and what is dated
+--   in the month on each (commission_movements_accrual_idx);
+--   what came back in the month (commission_movements_returns_idx) of a line of the seller's
+--   invoiced in another month. A line's first movement, 'accrued', is written once, with the
+--   line, on the invoice's date (app.commission_after_document), so it is never one of these;
+--   and a movement with no base, or none of it, adds nothing.
+CREATE OR REPLACE FUNCTION app.commission_month_sales(p_tenant uuid, p_user uuid, p_date date) RETURNS numeric
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+  AS $$
+    -- Worked out without a time zone: the month is the calendar's, whatever the session is set to.
+    WITH month AS (
+      SELECT date_trunc('month', p_date::timestamp)::date AS first_day, (date_trunc('month', p_date::timestamp) + interval '1 month')::date AS next_month
+    )
+    SELECT greatest(
+      coalesce((
+        SELECT sum(m.base)
+        FROM month, public.commission_accruals a
+        JOIN public.commission_movements m ON m.tenant_id = a.tenant_id AND m.accrual_id = a.id
+        WHERE a.tenant_id = p_tenant AND a.user_id = p_user AND a.kind = 'own'
+          AND a.invoice_date >= month.first_day AND a.invoice_date < month.next_month
+          AND m.movement_date >= month.first_day AND m.movement_date < month.next_month), 0)
+      + coalesce((
+        SELECT sum(m.base)
+        FROM month, public.commission_movements m
+        JOIN public.commission_accruals a ON a.tenant_id = m.tenant_id AND a.id = m.accrual_id
+        WHERE m.tenant_id = p_tenant AND m.type <> 'accrued' AND m.base <> 0
+          AND m.movement_date >= month.first_day AND m.movement_date < month.next_month
+          AND a.user_id = p_user AND a.kind = 'own'
+          AND NOT (a.invoice_date >= month.first_day AND a.invoice_date < month.next_month)), 0),
+      0)
+  $$;
+--> statement-breakpoint
 
 -- ── how far an order has gone ───────────────────────────────────────────────────────────────────
 -- app.order_progress of drizzle/0018_sales_invoices.sql, answering the same. What was invoiced

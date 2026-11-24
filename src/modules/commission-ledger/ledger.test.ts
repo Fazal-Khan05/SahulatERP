@@ -615,6 +615,35 @@ describe.skipIf(!hasDb)("commission earned, released, taken back and paid", { ti
     await booksAgree();
   });
 
+  it("adds up a seller's month as the whole of the ledger does, for everyone and every month", async () => {
+    // Step 50 asks app.commission_month_sales in two parts that indexes can serve. This is the
+    // question as it was first written: every movement of the company dated in the month.
+    const rows = await admin<{ who: string; month: string; whole: string; asked: string }[]>`
+      select u.user_id::text as who, d.day::text as month,
+        (select greatest(coalesce(sum(m.base), 0), 0)
+           from public.commission_movements m
+           join public.commission_accruals a on a.tenant_id = m.tenant_id and a.id = m.accrual_id
+          where m.tenant_id = u.tenant_id and a.user_id = u.user_id and a.kind = 'own'
+            and m.movement_date >= d.day and m.movement_date < (d.day + interval '1 month')::date)::text as whole,
+        app.commission_month_sales(u.tenant_id, u.user_id, (d.day + 14))::text as asked
+      from (select distinct tenant_id, user_id from public.commission_accruals where tenant_id in (${tenantA}, ${tenantT})) u,
+           (values ('2026-08-01'::date), ('2026-09-01'), ('2026-10-01'), ('2026-11-01'), ('2026-12-01')) d(day)
+      order by 1, 2`;
+    expect(rows.length).toBeGreaterThan(30);
+    expect(rows.filter((row) => row.whole !== row.asked)).toEqual([]);
+    // There is something to tell apart: months with sales, and goods that came back in a later month than they were sold in.
+    expect(rows.filter((row) => Number(row.whole) > 0).length).toBeGreaterThan(8);
+    const [late] = await admin<{ n: number }[]>`
+      select count(*)::int as n from public.commission_movements m join public.commission_accruals a on a.tenant_id = m.tenant_id and a.id = m.accrual_id
+      where m.tenant_id = ${tenantA} and m.base <> 0 and date_trunc('month', m.movement_date) > date_trunc('month', a.invoice_date)`;
+    expect(late.n).toBeGreaterThan(0);
+    // And a line's first movement is always on the invoice's own date, which the second part leans on.
+    const [apart] = await admin<{ n: number }[]>`
+      select count(*)::int as n from public.commission_movements m join public.commission_accruals a on a.tenant_id = m.tenant_id and a.id = m.accrual_id
+      where m.tenant_id in (${tenantA}, ${tenantT}) and m.type = 'accrued' and m.movement_date <> a.invoice_date`;
+    expect(apart.n).toBe(0);
+  });
+
   it("is read by those it concerns and written by nobody but the database's own functions", async () => {
     const [mine] = await admin<{ id: string; invoice_id: string }[]>`select id, invoice_id from public.commission_accruals where tenant_id = ${tenantA} and user_id = ${people.hamza} order by invoice_date limit 1`;
     // The owner, an accountant and the auditor read everyone's; a salesperson and a manager their own; the rest nothing.

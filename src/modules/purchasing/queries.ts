@@ -4,6 +4,7 @@ import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { isUuid, withTenant, type Tx } from "@/db";
 import { UserError } from "@/lib/errors";
 import { itemUnits, items, units } from "@/modules/items/schema";
+import { notMarketSupplier } from "@/modules/market-purchases/market-supplier";
 import { suppliers } from "@/modules/parties/schema";
 import { can, type TenantContext } from "@/modules/tenant/rules";
 import { warehouses } from "@/modules/warehouses/schema";
@@ -297,7 +298,7 @@ export async function getOrderChoices(ctx: TenantContext): Promise<{ suppliers: 
   requireOrderAccess(ctx);
   return withTenant(ctx.userId, ctx.tenantId, async (tx) => {
     const [supplierRows, warehouseRows, itemRows, unitRows] = await Promise.all([
-      tx.select({ id: suppliers.id, name: suppliers.name, code: suppliers.code }).from(suppliers).where(and(eq(suppliers.tenantId, ctx.tenantId), isNull(suppliers.archivedAt))).orderBy(asc(sql`lower(${suppliers.name})`)).limit(1000),
+      tx.select({ id: suppliers.id, name: suppliers.name, code: suppliers.code }).from(suppliers).where(and(eq(suppliers.tenantId, ctx.tenantId), isNull(suppliers.archivedAt), notMarketSupplier)).orderBy(asc(sql`lower(${suppliers.name})`)).limit(1000),
       tx.select({ id: warehouses.id, name: warehouses.name }).from(warehouses).where(eq(warehouses.tenantId, ctx.tenantId)).orderBy(asc(warehouses.createdAt)),
       tx
         .select({ id: items.id, code: items.code, name: items.name, unitId: items.baseUnitId, unitCode: units.code })

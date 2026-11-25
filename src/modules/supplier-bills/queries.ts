@@ -312,7 +312,9 @@ export async function getBillChoices(ctx: TenantContext, on: string): Promise<Bi
     const [suppliers, branches, accounts, tables, withholdingOn] = await Promise.all([
       tx.execute<{ id: string; name: string; code: string | null; supplier_type: BillSupplier["type"]; registered: boolean }>(sql`
         select id, name, code, supplier_type, (registration_type = 'registered' and strn is not null) as registered
-        from suppliers where tenant_id = ${ctx.tenantId}::uuid and archived_at is null order by lower(name) limit 1000`),
+        from suppliers where tenant_id = ${ctx.tenantId}::uuid and archived_at is null
+          and not exists (select 1 from market_suppliers m where m.tenant_id = suppliers.tenant_id and m.supplier_id = suppliers.id)
+        order by lower(name) limit 1000`),
       tx.execute<{ id: string; name: string }>(sql`select id, name from branches where tenant_id = ${ctx.tenantId}::uuid order by created_at`),
       tx.execute<{ id: string; code: string; name: string }>(sql`
         select id, code, name from accounts

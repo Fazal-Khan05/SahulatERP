@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { ActionForm } from "@/components/action-form";
 import { signOutAction } from "@/lib/auth/actions";
-import { provedRecently, twoStepRequiredFor } from "@/lib/auth/rules";
+import { provedRecently, twoStepRequiredFor, twoStepRequiredOfCreator } from "@/lib/auth/rules";
 import { getSignedInAccount, hasAuthenticator } from "@/lib/auth/session";
 import { loadWorkspace } from "@/modules/tenant/queries";
 import { SetupForm } from "./setup-form";
@@ -27,7 +27,8 @@ async function Setup() {
   if (account.gate === "code") redirect("/two-step");
   if (account.level === "aal2" && (await hasAuthenticator())) redirect("/");
   const { memberships } = await loadWorkspace(account.id, null);
-  const required = account.canCreateCompany || memberships.some((m) => m.active && twoStepRequiredFor(m.role));
+  const required =
+    twoStepRequiredOfCreator(account.canCreateCompany) || memberships.some((m) => m.active && twoStepRequiredFor(m.role));
   return (
     <>
       <p className="text-sm text-muted-foreground">For {account.email}</p>

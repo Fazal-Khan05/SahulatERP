@@ -57,6 +57,19 @@ migration.
    spotted.
 6. No recovery codes; a lost phone goes through `npm run two-step:remove`.
 
+## Decided by the founder
+
+- 2026-11-25: **Two-step sign-in is switched off as a rule while the site only shows a demo.**
+  The site's setting `TWO_STEP_REQUIRED=off` (Vercel, Production and Preview) makes it everyone's
+  own choice: an owner or accountant is offered the setup after the password, as every other
+  member is, with "Not now", and can turn it on or off on Your account. Without the setting, or
+  with anything else in it, the rule above holds (`twoStepEnforced` in `src/lib/auth/rules.ts`).
+  Someone who already has an app is still asked its code. **Before a real company's books go in
+  (Step 52), take the setting away** (`vercel env rm TWO_STEP_REQUIRED production`, and preview)
+  and deploy again; owners and accountants are then sent to the setup at their next page.
+  `e2e/two-step-optional.spec.ts` is the switched-off site (run as its first lines say);
+  `e2e/two-step.spec.ts` is the rule.
+
 ## Things to know
 
 - **A session that has given a code is not asked of Supabase Auth again** on each page; only its

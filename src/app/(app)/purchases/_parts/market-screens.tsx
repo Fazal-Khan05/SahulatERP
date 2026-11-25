@@ -8,7 +8,7 @@ import { todayIso } from "@/lib/format";
 import { formatQuantity } from "@/modules/inventory/rules";
 import { ONLY_BUYERS } from "@/modules/market-purchases/commands";
 import { getMarketPurchase, getMarketPurchaseChoices } from "@/modules/market-purchases/queries";
-import { NO_TAX_ON_MARKET_PURCHASE, backToSales, marketPurchaseHref, shortages } from "@/modules/market-purchases/rules";
+import { NO_TAX_ON_MARKET_PURCHASE, WITHHOLDS_FROM_SUPPLIERS, backToSales, marketPurchaseHref, shortages } from "@/modules/market-purchases/rules";
 import { can } from "@/modules/tenant/rules";
 import { marketPurchaseAction } from "./market-actions";
 import { MarketPurchaseForm } from "./market-form";
@@ -70,6 +70,7 @@ export async function MarketPurchaseScreen({ searchParams }: { searchParams: Pro
         <MarketPurchaseForm
           action={marketPurchaseAction.bind(null, back)}
           suppliers={choices.withholds ? [] : choices.suppliers}
+          noListReason={choices.withholds ? WITHHOLDS_FROM_SUPPLIERS : choices.suppliers.length === 0 ? "There are no suppliers on your list yet." : undefined}
           warehouses={choices.warehouses}
           items={choices.items}
           accounts={choices.accounts}

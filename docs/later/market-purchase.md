@@ -215,6 +215,19 @@ app's role in each role and from another company, on a database of their own.
 - The same item on two lines was refused only when both left the unit empty; that rule is gone
   (an order may carry an item twice).
 
+**Second round**, on the changes: every finding above confirmed closed by running the first
+round's attacks again, and the new payment guard attacked (amount raised, allocations removed
+or rewritten around posting, an ordinary advance pointed at the market supplier, a cancelled
+payment posted again: all refused) without it refusing anything it should allow (the
+purchase's own payment, a bill paid again in full, two bills paid with one payment, an ordinary
+supplier's advance). Noted and left: after a cancellation a bill can be paid again in parts,
+so something can stay owed to the market seller until the last part is paid (decision 6
+accepts money owed after a cancellation; the guard stops only an advance); the withholding
+rule is the app's, so SQL written by hand as an owner could still make a listed-supplier
+purchase in a withholding company; the market supplier's type and province can be changed.
+The reviewer's closing line both times: nothing should stop the migration going to the shared
+development database.
+
 **Found and left, with the reason:** goods returned to a market seller (see Later: money back
 from a supplier); a key reused with other contents (decision 8); `?bought=` shows a real
 purchase of the company on any draft delivery, to someone who may read it anyway; the list of

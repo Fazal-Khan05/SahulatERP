@@ -33,7 +33,7 @@
 -- in its quantity, at the order's cost) with no tax on it and nothing withheld, and the posted
 -- payment that settles that bill in full; or the transaction is refused. What comes after
 -- follows the documents' own rules: goods that go back are a supplier return, and a payment
--- entered by mistake is cancelled and the bill paid again, in full and no more.
+-- entered by mistake is cancelled and the bill paid again, never for more than is owed on it.
 --
 -- Database error codes (the buying range, SE200 to SE299):
 --   SE267  the market seller is bought from only through a quick market purchase, paid at once,

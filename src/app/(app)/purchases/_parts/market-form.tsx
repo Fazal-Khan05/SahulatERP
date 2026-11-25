@@ -22,6 +22,8 @@ export type MarketFormProps = {
   initial: { date: string; warehouseId: string; lines: { itemCode: string; unitId: string; quantity: string; unitCost: string }[] };
   /** What a quick market purchase does not do about tax, said under the lines. */
   taxNote: string;
+  /** Why no supplier on the list can be chosen, when none can. */
+  noListReason?: string;
 };
 
 const SELECT = "h-8 w-full min-w-0 rounded-lg border border-input bg-card px-2 text-sm";
@@ -42,7 +44,7 @@ function lineAmount(row: Row): Decimal | null {
  * cash or bank account it was paid from. The server reads and checks everything again, and
  * records all of it or none.
  */
-export function MarketPurchaseForm({ action, suppliers, warehouses, items, accounts, initial, taxNote }: MarketFormProps) {
+export function MarketPurchaseForm({ action, suppliers, warehouses, items, accounts, initial, taxNote, noListReason }: MarketFormProps) {
   const { state, ready, busy, run } = useFormAction(action);
   // Made once for this form: the same purchase sent twice (a double click, a retry) is recorded once.
   const [clientKey] = useState(() => crypto.randomUUID());
@@ -115,6 +117,11 @@ export function MarketPurchaseForm({ action, suppliers, warehouses, items, accou
             <input type="radio" name="sellerKind" value="supplier" checked={sellerKind === "supplier"} onChange={() => setSellerKind("supplier")} disabled={suppliers.length === 0} />A supplier on your list
           </label>
         </div>
+        {suppliers.length === 0 && noListReason ? (
+          <p className="text-sm text-muted-foreground" data-testid="no-list-reason">
+            {noListReason}
+          </p>
+        ) : null}
         <div className="grid max-w-3xl gap-4 sm:grid-cols-3">
           {sellerKind === "market" ? (
             <>

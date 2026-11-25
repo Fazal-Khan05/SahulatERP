@@ -9,12 +9,14 @@ import { todayIso } from "@/lib/format";
 import { formatAmount } from "@/lib/money";
 import { formatIsoDate } from "@/modules/currencies/rules";
 import { formatQuantity } from "@/modules/inventory/rules";
+import { getMarketPurchaseOfBill } from "@/modules/market-purchases/queries";
 import { getBill, getBillChoices, getPurchaseSettings, listBills, listReceiptLinesToBill, type BillChoices, type BillLine } from "@/modules/supplier-bills/queries";
 import { BILL_STATUS_LABELS, stillToBill, suggestedIncomeTaxCode, type ReceiptLineToBill, type Withheld } from "@/modules/supplier-bills/rules";
 import { WITHHOLDING_KIND_LABELS, formatPercent } from "@/modules/tax/rules";
 import { can } from "@/modules/tenant/rules";
 import { discardBillAction, saveBillAction, setWithholdingAction } from "./bill-actions";
 import { BillForm } from "./bill-form";
+import { MarketPurchaseButton, MarketPurchaseNote } from "./market-note";
 import { ChallanCards } from "./payment-screens";
 import { Back, Pill, Refused, Sections } from "./screens";
 
@@ -35,10 +37,11 @@ export async function BillsScreen() {
       <PageHead title="Supplier bills" sub="What suppliers have billed, for goods received or for services. A posted bill is what is owed to the supplier." />
       <Sections session={session} current="/purchases/bills" />
       {can(session.role, "supplier_bill.manage") ? (
-        <p className="mb-4">
+        <p className="mb-4 flex flex-wrap gap-2">
           <Link href="/purchases/bills/new" className={buttonVariants()}>
             New supplier bill
           </Link>
+          <MarketPurchaseButton role={session.role} />
         </p>
       ) : null}
       <Card className="max-w-5xl">
@@ -283,10 +286,12 @@ export async function BillScreen({ params, searchParams }: { params: Promise<{ i
     );
   }
 
+  const market = await getMarketPurchaseOfBill(session, bill.id);
   return (
     <>
       {back}
       <PageHead title={bill.number ?? `Draft bill from ${bill.supplierName}`} sub={bill.note ?? undefined} />
+      <MarketPurchaseNote purchase={market} on="bill" />
       <div className="flex max-w-5xl flex-col gap-5">
         <Card>
           <dl className="mb-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">

@@ -39,7 +39,7 @@ const isNew = (id: unknown) => id === null || id === undefined || id === "";
 const dmy = (date: string) => date.split("-").reverse().join("-");
 
 /** What to tell someone whose purchase document the database refused, or null for anything unexpected. */
-function purchaseRefusal(error: unknown, date: string, what: string): UserError | null {
+export function purchaseRefusal(error: unknown, date: string, what: string): UserError | null {
   const code = pgCode(error);
   const closed = periodRefusal(code, date);
   if (closed) return new UserError(closed);
@@ -52,6 +52,7 @@ function purchaseRefusal(error: unknown, date: string, what: string): UserError 
   if (code === "SE218") return new UserError("Goods have been received against this order, or a goods received note is waiting as a draft, so it cannot be cancelled. Throw the draft away first; an order with goods received stays.");
   if (code === "SE220") return new UserError("That date has not come yet.");
   if (code === "SE221") return new UserError("The supplier is archived. Restore the supplier before submitting the order.");
+  if (code === "SE267") return new UserError("The market seller stands for sellers who are not on your list, and is bought from only with Purchases, Quick market purchase, which pays at once. Choose another supplier, or throw this draft away.");
   if (code === "SE222") return new UserError("An item on this order is no longer bought in the unit the order names: the item's units were changed after the order was written. Open the draft, check the line and save it again, then submit it.");
   if (code === "40P01") return new UserError("Someone else was working on the same order at that moment. Nothing was changed; try again.");
   if (code === "23505") return new UserError("A goods received note for this order is already waiting as a draft. Open that one.");
@@ -116,80 +117,83 @@ export async function saveOrderDraft(ctx: TenantContext, id: unknown, raw: RawOr
   if (!read.ok) throw new UserError(read.reason);
   const draft = read.order;
   try {
-    return await withTenant(ctx.userId, ctx.tenantId, async (tx) => {
-      if (!isUuid(draft.supplierId)) throw new UserError("Choose the supplier from the list.");
-      const [supplier] = await tx.select({ name: suppliers.name, archivedAt: suppliers.archivedAt }).from(suppliers).where(and(eq(suppliers.tenantId, ctx.tenantId), eq(suppliers.id, draft.supplierId)));
-      if (!supplier) throw new UserError("Choose the supplier from the list.");
-      if (supplier.archivedAt) throw new UserError(`${supplier.name} is archived. Restore the supplier before ordering from them.`);
-      if (!isUuid(draft.warehouseId)) throw new UserError("Choose the warehouse from your own warehouses.");
-      const [warehouse] = await tx.select({ name: warehouses.name }).from(warehouses).where(and(eq(warehouses.tenantId, ctx.tenantId), eq(warehouses.id, draft.warehouseId)));
-      if (!warehouse) throw new UserError("Choose the warehouse from your own warehouses.");
-      const { lines, codes } = await costOrder(tx, ctx, draft);
-      const total = orderTotal(lines);
-      const values = {
-        orderDate: draft.date,
-        supplierId: draft.supplierId,
-        warehouseId: draft.warehouseId,
-        expectedOn: draft.expectedOn,
-        supplierReference: draft.supplierReference,
-        note: draft.note,
-        total: total.toFixed(2),
-        updatedBy: ctx.userId,
-      };
-      let saved: { id: string; updatedAt: Date };
-      let before: unknown = null;
-      if (isNew(id)) {
-        [saved] = await tx
-          .insert(purchaseOrders)
-          .values({ tenantId: ctx.tenantId, createdBy: ctx.userId, ...values })
-          .returning({ id: purchaseOrders.id, updatedAt: purchaseOrders.updatedAt });
-      } else {
-        const stored = await lockOrder(tx, ctx, id, loadedAt);
-        if (stored.status !== "draft") throw new UserError("This order is submitted and cannot be changed. Cancel it and write a new one.");
-        before = describeStored(stored);
-        await tx.delete(purchaseOrderLines).where(and(eq(purchaseOrderLines.tenantId, ctx.tenantId), eq(purchaseOrderLines.orderId, stored.id)));
-        [saved] = await tx
-          .update(purchaseOrders)
-          .set({ ...values, updatedAt: sql`now()` })
-          .where(and(eq(purchaseOrders.tenantId, ctx.tenantId), eq(purchaseOrders.id, stored.id)))
-          .returning({ id: purchaseOrders.id, updatedAt: purchaseOrders.updatedAt });
-      }
-      if (lines.length > 0) {
-        await tx.insert(purchaseOrderLines).values(
-          lines.map((line, index) => ({
-            tenantId: ctx.tenantId,
-            orderId: saved.id,
-            lineNo: index + 1,
-            itemId: line.itemId,
-            description: line.description,
-            unitId: line.unitId,
-            unitFactor: line.unitFactor.toFixed(FACTOR_SCALE),
-            quantity: line.quantity.toFixed(QUANTITY_SCALE),
-            baseQuantity: line.baseQuantity.toFixed(QUANTITY_SCALE),
-            unitCost: line.unitCost.toFixed(UNIT_COST_SCALE),
-            amount: line.amount.toFixed(2),
-            createdBy: ctx.userId,
-          })),
-        );
-      }
-      await audit(tx, ctx, {
-        action: before === null ? "purchase_order.create" : "purchase_order.update",
-        entity: "purchase_order",
-        entityId: saved.id,
-        before,
-        after: describeOrder(
-          draft,
-          supplier.name,
-          warehouse.name,
-          lines.map((line, index) => ({ code: codes[index], quantity: line.quantity.toFixed(), unitCost: line.unitCost.toFixed() })),
-          total.toFixed(2),
-        ),
-      });
-      return saved;
-    });
+    return await withTenant(ctx.userId, ctx.tenantId, (tx) => saveOrderDraftIn(tx, ctx, id, draft, loadedAt));
   } catch (error) {
     throw purchaseRefusal(error, draft.date, "purchase order") ?? error;
   }
+}
+
+/** The same, inside a transaction the caller holds: a quick market purchase writes its order with it. */
+export async function saveOrderDraftIn(tx: Tx, ctx: TenantContext, id: unknown, draft: OrderDraft, loadedAt?: unknown): Promise<{ id: string; updatedAt: Date }> {
+  if (!isUuid(draft.supplierId)) throw new UserError("Choose the supplier from the list.");
+  const [supplier] = await tx.select({ name: suppliers.name, archivedAt: suppliers.archivedAt }).from(suppliers).where(and(eq(suppliers.tenantId, ctx.tenantId), eq(suppliers.id, draft.supplierId)));
+  if (!supplier) throw new UserError("Choose the supplier from the list.");
+  if (supplier.archivedAt) throw new UserError(`${supplier.name} is archived. Restore the supplier before ordering from them.`);
+  if (!isUuid(draft.warehouseId)) throw new UserError("Choose the warehouse from your own warehouses.");
+  const [warehouse] = await tx.select({ name: warehouses.name }).from(warehouses).where(and(eq(warehouses.tenantId, ctx.tenantId), eq(warehouses.id, draft.warehouseId)));
+  if (!warehouse) throw new UserError("Choose the warehouse from your own warehouses.");
+  const { lines, codes } = await costOrder(tx, ctx, draft);
+  const total = orderTotal(lines);
+  const values = {
+    orderDate: draft.date,
+    supplierId: draft.supplierId,
+    warehouseId: draft.warehouseId,
+    expectedOn: draft.expectedOn,
+    supplierReference: draft.supplierReference,
+    note: draft.note,
+    total: total.toFixed(2),
+    updatedBy: ctx.userId,
+  };
+  let saved: { id: string; updatedAt: Date };
+  let before: unknown = null;
+  if (isNew(id)) {
+    [saved] = await tx
+      .insert(purchaseOrders)
+      .values({ tenantId: ctx.tenantId, createdBy: ctx.userId, ...values })
+      .returning({ id: purchaseOrders.id, updatedAt: purchaseOrders.updatedAt });
+  } else {
+    const stored = await lockOrder(tx, ctx, id, loadedAt);
+    if (stored.status !== "draft") throw new UserError("This order is submitted and cannot be changed. Cancel it and write a new one.");
+    before = describeStored(stored);
+    await tx.delete(purchaseOrderLines).where(and(eq(purchaseOrderLines.tenantId, ctx.tenantId), eq(purchaseOrderLines.orderId, stored.id)));
+    [saved] = await tx
+      .update(purchaseOrders)
+      .set({ ...values, updatedAt: sql`now()` })
+      .where(and(eq(purchaseOrders.tenantId, ctx.tenantId), eq(purchaseOrders.id, stored.id)))
+      .returning({ id: purchaseOrders.id, updatedAt: purchaseOrders.updatedAt });
+  }
+  if (lines.length > 0) {
+    await tx.insert(purchaseOrderLines).values(
+      lines.map((line, index) => ({
+        tenantId: ctx.tenantId,
+        orderId: saved.id,
+        lineNo: index + 1,
+        itemId: line.itemId,
+        description: line.description,
+        unitId: line.unitId,
+        unitFactor: line.unitFactor.toFixed(FACTOR_SCALE),
+        quantity: line.quantity.toFixed(QUANTITY_SCALE),
+        baseQuantity: line.baseQuantity.toFixed(QUANTITY_SCALE),
+        unitCost: line.unitCost.toFixed(UNIT_COST_SCALE),
+        amount: line.amount.toFixed(2),
+        createdBy: ctx.userId,
+      })),
+    );
+  }
+  await audit(tx, ctx, {
+    action: before === null ? "purchase_order.create" : "purchase_order.update",
+    entity: "purchase_order",
+    entityId: saved.id,
+    before,
+    after: describeOrder(
+      draft,
+      supplier.name,
+      warehouse.name,
+      lines.map((line, index) => ({ code: codes[index], quantity: line.quantity.toFixed(), unitCost: line.unitCost.toFixed() })),
+      total.toFixed(2),
+    ),
+  });
+  return saved;
 }
 
 /** Throws a draft order away. A submitted one is never removed; it is cancelled. */
@@ -207,19 +211,22 @@ export async function discardOrder(ctx: TenantContext, id: unknown, loadedAt?: u
 /** Submits a draft order: it takes its PO number and can be received against. Nothing reaches the books or the stock. */
 export async function submitOrder(ctx: TenantContext, id: unknown, loadedAt?: unknown): Promise<{ number: string }> {
   requirePermission(ctx, "purchase_order.manage", ONLY_BOOKS);
-  let date = "";
+  const dated = { date: "" };
   try {
-    return await withTenant(ctx.userId, ctx.tenantId, async (tx) => {
-      const stored = await lockOrder(tx, ctx, id, loadedAt);
-      if (stored.status !== "draft") throw new UserError("This order is already submitted.");
-      if (stored.lines.length === 0) throw new UserError("Add at least one item to the order before submitting it.");
-      date = stored.date;
-      const [row] = await tx.execute<{ number: string }>(sql`select app.submit_purchase_order(${stored.id}::uuid) as number`);
-      return { number: row.number };
-    });
+    return await withTenant(ctx.userId, ctx.tenantId, (tx) => submitOrderIn(tx, ctx, id, loadedAt, dated));
   } catch (error) {
-    throw purchaseRefusal(error, date, "purchase order") ?? error;
+    throw purchaseRefusal(error, dated.date, "purchase order") ?? error;
   }
+}
+
+/** The same, inside a transaction the caller holds. `dated` is told the order's date, for what a refusal says. */
+export async function submitOrderIn(tx: Tx, ctx: TenantContext, id: unknown, loadedAt?: unknown, dated?: { date: string }): Promise<{ number: string }> {
+  const stored = await lockOrder(tx, ctx, id, loadedAt);
+  if (stored.status !== "draft") throw new UserError("This order is already submitted.");
+  if (stored.lines.length === 0) throw new UserError("Add at least one item to the order before submitting it.");
+  if (dated) dated.date = stored.date;
+  const [row] = await tx.execute<{ number: string }>(sql`select app.submit_purchase_order(${stored.id}::uuid) as number`);
+  return { number: row.number };
 }
 
 /** Cancels a submitted order that nothing has been received against, with a reason. */
@@ -270,62 +277,65 @@ export async function saveReceiptDraft(ctx: TenantContext, id: unknown, orderId:
   const read = readReceipt(raw);
   if (!read.ok) throw new UserError(read.reason);
   const draft = read.receipt;
-  if (draft.date > todayIso(new Date())) throw new UserError("Goods cannot be received on a day that has not come yet.");
   try {
-    return await withTenant(ctx.userId, ctx.tenantId, async (tx) => {
-      const stored = isNew(id) ? null : await lockReceipt(tx, ctx, id, loadedAt);
-      if (stored && stored.status !== "draft") throw new UserError("These goods received are posted and cannot be changed.");
-      const of = stored ? stored.orderId : orderId;
-      if (!isUuid(of)) throw new UserError(ORDER_CLOSED);
-      const order = await selectOrderHead(tx, of);
-      if (!order || order.status !== "submitted") throw new UserError(ORDER_CLOSED);
-      if (draft.date < order.date) throw new UserError(`The order is dated ${dmy(order.date)}. Goods cannot arrive before they were ordered.`);
-      const worked = receiptLines(await selectLinesToReceive(tx, order.id), draft.lines);
-      if (!worked.ok) throw new UserError(worked.reason);
-      const values = { receiptDate: draft.date, supplierDeliveryNote: draft.supplierDeliveryNote, note: draft.note, updatedBy: ctx.userId };
-      let saved: { id: string; updatedAt: Date };
-      let before: unknown = null;
-      if (!stored) {
-        [saved] = await tx
-          .insert(goodsReceipts)
-          .values({ tenantId: ctx.tenantId, orderId: order.id, supplierId: order.supplierId, warehouseId: order.warehouseId, createdBy: ctx.userId, ...values })
-          .returning({ id: goodsReceipts.id, updatedAt: goodsReceipts.updatedAt });
-      } else {
-        before = describeReceipt(stored, order.number, stored.supplierName, stored.warehouseName, stored.lines.map((line) => ({ code: line.itemCode, quantity: line.quantity.toFixed() })));
-        await tx.delete(goodsReceiptLines).where(and(eq(goodsReceiptLines.tenantId, ctx.tenantId), eq(goodsReceiptLines.receiptId, stored.id)));
-        [saved] = await tx
-          .update(goodsReceipts)
-          .set({ ...values, updatedAt: sql`now()` })
-          .where(and(eq(goodsReceipts.tenantId, ctx.tenantId), eq(goodsReceipts.id, stored.id)))
-          .returning({ id: goodsReceipts.id, updatedAt: goodsReceipts.updatedAt });
-      }
-      if (worked.lines.length > 0) {
-        await tx.insert(goodsReceiptLines).values(
-          worked.lines.map((line, index) => ({
-            tenantId: ctx.tenantId,
-            receiptId: saved.id,
-            lineNo: index + 1,
-            orderLineId: line.orderLineId,
-            itemId: line.itemId,
-            unitFactor: line.unitFactor.toFixed(FACTOR_SCALE),
-            quantity: line.quantity.toFixed(QUANTITY_SCALE),
-            baseQuantity: line.baseQuantity.toFixed(QUANTITY_SCALE),
-            createdBy: ctx.userId,
-          })),
-        );
-      }
-      await audit(tx, ctx, {
-        action: before === null ? "goods_receipt.create" : "goods_receipt.update",
-        entity: "goods_receipt",
-        entityId: saved.id,
-        before,
-        after: describeReceipt(draft, order.number, order.supplierName, order.warehouseName, worked.lines.map((line) => ({ code: line.itemCode, quantity: line.quantity.toFixed() }))),
-      });
-      return saved;
-    });
+    return await withTenant(ctx.userId, ctx.tenantId, (tx) => saveReceiptDraftIn(tx, ctx, id, orderId, draft, loadedAt));
   } catch (error) {
     throw purchaseRefusal(error, draft.date, "goods received note") ?? error;
   }
+}
+
+/** The same, inside a transaction the caller holds. */
+export async function saveReceiptDraftIn(tx: Tx, ctx: TenantContext, id: unknown, orderId: unknown, draft: ReceiptDraft, loadedAt?: unknown): Promise<{ id: string; updatedAt: Date }> {
+  if (draft.date > todayIso(new Date())) throw new UserError("Goods cannot be received on a day that has not come yet.");
+  const stored = isNew(id) ? null : await lockReceipt(tx, ctx, id, loadedAt);
+  if (stored && stored.status !== "draft") throw new UserError("These goods received are posted and cannot be changed.");
+  const of = stored ? stored.orderId : orderId;
+  if (!isUuid(of)) throw new UserError(ORDER_CLOSED);
+  const order = await selectOrderHead(tx, of);
+  if (!order || order.status !== "submitted") throw new UserError(ORDER_CLOSED);
+  if (draft.date < order.date) throw new UserError(`The order is dated ${dmy(order.date)}. Goods cannot arrive before they were ordered.`);
+  const worked = receiptLines(await selectLinesToReceive(tx, order.id), draft.lines);
+  if (!worked.ok) throw new UserError(worked.reason);
+  const values = { receiptDate: draft.date, supplierDeliveryNote: draft.supplierDeliveryNote, note: draft.note, updatedBy: ctx.userId };
+  let saved: { id: string; updatedAt: Date };
+  let before: unknown = null;
+  if (!stored) {
+    [saved] = await tx
+      .insert(goodsReceipts)
+      .values({ tenantId: ctx.tenantId, orderId: order.id, supplierId: order.supplierId, warehouseId: order.warehouseId, createdBy: ctx.userId, ...values })
+      .returning({ id: goodsReceipts.id, updatedAt: goodsReceipts.updatedAt });
+  } else {
+    before = describeReceipt(stored, order.number, stored.supplierName, stored.warehouseName, stored.lines.map((line) => ({ code: line.itemCode, quantity: line.quantity.toFixed() })));
+    await tx.delete(goodsReceiptLines).where(and(eq(goodsReceiptLines.tenantId, ctx.tenantId), eq(goodsReceiptLines.receiptId, stored.id)));
+    [saved] = await tx
+      .update(goodsReceipts)
+      .set({ ...values, updatedAt: sql`now()` })
+      .where(and(eq(goodsReceipts.tenantId, ctx.tenantId), eq(goodsReceipts.id, stored.id)))
+      .returning({ id: goodsReceipts.id, updatedAt: goodsReceipts.updatedAt });
+  }
+  if (worked.lines.length > 0) {
+    await tx.insert(goodsReceiptLines).values(
+      worked.lines.map((line, index) => ({
+        tenantId: ctx.tenantId,
+        receiptId: saved.id,
+        lineNo: index + 1,
+        orderLineId: line.orderLineId,
+        itemId: line.itemId,
+        unitFactor: line.unitFactor.toFixed(FACTOR_SCALE),
+        quantity: line.quantity.toFixed(QUANTITY_SCALE),
+        baseQuantity: line.baseQuantity.toFixed(QUANTITY_SCALE),
+        createdBy: ctx.userId,
+      })),
+    );
+  }
+  await audit(tx, ctx, {
+    action: before === null ? "goods_receipt.create" : "goods_receipt.update",
+    entity: "goods_receipt",
+    entityId: saved.id,
+    before,
+    after: describeReceipt(draft, order.number, order.supplierName, order.warehouseName, worked.lines.map((line) => ({ code: line.itemCode, quantity: line.quantity.toFixed() }))),
+  });
+  return saved;
 }
 
 /** Throws a draft of goods received away. A posted one is never removed. */
@@ -355,17 +365,20 @@ export async function discardReceipt(ctx: TenantContext, id: unknown, loadedAt?:
  */
 export async function postReceipt(ctx: TenantContext, id: unknown, loadedAt?: unknown): Promise<{ number: string }> {
   requirePermission(ctx, "goods_receipt.manage", ONLY_RECEIVERS);
-  let date = "";
+  const dated = { date: "" };
   try {
-    return await withTenant(ctx.userId, ctx.tenantId, async (tx) => {
-      const stored = await lockReceipt(tx, ctx, id, loadedAt);
-      if (stored.status !== "draft") throw new UserError("These goods received are already posted.");
-      if (stored.lines.length === 0) throw new UserError("Enter how much arrived of at least one line, save, then post.");
-      date = stored.date;
-      const [row] = await tx.execute<{ number: string }>(sql`select app.post_goods_receipt(${stored.id}::uuid) as number`);
-      return { number: row.number };
-    });
+    return await withTenant(ctx.userId, ctx.tenantId, (tx) => postReceiptIn(tx, ctx, id, loadedAt, dated));
   } catch (error) {
-    throw purchaseRefusal(error, date, "goods received note") ?? error;
+    throw purchaseRefusal(error, dated.date, "goods received note") ?? error;
   }
+}
+
+/** The same, inside a transaction the caller holds. */
+export async function postReceiptIn(tx: Tx, ctx: TenantContext, id: unknown, loadedAt?: unknown, dated?: { date: string }): Promise<{ number: string }> {
+  const stored = await lockReceipt(tx, ctx, id, loadedAt);
+  if (stored.status !== "draft") throw new UserError("These goods received are already posted.");
+  if (stored.lines.length === 0) throw new UserError("Enter how much arrived of at least one line, save, then post.");
+  if (dated) dated.date = stored.date;
+  const [row] = await tx.execute<{ number: string }>(sql`select app.post_goods_receipt(${stored.id}::uuid) as number`);
+  return { number: row.number };
 }

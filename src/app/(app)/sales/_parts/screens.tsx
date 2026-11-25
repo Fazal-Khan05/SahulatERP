@@ -25,6 +25,7 @@ import { approveSalesAction, cancelDeliveryAction, cancelSalesAction, discardSal
 import { counterSaleAction } from "./counter-actions";
 import { applyCreditAction, saveCreditNoteAction, startCreditNoteAction } from "./credit-actions";
 import { CreditNoteForm } from "./credit-note-form";
+import { ShortOfStock } from "../../purchases/_parts/market-screens";
 import { DeliveryForm } from "./delivery-form";
 import { DocumentOutput } from "./output";
 import { SalesForm } from "./sales-form";
@@ -450,7 +451,7 @@ export async function CounterSaleScreen() {
   );
 }
 
-export async function SalesDocumentScreen({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ refused?: string | string[] }> }) {
+export async function SalesDocumentScreen({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ refused?: string | string[]; bought?: string | string[] }> }) {
   const session = await requireTenant();
   const shut = closed(session);
   if (shut) {
@@ -461,7 +462,7 @@ export async function SalesDocumentScreen({ params, searchParams }: { params: Pr
       </>
     );
   }
-  const [{ id }, { refused }] = await Promise.all([params, searchParams]);
+  const [{ id }, { refused, bought }] = await Promise.all([params, searchParams]);
   const document = await getSalesDocument(session, id);
   if (!document) notFound();
   const manager = can(session.role, "sales.manage");
@@ -500,8 +501,8 @@ export async function SalesDocumentScreen({ params, searchParams }: { params: Pr
     </>
   );
 
-  if (document.kind === "delivery") return <DeliveryNote session={session} document={document} back={back} />;
-  if (document.kind === "invoice") return <Invoice session={session} document={document} back={back} />;
+  if (document.kind === "delivery") return <DeliveryNote session={session} document={document} back={back} bought={bought} />;
+  if (document.kind === "invoice") return <Invoice session={session} document={document} back={back} bought={bought} />;
   if (document.kind === "credit_note") return <CreditNote session={session} document={document} back={back} />;
 
   if (document.status === "draft" && manager && isEntryKind(document.kind)) {
@@ -701,7 +702,7 @@ export async function SalesDocumentScreen({ params, searchParams }: { params: Pr
 }
 
 /** A delivery note: a draft to fill in and post, or a posted or cancelled note to read. No prices: it is a goods document. */
-async function DeliveryNote({ session, document, back }: { session: Session; document: NonNullable<Awaited<ReturnType<typeof getSalesDocument>>>; back: React.ReactNode }) {
+async function DeliveryNote({ session, document, back, bought }: { session: Session; document: NonNullable<Awaited<ReturnType<typeof getSalesDocument>>>; back: React.ReactNode; bought?: string | string[] }) {
   const [rows, invoices, journal] = await Promise.all([getDeliveryRows(session, document), listInvoicesOf(session, document.id), document.status === "draft" ? null : getDocumentJournal(session, "delivery_note", document.id)]);
   const writer = can(session.role, "delivery.manage");
   const biller = can(session.role, "sales.manage");
@@ -725,6 +726,7 @@ async function DeliveryNote({ session, document, back }: { session: Session; doc
             </Link>
             .
           </p>
+          <ShortOfStock session={session} documentId={document.id} warehouseId={document.warehouseId} warehouseName={document.warehouseName} rows={rows} bought={bought} />
           <Card>
             <DeliveryForm
               action={saveDeliveryAction.bind(null, document.id, loadedAt)}
@@ -883,7 +885,7 @@ function Books({ journal }: { journal: Journal }) {
 }
 
 /** A sales invoice: a draft to check and post, or a posted invoice to read, with what it put into the books. */
-async function Invoice({ session, document, back }: { session: Session; document: NonNullable<Awaited<ReturnType<typeof getSalesDocument>>>; back: React.ReactNode }) {
+async function Invoice({ session, document, back, bought }: { session: Session; document: NonNullable<Awaited<ReturnType<typeof getSalesDocument>>>; back: React.ReactNode; bought?: string | string[] }) {
   const manager = can(session.role, "sales.manage");
   const loadedAt = document.updatedAt.toISOString();
   const source = document.source;
@@ -904,6 +906,7 @@ async function Invoice({ session, document, back }: { session: Session; document
             </Link>
             . {direct ? `The goods leave ${document.warehouseName} when the invoice is posted.` : "It bills exactly what that note delivered."}
           </p>
+          {direct ? <ShortOfStock session={session} documentId={document.id} warehouseId={document.warehouseId} warehouseName={document.warehouseName} rows={rows} bought={bought} /> : null}
           <Card>
             <DeliveryForm
               action={saveInvoiceAction.bind(null, document.id, loadedAt)}

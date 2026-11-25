@@ -316,6 +316,13 @@
       "when": 1795534749072,
       "tag": "0044_security_clean_up",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1795630067800,
+      "tag": "0045_market_purchases",
+      "breakpoints": true
     }
   ]
 }

@@ -34,7 +34,7 @@ function requireFresh(updatedAt: Date, loadedAt: unknown): void {
 const isNew = (id: unknown) => id === null || id === undefined || id === "";
 
 /** What to tell someone whose payment or challan the database refused, or null for anything unexpected. */
-function paymentRefusal(error: unknown, date: string): UserError | null {
+export function paymentRefusal(error: unknown, date: string): UserError | null {
   const code = pgCode(error);
   const closed = periodRefusal(code, date);
   if (closed) return new UserError(closed);
@@ -46,6 +46,7 @@ function paymentRefusal(error: unknown, date: string): UserError | null {
   if (code === "SE241") return new UserError("The money leaves a cash or bank account that is in use. Choose another account, or restore the one that was archived.");
   if (code === "SE242") return new UserError("That date has not come yet, or is before what it follows: a payment is cancelled, and an advance set against a bill, on or after the day of the payment and of the bill.");
   if (code === "SE243") return new UserError("A challan pays whole amounts withheld, of its own kind of tax, withheld on or before its date, each once. Another challan may have paid one of them since you opened this page; reload it.");
+  if (code === "SE267") return new UserError("The market seller is paid only what is owed on a quick market purchase's bill, never in advance. Set the whole payment against its unpaid bills.");
   if (code === "SE244") return new UserError("Enter an amount against at least one bill, each bill once.");
   if (code === "SE245") return new UserError("Choose a foreign currency from the company's own currencies (Settings, Currencies), other than the one the books are kept in.");
   if (code === "SE011" || code === "SE012") return new UserError("The account chosen is a heading or has been archived. Choose another account.");
@@ -96,70 +97,73 @@ export async function savePaymentDraft(ctx: TenantContext, id: unknown, raw: Raw
   const read = readPayment(raw);
   if (!read.ok) throw new UserError(read.reason);
   const draft = read.payment;
-  if (draft.date > todayIso(new Date())) throw new UserError("A payment cannot be dated on a day that has not come yet.");
   try {
-    return await withTenant(ctx.userId, ctx.tenantId, async (tx) => {
-      const stored = isNew(id) ? null : await lockPayment(tx, ctx, id, loadedAt);
-      if (stored && stored.status !== "draft") throw new UserError("This payment is posted and cannot be changed. Cancel it and enter it again.");
-      if (!isUuid(draft.supplierId)) throw new UserError("Choose the supplier from the list.");
-      const [supplier] = await tx.execute<{ name: string }>(sql`select name from suppliers where tenant_id = ${ctx.tenantId}::uuid and id = ${draft.supplierId}::uuid`);
-      if (!supplier) throw new UserError("Choose the supplier from the list.");
-      if (!isUuid(draft.branchId)) throw new UserError("Choose the branch from your own branches.");
-      const [branch] = await tx.execute<{ id: string }>(sql`select id from branches where tenant_id = ${ctx.tenantId}::uuid and id = ${draft.branchId}::uuid`);
-      if (!branch) throw new UserError("Choose the branch from your own branches.");
-      if (!isUuid(draft.accountId)) throw new UserError("Choose the cash or bank account from the list.");
-      const [account] = await tx.execute<{ name: string }>(sql`
-        select code || ' ' || name as name from accounts
-        where tenant_id = ${ctx.tenantId}::uuid and id = ${draft.accountId}::uuid and control_type in ('cash', 'bank') and not is_group and archived_at is null`);
-      if (!account) throw new UserError("Choose the cash or bank account from the list.");
-      if (draft.foreign) {
-        const [currency] = await tx.execute<{ code: string }>(sql`select code from currencies where tenant_id = ${ctx.tenantId}::uuid and code = ${draft.foreign.currency} and not is_base`);
-        if (!currency) throw new UserError("Choose a foreign currency from the company's own currencies (Settings, Currencies), other than the one the books are kept in.");
-      }
-      for (const line of draft.allocations) if (!isUuid(line.billId)) throw new UserError("A bill on the payment is not an unpaid bill of this supplier in this branch. Reload the page.");
-      const worked = settle(draft.amount, draft.date, draft.allocations, await selectBillsOwed(tx, ctx.tenantId, draft.supplierId, draft.branchId), "the payment");
-      if (!worked.ok) throw new UserError(worked.reason);
-
-      const values = {
-        paymentDate: draft.date,
-        supplierId: draft.supplierId,
-        branchId: draft.branchId,
-        accountId: draft.accountId,
-        reference: draft.reference,
-        note: draft.note,
-        amount: draft.amount.toFixed(2),
-        foreignCurrency: draft.foreign?.currency ?? null,
-        foreignAmount: draft.foreign?.amount.toFixed(2) ?? null,
-        updatedBy: ctx.userId,
-      };
-      let saved: { id: string; updatedAt: Date };
-      let before: unknown = null;
-      if (!stored) {
-        [saved] = await tx
-          .insert(supplierPayments)
-          .values({ tenantId: ctx.tenantId, createdBy: ctx.userId, ...values })
-          .returning({ id: supplierPayments.id, updatedAt: supplierPayments.updatedAt });
-      } else {
-        before = describeStored(stored);
-        await tx.execute(sql`delete from supplier_payment_allocations where tenant_id = ${ctx.tenantId}::uuid and payment_id = ${stored.id}::uuid`);
-        [saved] = await tx
-          .update(supplierPayments)
-          .set({ ...values, updatedAt: sql`now()` })
-          .where(and(eq(supplierPayments.tenantId, ctx.tenantId), eq(supplierPayments.id, stored.id)))
-          .returning({ id: supplierPayments.id, updatedAt: supplierPayments.updatedAt });
-      }
-      // Written column by column: the app's role may not name the columns that say an advance was set against a bill.
-      for (const line of draft.allocations) {
-        await tx.execute(sql`
-          insert into supplier_payment_allocations (tenant_id, payment_id, bill_id, amount, created_by)
-          values (${ctx.tenantId}::uuid, ${saved.id}::uuid, ${line.billId}::uuid, ${line.amount.toFixed(2)}::numeric, ${ctx.userId}::uuid)`);
-      }
-      await audit(tx, ctx, { action: before === null ? "supplier_payment.create" : "supplier_payment.update", entity: "supplier_payment", entityId: saved.id, before, after: describeDraft(draft, supplier.name, account.name, worked.settled.toFixed(2)) });
-      return saved;
-    });
+    return await withTenant(ctx.userId, ctx.tenantId, (tx) => savePaymentDraftIn(tx, ctx, id, draft, loadedAt));
   } catch (error) {
     throw paymentRefusal(error, draft.date) ?? error;
   }
+}
+
+/** The same, inside a transaction the caller holds: a quick market purchase writes its payment with it. */
+export async function savePaymentDraftIn(tx: Tx, ctx: TenantContext, id: unknown, draft: PaymentDraft, loadedAt?: unknown): Promise<{ id: string; updatedAt: Date }> {
+  if (draft.date > todayIso(new Date())) throw new UserError("A payment cannot be dated on a day that has not come yet.");
+  const stored = isNew(id) ? null : await lockPayment(tx, ctx, id, loadedAt);
+  if (stored && stored.status !== "draft") throw new UserError("This payment is posted and cannot be changed. Cancel it and enter it again.");
+  if (!isUuid(draft.supplierId)) throw new UserError("Choose the supplier from the list.");
+  const [supplier] = await tx.execute<{ name: string }>(sql`select name from suppliers where tenant_id = ${ctx.tenantId}::uuid and id = ${draft.supplierId}::uuid`);
+  if (!supplier) throw new UserError("Choose the supplier from the list.");
+  if (!isUuid(draft.branchId)) throw new UserError("Choose the branch from your own branches.");
+  const [branch] = await tx.execute<{ id: string }>(sql`select id from branches where tenant_id = ${ctx.tenantId}::uuid and id = ${draft.branchId}::uuid`);
+  if (!branch) throw new UserError("Choose the branch from your own branches.");
+  if (!isUuid(draft.accountId)) throw new UserError("Choose the cash or bank account from the list.");
+  const [account] = await tx.execute<{ name: string }>(sql`
+    select code || ' ' || name as name from accounts
+    where tenant_id = ${ctx.tenantId}::uuid and id = ${draft.accountId}::uuid and control_type in ('cash', 'bank') and not is_group and archived_at is null`);
+  if (!account) throw new UserError("Choose the cash or bank account from the list.");
+  if (draft.foreign) {
+    const [currency] = await tx.execute<{ code: string }>(sql`select code from currencies where tenant_id = ${ctx.tenantId}::uuid and code = ${draft.foreign.currency} and not is_base`);
+    if (!currency) throw new UserError("Choose a foreign currency from the company's own currencies (Settings, Currencies), other than the one the books are kept in.");
+  }
+  for (const line of draft.allocations) if (!isUuid(line.billId)) throw new UserError("A bill on the payment is not an unpaid bill of this supplier in this branch. Reload the page.");
+  const worked = settle(draft.amount, draft.date, draft.allocations, await selectBillsOwed(tx, ctx.tenantId, draft.supplierId, draft.branchId), "the payment");
+  if (!worked.ok) throw new UserError(worked.reason);
+
+  const values = {
+    paymentDate: draft.date,
+    supplierId: draft.supplierId,
+    branchId: draft.branchId,
+    accountId: draft.accountId,
+    reference: draft.reference,
+    note: draft.note,
+    amount: draft.amount.toFixed(2),
+    foreignCurrency: draft.foreign?.currency ?? null,
+    foreignAmount: draft.foreign?.amount.toFixed(2) ?? null,
+    updatedBy: ctx.userId,
+  };
+  let saved: { id: string; updatedAt: Date };
+  let before: unknown = null;
+  if (!stored) {
+    [saved] = await tx
+      .insert(supplierPayments)
+      .values({ tenantId: ctx.tenantId, createdBy: ctx.userId, ...values })
+      .returning({ id: supplierPayments.id, updatedAt: supplierPayments.updatedAt });
+  } else {
+    before = describeStored(stored);
+    await tx.execute(sql`delete from supplier_payment_allocations where tenant_id = ${ctx.tenantId}::uuid and payment_id = ${stored.id}::uuid`);
+    [saved] = await tx
+      .update(supplierPayments)
+      .set({ ...values, updatedAt: sql`now()` })
+      .where(and(eq(supplierPayments.tenantId, ctx.tenantId), eq(supplierPayments.id, stored.id)))
+      .returning({ id: supplierPayments.id, updatedAt: supplierPayments.updatedAt });
+  }
+  // Written column by column: the app's role may not name the columns that say an advance was set against a bill.
+  for (const line of draft.allocations) {
+    await tx.execute(sql`
+      insert into supplier_payment_allocations (tenant_id, payment_id, bill_id, amount, created_by)
+      values (${ctx.tenantId}::uuid, ${saved.id}::uuid, ${line.billId}::uuid, ${line.amount.toFixed(2)}::numeric, ${ctx.userId}::uuid)`);
+  }
+  await audit(tx, ctx, { action: before === null ? "supplier_payment.create" : "supplier_payment.update", entity: "supplier_payment", entityId: saved.id, before, after: describeDraft(draft, supplier.name, account.name, worked.settled.toFixed(2)) });
+  return saved;
 }
 
 /** Throws a draft payment away. A posted one is never removed; it is cancelled. */
@@ -177,18 +181,21 @@ export async function discardPayment(ctx: TenantContext, id: unknown, loadedAt?:
 /** Posts a draft payment: it takes its number, the bills it names are settled, and the rest is an advance. */
 export async function postPayment(ctx: TenantContext, id: unknown, loadedAt?: unknown): Promise<{ number: string }> {
   requirePermission(ctx, "supplier_payment.manage", ONLY_BOOKS);
-  let date = "";
+  const dated = { date: "" };
   try {
-    return await withTenant(ctx.userId, ctx.tenantId, async (tx) => {
-      const stored = await lockPayment(tx, ctx, id, loadedAt);
-      if (stored.status !== "draft") throw new UserError("This payment is already posted.");
-      date = stored.date;
-      const [row] = await tx.execute<{ number: string }>(sql`select app.post_supplier_payment(${stored.id}::uuid) as number`);
-      return { number: row.number };
-    });
+    return await withTenant(ctx.userId, ctx.tenantId, (tx) => postPaymentIn(tx, ctx, id, loadedAt, dated));
   } catch (error) {
-    throw paymentRefusal(error, date) ?? error;
+    throw paymentRefusal(error, dated.date) ?? error;
   }
+}
+
+/** The same, inside a transaction the caller holds. */
+export async function postPaymentIn(tx: Tx, ctx: TenantContext, id: unknown, loadedAt?: unknown, dated?: { date: string }): Promise<{ number: string }> {
+  const stored = await lockPayment(tx, ctx, id, loadedAt);
+  if (stored.status !== "draft") throw new UserError("This payment is already posted.");
+  if (dated) dated.date = stored.date;
+  const [row] = await tx.execute<{ number: string }>(sql`select app.post_supplier_payment(${stored.id}::uuid) as number`);
+  return { number: row.number };
 }
 
 /** Sets what is left of a posted payment (its advance) against bills of the same supplier, on a day. */

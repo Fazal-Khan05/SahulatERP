@@ -28,6 +28,7 @@ function requireManager(ctx: TenantContext, kind: PartyKind): void {
 function taken(kind: PartyKind, error: unknown): UserError | null {
   // The only thing a party points at is its price list.
   if (pgCode(error) === "23503") return new UserError("Choose a price list from the list.");
+  if (pgCode(error) === "SE269") return new UserError("This supplier stands for sellers in the market who are not on your list. It can be renamed or given a code, but not archived, given credit days, registered for tax or given an NTN, STRN or CNIC.");
   if (pgCode(error) !== UNIQUE_VIOLATION) return null;
   const e = error as { constraint_name?: string; cause?: { constraint_name?: string } };
   const constraint = e.cause?.constraint_name ?? e.constraint_name ?? "";
@@ -183,6 +184,12 @@ export async function updateParty(
 export async function setPartyArchived(ctx: TenantContext, kind: PartyKind, id: unknown, archived: boolean): Promise<void> {
   requireManager(ctx, kind);
   if (!isUuid(id)) throw new UserError(`That ${PARTY_WORDS[kind].one} is not in this company.`);
+  await archiveIn(ctx, kind, id, archived).catch((error) => {
+    throw taken(kind, error) ?? error;
+  });
+}
+
+async function archiveIn(ctx: TenantContext, kind: PartyKind, id: string, archived: boolean): Promise<void> {
   await withTenant(ctx.userId, ctx.tenantId, async (tx) => {
     const { found, mine } = await lockParty(tx, ctx, kind, id);
     if ((found.archivedAt !== null) === archived) return;

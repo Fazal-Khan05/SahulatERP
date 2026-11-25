@@ -3,7 +3,15 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { proofsOf, sessionTooOld, twoStepGate, twoStepRequiredFor, type ProofEntry, type TwoStepGate } from "./rules";
+import {
+  proofsOf,
+  sessionTooOld,
+  twoStepGate,
+  twoStepRequiredFor,
+  twoStepRequiredOfCreator,
+  type ProofEntry,
+  type TwoStepGate,
+} from "./rules";
 import { loadWorkspace, type Branding } from "@/modules/tenant/queries";
 import type { MembershipSummary, ModuleState, TenantContext } from "@/modules/tenant/rules";
 
@@ -65,7 +73,7 @@ export const getSignedInAccount = cache(async (): Promise<SignedInAccount | null
     hasFactor = factors.totp.length > 0;
   }
   // Whoever may create a company is about to be its owner, so is held to the owner's rule.
-  const gate = twoStepGate({ level, hasFactor, required: user.canCreateCompany });
+  const gate = twoStepGate({ level, hasFactor, required: twoStepRequiredOfCreator(user.canCreateCompany) });
   return { ...user, level, proofs, hasFactor, gate };
 });
 

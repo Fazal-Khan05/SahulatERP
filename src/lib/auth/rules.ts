@@ -13,8 +13,24 @@ export const RECENT_SIGN_IN_MINUTES = 10;
 /** The roles that may not use the app until two-step sign-in is on. */
 const TWO_STEP_ROLES: ReadonlySet<Role> = new Set<Role>(["owner", "accountant"]);
 
-export function twoStepRequiredFor(role: Role): boolean {
-  return TWO_STEP_ROLES.has(role);
+/**
+ * Whether those roles are held to it. The founder switched the rule off while the product is only
+ * shown as a demo (2026-11-25): with the site's setting TWO_STEP_REQUIRED=off, two-step sign-in
+ * is everyone's own choice ("Not now" at sign-in, on or off on Your account). With no setting, or
+ * anything else in it, the rule holds. The setting is taken away before a real company's books go
+ * in (docs/later/step-47.md).
+ */
+export function twoStepEnforced(setting: string | undefined = process.env.TWO_STEP_REQUIRED): boolean {
+  return setting?.trim().toLowerCase() !== "off";
+}
+
+export function twoStepRequiredFor(role: Role, enforced: boolean = twoStepEnforced()): boolean {
+  return enforced && TWO_STEP_ROLES.has(role);
+}
+
+/** Whoever may create a company is about to be its owner, so is held to the owner's rule. */
+export function twoStepRequiredOfCreator(canCreateCompany: boolean, enforced: boolean = twoStepEnforced()): boolean {
+  return enforced && canCreateCompany;
 }
 
 /** One way the session was proven, as the token lists it, with when (seconds since 1970). */

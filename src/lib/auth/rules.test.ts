@@ -13,19 +13,42 @@ import {
   proofsOf,
   provedRecently,
   sessionTooOld,
+  twoStepEnforced,
   twoStepGate,
   twoStepRequiredFor,
+  twoStepRequiredOfCreator,
 } from "./rules";
 
 const NOW = 1_800_000_000;
 
 describe("two-step sign-in", () => {
   it("is asked of owners and accountants only", () => {
-    expect(twoStepRequiredFor("owner")).toBe(true);
-    expect(twoStepRequiredFor("accountant")).toBe(true);
+    expect(twoStepRequiredFor("owner", true)).toBe(true);
+    expect(twoStepRequiredFor("accountant", true)).toBe(true);
     for (const role of ["sales_manager", "salesperson", "recovery_officer", "warehouse_manager", "payroll_administrator", "auditor"] as const) {
-      expect(twoStepRequiredFor(role)).toBe(false);
+      expect(twoStepRequiredFor(role, true)).toBe(false);
     }
+    expect(twoStepRequiredOfCreator(true, true)).toBe(true);
+    expect(twoStepRequiredOfCreator(false, true)).toBe(false);
+  });
+
+  it("holds unless the site's setting says off, and only that word switches it off", () => {
+    for (const setting of [undefined, "", "on", "true", "0", "no", "false", "offf", "of f"]) {
+      expect(twoStepEnforced(setting)).toBe(true);
+    }
+    for (const setting of ["off", "OFF", " Off "]) {
+      expect(twoStepEnforced(setting)).toBe(false);
+    }
+  });
+
+  it("is asked of nobody while it is switched off, and a code is still asked of anyone with an app", () => {
+    for (const role of ["owner", "accountant", "auditor", "salesperson"] as const) {
+      expect(twoStepRequiredFor(role, false)).toBe(false);
+    }
+    expect(twoStepRequiredOfCreator(true, false)).toBe(false);
+    const required = twoStepRequiredFor("owner", false);
+    expect(twoStepGate({ level: "aal1", hasFactor: false, required })).toBe("ok");
+    expect(twoStepGate({ level: "aal1", hasFactor: true, required })).toBe("code");
   });
 
   it("asks for the code of anyone with an app, and the setup of anyone who must have one", () => {

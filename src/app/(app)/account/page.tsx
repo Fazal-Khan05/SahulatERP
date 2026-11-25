@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { ActionForm } from "@/components/action-form";
 import { PageHead, Card } from "@/components/page-parts";
 import { PageLoading } from "@/components/page-loading";
-import { IDLE_MINUTES, MAX_SESSION_HOURS, twoStepRequiredFor } from "@/lib/auth/rules";
+import { IDLE_MINUTES, MAX_SESSION_HOURS, twoStepRequiredFor, twoStepRequiredOfCreator } from "@/lib/auth/rules";
 import { hasAuthenticator, requireTenant } from "@/lib/auth/session";
 import { removeTwoStepAction, signOutEverywhereAction } from "@/lib/auth/two-step";
 
@@ -25,7 +25,8 @@ async function Account() {
   const session = await requireTenant();
   const on = await hasAuthenticator();
   const required =
-    session.canCreateCompany || session.memberships.some((m) => m.active && twoStepRequiredFor(m.role));
+    twoStepRequiredOfCreator(session.canCreateCompany) ||
+    session.memberships.some((m) => m.active && twoStepRequiredFor(m.role));
   return (
     <div className="flex max-w-2xl flex-col gap-5">
       <Card title="Two-step sign-in">

@@ -9,11 +9,13 @@ import { requireTenant, type TenantSession } from "@/lib/auth/session";
 import { todayIso } from "@/lib/format";
 import { formatAmount } from "@/lib/money";
 import { formatIsoDate } from "@/modules/currencies/rules";
+import { getMarketPurchaseOfPayment } from "@/modules/market-purchases/queries";
 import { getPayment, getPaymentChoices, getWithholdingPosition, listBillsOwed, listPayments, type PaymentAllocation } from "@/modules/supplier-payments/queries";
 import { PAYMENT_STATUS_LABELS, impliedRate, type BillOwed } from "@/modules/supplier-payments/rules";
 import { WITHHOLDING_KIND_LABELS, type WithholdingKind } from "@/modules/tax/rules";
 import { can } from "@/modules/tenant/rules";
 import { applyAdvanceAction, cancelPaymentAction, discardPaymentAction, recordChallanAction, savePaymentAction } from "./payment-actions";
+import { MarketPurchaseNote } from "./market-note";
 import { AdvanceForm, PaymentForm } from "./payment-form";
 import { Back, Pill, Refused, Sections } from "./screens";
 
@@ -217,10 +219,12 @@ export async function PaymentScreen({ params, searchParams }: { params: Promise<
   }
 
   const posted = payment.status === "posted";
+  const market = await getMarketPurchaseOfPayment(session, payment.id);
   return (
     <>
       {back}
       <PageHead title={payment.number ?? `Draft payment to ${payment.supplierName}`} sub={payment.note ?? undefined} />
+      <MarketPurchaseNote purchase={market} on="payment" />
       <div className="flex max-w-5xl flex-col gap-5">
         <Card>
           <dl className="mb-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">

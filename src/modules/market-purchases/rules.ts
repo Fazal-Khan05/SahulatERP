@@ -131,3 +131,23 @@ export function shortages(rows: readonly { itemId: string; itemCode: string; des
   }
   return short;
 }
+
+/**
+ * Where a quick market purchase returns to when it was opened from a delivery note or an invoice
+ * that was short: that document's own page and nothing else, whatever the address asked for.
+ */
+export function backToSales(back: unknown): string | null {
+  return typeof back === "string" && /^\/sales\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(back) ? back : null;
+}
+
+/** The address of the quick market purchase screen, filled in with what a document is short of. */
+export function marketPurchaseHref(short: readonly Pick<Shortage, "itemId" | "short">[], warehouseId: string, back: string): string {
+  const query = new URLSearchParams();
+  for (const item of short) {
+    query.append("item", item.itemId);
+    query.append("quantity", item.short.toFixed());
+  }
+  query.set("warehouse", warehouseId);
+  query.set("back", back);
+  return `/purchases/market?${query.toString()}`;
+}

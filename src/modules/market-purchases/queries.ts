@@ -69,7 +69,7 @@ type ViewRow = {
  * other documents made with it. Null for a document made any other way, and for a reader who
  * does not read purchase orders (which carry cost): the warehouse and the sales team.
  */
-async function marketPurchaseOf(ctx: TenantContext, column: "order_id" | "receipt_id" | "bill_id" | "payment_id", documentId: string): Promise<MarketPurchaseView | null> {
+async function marketPurchaseOf(ctx: TenantContext, column: "id" | "order_id" | "receipt_id" | "bill_id" | "payment_id", documentId: string): Promise<MarketPurchaseView | null> {
   if (!isUuid(documentId) || !can(ctx.role, "purchase_order.read")) return null;
   const rows = await withTenant(ctx.userId, ctx.tenantId, (tx) =>
     tx.execute<ViewRow>(sql`
@@ -104,3 +104,4 @@ async function marketPurchaseOf(ctx: TenantContext, column: "order_id" | "receip
 export const getMarketPurchaseOfOrder = (ctx: TenantContext, orderId: string) => marketPurchaseOf(ctx, "order_id", orderId);
 export const getMarketPurchaseOfBill = (ctx: TenantContext, billId: string) => marketPurchaseOf(ctx, "bill_id", billId);
 export const getMarketPurchaseOfPayment = (ctx: TenantContext, paymentId: string) => marketPurchaseOf(ctx, "payment_id", paymentId);
+export const getMarketPurchase = (ctx: TenantContext, id: string) => marketPurchaseOf(ctx, "id", id);

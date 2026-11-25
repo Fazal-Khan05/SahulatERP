@@ -10,10 +10,12 @@ import { todayIso } from "@/lib/format";
 import { formatAmount } from "@/lib/money";
 import { formatIsoDate } from "@/modules/currencies/rules";
 import { formatQuantity } from "@/modules/inventory/rules";
+import { getMarketPurchaseOfOrder } from "@/modules/market-purchases/queries";
 import { getGrni, getOrder, getOrderChoices, getOrderToReceive, getReceipt, listOrders, listOrdersToReceive, listReceipts } from "@/modules/purchasing/queries";
 import { ORDER_STATUS_LABELS, RECEIPT_STATUS_LABELS, UNIT_COST_SCALE, stillToReceive, type OrderLineToReceive } from "@/modules/purchasing/rules";
 import { can, type ModuleKey, type Permission } from "@/modules/tenant/rules";
 import { cancelOrderAction, discardOrderAction, discardReceiptAction, saveOrderAction, saveReceiptAction } from "./actions";
+import { MarketPurchaseButton, MarketPurchaseNote } from "./market-note";
 import { OrderForm } from "./order-form";
 import { ReceiptForm } from "./receipt-form";
 
@@ -94,10 +96,11 @@ export async function OrdersScreen() {
       <PageHead title="Purchase orders" sub="What has been ordered from suppliers. Nothing reaches the books or the stock until the goods are received." />
       <Sections session={session} current="/purchases" />
       {can(session.role, "purchase_order.manage") ? (
-        <p className="mb-4">
+        <p className="mb-4 flex flex-wrap gap-2">
           <Link href="/purchases/new" className={buttonVariants()}>
             New purchase order
           </Link>
+          <MarketPurchaseButton role={session.role} />
         </p>
       ) : null}
       <Card className="max-w-5xl">
@@ -221,10 +224,12 @@ export async function OrderScreen({ params, searchParams }: { params: Promise<{ 
   const left = order.toReceive.some((line) => stillToReceive(line).gt(0));
   const draftNote = order.receipts.find((receipt) => receipt.status === "draft");
   const receive = order.status === "submitted" && can(session.role, "goods_receipt.manage");
+  const market = await getMarketPurchaseOfOrder(session, order.id);
   return (
     <>
       {back}
       <PageHead title={order.number ?? "Draft purchase order"} sub={order.note ?? undefined} />
+      <MarketPurchaseNote purchase={market} on="order" />
       <div className="flex max-w-5xl flex-col gap-5">
         <Card>
           <dl className="mb-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">

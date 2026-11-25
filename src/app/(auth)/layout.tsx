@@ -1,7 +1,9 @@
+import { shownVersion } from "@/lib/version";
 import { DEFAULT_PRODUCT_NAME } from "@/modules/tenant/rules";
 
 export default function AuthLayout({ children }: LayoutProps<"/">) {
-  // Vercel sets VERCEL_GIT_COMMIT_SHA at build time; local builds have none.
+  // The version a member reads (package.json). The exact build is kept as the line's tooltip, for
+  // whoever looks after the site: Vercel sets VERCEL_GIT_COMMIT_SHA at build time; local builds have none.
   const commit = process.env.VERCEL_GIT_COMMIT_SHA ?? "local";
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-6 p-6">
@@ -15,7 +17,9 @@ export default function AuthLayout({ children }: LayoutProps<"/">) {
         <span>{DEFAULT_PRODUCT_NAME}</span>
       </p>
       <div className="w-full max-w-sm rounded-[10px] border bg-card p-6 shadow-xs">{children}</div>
-      <p className="font-mono text-xs text-muted-foreground">{commit.slice(0, 7)}</p>
+      <p className="text-xs text-muted-foreground" title={`Build ${commit.slice(0, 7)}`} data-testid="version">
+        Version {shownVersion()}
+      </p>
     </main>
   );
 }

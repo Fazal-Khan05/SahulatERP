@@ -174,10 +174,9 @@ other bill has, and the memo number is kept on the purchase and in the notes.
 - `src/modules/supplier-payments/payments.test.ts` picks "a posted payment" with `limit 1` and
   no order, and fails now and then when it picks one that settled no bill (seen once while
   building this; not caused by it).
-- **The accountant's menu has no Purchases entry** (their "Bills and payments" link is not built
-  yet; noted before this work). An accountant reaches the quick market purchase from a short
-  delivery, or by the address, or from the Purchases screens once they are there. The menu is
-  not changed here.
+- **The accountant's menu now leads to buying** (the founder's yes of 2026-11-26): "Bills and
+  payments" opens the supplier bills (`/purchases/bills`), where the quick market purchase button
+  and the rest of Purchases are. Version 1.2.
 - A list of quick market purchases of its own. Today each shows in the lists of orders, goods
   received, bills and payments, and says on its page how it was made.
 - Buying for several warehouses at once, or part of the goods into each: one purchase is one

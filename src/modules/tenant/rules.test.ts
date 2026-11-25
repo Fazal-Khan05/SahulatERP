@@ -335,6 +335,7 @@ describe("navigation", () => {
     expect(menu.find((e) => e.label === "Exchange rates")?.href).toBe("/settings/currencies");
     expect(menu.find((e) => e.label === "Tax rates")?.href).toBe("/settings/tax");
     expect(menu.find((e) => e.label === "Stock")?.href).toBe("/stock");
+    expect(menu.find((e) => e.label === "Bills and payments")?.href).toBe("/purchases/bills");
     // Without inventory, no Stock.
     expect(labels(navFor("accountant", state({ inventory: false })))).not.toContain("Stock");
   });

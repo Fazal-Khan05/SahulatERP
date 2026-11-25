@@ -130,6 +130,10 @@ test("an accountant gets the books and the stock, and reaches the stock from the
   await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Stock", exact: true }).click();
   await expect(page).toHaveURL(/\/stock$/);
   await expect(page.getByText(/does not include/)).toHaveCount(0);
+  // Buying too: the bills, and from there the quick market purchase.
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Bills and payments" }).click();
+  await expect(page).toHaveURL(/\/purchases\/bills$/);
+  await expect(page.getByRole("link", { name: "Quick market purchase" })).toBeVisible();
 });
 
 test("switching a module off removes its menu entry for everyone, and on brings it back", async ({ page, browser }) => {

@@ -49,7 +49,8 @@ export const permissions = {
  */
 export const links = {
   purchases: "/purchases",
-  billsAndPayments: null,
+  // The accountant's way into buying: the supplier bills, with the rest of Purchases one click on.
+  billsAndPayments: "/purchases/bills",
   stock: "/stock",
   receiveGoods: "/purchases/receive",
   transfers: "/stock/transfers",

@@ -9,12 +9,12 @@ import { postReceiptIn, purchaseRefusal, saveOrderDraftIn, saveReceiptDraftIn, s
 import { selectLinesToReceive } from "@/modules/purchasing/queries";
 import { goodsReceipts, purchaseOrders } from "@/modules/purchasing/schema";
 import { billRefusal, postBillIn, saveBillDraftIn } from "@/modules/supplier-bills/commands";
-import { selectReceiptLinesToBill } from "@/modules/supplier-bills/queries";
+import { selectReceiptLinesToBill, selectWithholdingOn } from "@/modules/supplier-bills/queries";
 import { supplierBills } from "@/modules/supplier-bills/schema";
 import { paymentRefusal, postPaymentIn, savePaymentDraftIn } from "@/modules/supplier-payments/commands";
 import { supplierPayments } from "@/modules/supplier-payments/schema";
 import { can, type TenantContext } from "@/modules/tenant/rules";
-import { documentNote, readMarketPurchase, type RawMarketPurchase } from "./rules";
+import { WITHHOLDS_FROM_SUPPLIERS, documentNote, readMarketPurchase, type RawMarketPurchase } from "./rules";
 import { marketPurchases } from "./schema";
 
 // A quick market purchase: goods bought in the market and paid for on the spot. One transaction
@@ -34,7 +34,8 @@ export type MarketPurchaseResult = { id: string; orderId: string; billId: string
 function marketRefusal(error: unknown, date: string): unknown {
   if (error instanceof UserError) return error;
   const code = pgCode(error);
-  if (code === "SE267" || code === "SE268" || code === "SE269") return new UserError("This purchase could not be recorded as it stands. Reload the page and try again.");
+  // A key that is already there and was not this purchase's own (that one is answered before this is asked).
+  if (code === "SE267" || code === "SE268" || code === "SE269" || code === "23505") return new UserError("This purchase could not be recorded as it stands. Reload the page and try again.");
   return purchaseRefusal(error, date, "purchase") ?? billRefusal(error, date) ?? paymentRefusal(error, date) ?? error;
 }
 
@@ -94,6 +95,8 @@ export async function postMarketPurchase(ctx: TenantContext, raw: RawMarketPurch
         if (!isUuid(supplierId)) throw new UserError("Choose the supplier from the list.");
         const [market] = await tx.execute<{ id: string }>(sql`select supplier_id as id from market_suppliers where tenant_id = ${ctx.tenantId}::uuid and supplier_id = ${supplierId}::uuid`);
         if (market) throw new UserError('For a seller who is not on your list, choose "A seller in the market" and type their name.');
+        // A supplier the company knows, in a company that withholds: the bill is where the tax is worked out.
+        if (await selectWithholdingOn(tx, ctx.tenantId)) throw new UserError(WITHHOLDS_FROM_SUPPLIERS);
       }
 
       // The goods, as an order: worked out as any purchase order is.

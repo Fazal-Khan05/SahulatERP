@@ -46,6 +46,7 @@ export function paymentRefusal(error: unknown, date: string): UserError | null {
   if (code === "SE241") return new UserError("The money leaves a cash or bank account that is in use. Choose another account, or restore the one that was archived.");
   if (code === "SE242") return new UserError("That date has not come yet, or is before what it follows: a payment is cancelled, and an advance set against a bill, on or after the day of the payment and of the bill.");
   if (code === "SE243") return new UserError("A challan pays whole amounts withheld, of its own kind of tax, withheld on or before its date, each once. Another challan may have paid one of them since you opened this page; reload it.");
+  if (code === "SE267") return new UserError("The market seller is paid only what is owed on a quick market purchase's bill, never in advance. Set the whole payment against its unpaid bills.");
   if (code === "SE244") return new UserError("Enter an amount against at least one bill, each bill once.");
   if (code === "SE245") return new UserError("Choose a foreign currency from the company's own currencies (Settings, Currencies), other than the one the books are kept in.");
   if (code === "SE011" || code === "SE012") return new UserError("The account chosen is a heading or has been archived. Choose another account.");

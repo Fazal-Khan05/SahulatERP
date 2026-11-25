@@ -69,12 +69,12 @@ export async function MarketPurchaseScreen({ searchParams }: { searchParams: Pro
         ) : null}
         <MarketPurchaseForm
           action={marketPurchaseAction.bind(null, back)}
-          suppliers={choices.suppliers}
+          suppliers={choices.withholds ? [] : choices.suppliers}
           warehouses={choices.warehouses}
           items={choices.items}
           accounts={choices.accounts}
           initial={{ date: todayIso(new Date()), warehouseId, lines }}
-          taxNote={choices.withholds ? `${NO_TAX_ON_MARKET_PURCHASE} Your company withholds tax from suppliers: check whether this seller is one it must withhold from.` : NO_TAX_ON_MARKET_PURCHASE}
+          taxNote={choices.withholds ? `${NO_TAX_ON_MARKET_PURCHASE} Your company withholds tax from suppliers, so a supplier on your list is bought from with a purchase order and a bill; check whether this seller is one you must withhold from too.` : NO_TAX_ON_MARKET_PURCHASE}
         />
       </Card>
       <p className="mt-4 max-w-3xl text-sm text-muted-foreground">
@@ -119,6 +119,8 @@ export async function ShortOfStock({
   if (short.length === 0) return done;
   const buyer = can(session.role, "market_purchase.manage") && session.modules.purchasing;
   const quantity = (value: Decimal, unit: string | null) => `${formatQuantity(value)}${unit ? ` ${unit}` : ""}`;
+  // An item sold only by the carton here is still counted in its own unit, which no line names.
+  const counted = (unit: string | null) => (unit ? "" : " (counted in the item's own unit)");
   return (
     <Card title={`Short of stock at ${warehouseName}`}>
       <div className="flex flex-col gap-3" data-testid="short-of-stock">
@@ -126,7 +128,8 @@ export async function ShortOfStock({
         <ul className="list-disc pl-5 text-sm">
           {short.map((item) => (
             <li key={item.itemId}>
-              <span className="font-medium">{item.itemCode}</span> {item.description}: {quantity(item.needed, item.unitCode)} needed, {quantity(item.onHand, item.unitCode)} in stock, <span className="font-semibold">{quantity(item.short, item.unitCode)} short</span>.
+              <span className="font-medium">{item.itemCode}</span> {item.description}: {quantity(item.needed, item.unitCode)} needed, {quantity(item.onHand, item.unitCode)} in stock, <span className="font-semibold">{quantity(item.short, item.unitCode)} short</span>
+              {counted(item.unitCode)}.
             </li>
           ))}
         </ul>

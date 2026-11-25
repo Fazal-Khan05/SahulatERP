@@ -35,7 +35,7 @@ describe("reading a quick market purchase", () => {
   });
 
   it("is dated today or earlier, never later", () => {
-    expect(reason({ date: "2026-11-26" })).toBe("A purchase is recorded on the day the goods were bought or later, never before it.");
+    expect(reason({ date: "2026-11-26" })).toBe("That date has not come yet. A purchase is recorded on the day the goods were bought, or later.");
     expect(reason({ date: "2026-11-24" })).toBeNull();
     expect(reason({ date: "yesterday" })).toBe("Enter the day the goods were bought.");
   });
@@ -52,8 +52,9 @@ describe("reading a quick market purchase", () => {
     expect(reason({ lines: [{ itemId: "i", quantity: "4", unitCost: "" }] })).toBe("Line 1, cost: Enter what one costs.");
     expect(reason({ lines: [{ itemId: "i", quantity: "4", unitCost: "0" }] })).toBe("Line 1, cost: enter what one cost, more than zero.");
     expect(reason({ lines: [{ itemId: "i", quantity: "0", unitCost: "5" }] })).toContain("Line 1, quantity");
-    expect(reason({ lines: [{ itemId: "i", quantity: "1", unitCost: "5" }, { itemId: "i", quantity: "2", unitCost: "6" }] })).toContain("twice in the same unit");
-    expect(reason({ lines: [{ itemId: "i", unitId: "ctn", quantity: "1", unitCost: "5" }, { itemId: "i", quantity: "2", unitCost: "6" }] })).toBeNull();
+    // The same item on two lines is two lines, as on any order; a line that comes to less than a paisa is refused.
+    expect(reason({ lines: [{ itemId: "i", quantity: "1", unitCost: "5" }, { itemId: "i", quantity: "2", unitCost: "6" }] })).toBeNull();
+    expect(reason({ lines: [{ itemId: "i", quantity: "4", unitCost: "650" }, { itemId: "j", quantity: "0.001", unitCost: "1" }] })).toBe("Line 2: this line comes to less than one paisa. Check the quantity and what one cost.");
     expect(reason({ method: "cheque" })).toContain("Choose how it was paid");
     expect(reason({ accountId: "" })).toBe("Choose the cash account the money came out of.");
     expect(reason({ method: "bank", accountId: "" })).toBe("Choose the bank account the money came out of.");

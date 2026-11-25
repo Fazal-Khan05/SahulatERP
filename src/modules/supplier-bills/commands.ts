@@ -47,6 +47,7 @@ export function billRefusal(error: unknown, date: string): UserError | null {
   if (code === "SE230") return new UserError("A tax rate or withholding line on this bill is not in force on the bill's date. Open the draft, choose again and save it.");
   if (code === "SE231") return new UserError("Your company does not withhold tax from suppliers. Remove the withholding lines from the bill, or switch withholding on under Purchases, Withholding tax.");
   if (code === "SE232") return new UserError("A bill with this supplier's invoice number has already been posted. Check that this is not the same invoice entered twice.");
+  if (code === "SE267") return new UserError("The market seller stands for sellers who are not on your list, and is bought from only with Purchases, Quick market purchase, which pays at once. Choose another supplier, or throw this draft away.");
   if (code === "SE233") return new UserError("That date has not come yet.");
   if (code === "SE234") return new UserError("A bill can charge an expense or asset account that takes plain entries: not a heading, a locked account or an archived one.");
   if (code === "SE011" || code === "SE012") return new UserError("An account on this bill is a heading or has been archived. Open the draft and choose another account.");

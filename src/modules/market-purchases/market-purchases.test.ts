@@ -7,13 +7,13 @@ import { setBaseCurrency } from "@/modules/currencies/commands";
 import { postAdjustment, saveAdjustmentDraft } from "@/modules/inventory/commands";
 import { addUnit, createItem, setItemUnit } from "@/modules/items/commands";
 import { addAccount, seedAccounts } from "@/modules/ledger/commands";
-import { openFiscalYear } from "@/modules/numbering/commands";
+import { openFiscalYear, setPeriodLocked } from "@/modules/numbering/commands";
 import { createParty, setPartyArchived, updateParty } from "@/modules/parties/commands";
 import { postReceiptIn, saveOrderDraft, saveOrderDraftIn, saveReceiptDraftIn, submitOrder, submitOrderIn } from "@/modules/purchasing/commands";
 import { getOrderChoices, selectLinesToReceive } from "@/modules/purchasing/queries";
 import { postDelivery, saveSalesDraft, startDelivery, submitSalesDocument } from "@/modules/sales/commands";
 import { getDeliveryRows, getSalesDocument } from "@/modules/sales/queries";
-import { postBill, postBillIn, saveBillDraft, saveBillDraftIn } from "@/modules/supplier-bills/commands";
+import { postBill, postBillIn, saveBillDraft, saveBillDraftIn, setWithholding } from "@/modules/supplier-bills/commands";
 import { selectReceiptLinesToBill } from "@/modules/supplier-bills/queries";
 import { cancelPayment, postPayment, postPaymentIn, savePaymentDraft, savePaymentDraftIn } from "@/modules/supplier-payments/commands";
 import { listBillsOwed } from "@/modules/supplier-payments/queries";
@@ -104,11 +104,13 @@ const idsOf = async (id: string) => (await admin<{ order_id: string; receipt_id:
  * committed: to show the database itself refuses one left without its bill, unpaid, paid in
  * part, or with only some of the goods in.
  */
-async function byHand(upTo: "received" | "billed" | "part-paid" | "part-received"): Promise<string | undefined> {
+async function byHand(upTo: "received" | "billed" | "part-paid" | "part-received" | "half-billed-at-double" | "supplier-swapped"): Promise<string | undefined> {
   return refusedWith(as.owner, async (tx) => {
     const [market] = await tx.execute<{ id: string }>(sql`select app.market_supplier() as id`);
     const order = await saveOrderDraftIn(tx, as.owner, null, { date: DAY, supplierId: market.id, warehouseId: mainWarehouse, expectedOn: null, supplierReference: null, note: null, lines: [{ itemId: helmet, unitId: null, quantity: new Decimal(2), unitCost: new Decimal(100), description: null }] });
     await tx.execute(sql`insert into public.market_purchases (tenant_id, order_id, seller_name, client_key, created_by) values (${tenantA}, ${order.id}, 'By Hand', gen_random_uuid(), ${userIds.owner})`);
+    // The seller is said once: the order a purchase was written with keeps its supplier.
+    if (upTo === "supplier-swapped") await tx.execute(sql`update public.purchase_orders set supplier_id = ${wholesaler} where id = ${order.id}`);
     await submitOrderIn(tx, as.owner, order.id);
     const lines = await selectLinesToReceive(tx, order.id);
     const note = await saveReceiptDraftIn(tx, as.owner, null, order.id, { date: DAY, supplierDeliveryNote: null, note: null, lines: lines.map((l) => ({ orderLineId: l.lineId, quantity: upTo === "part-received" ? new Decimal(1) : l.ordered })) });
@@ -116,7 +118,7 @@ async function byHand(upTo: "received" | "billed" | "part-paid" | "part-received
     const received = await postReceiptIn(tx, as.owner, note.id);
     if (upTo === "received") return;
     const toBill = (await selectReceiptLinesToBill(tx, tenantA, market.id, mainBranch)).filter((l) => l.receiptNumber === received.number);
-    const bill = await saveBillDraftIn(tx, as.owner, null, { date: DAY, supplierId: market.id, branchId: mainBranch, supplierInvoiceNo: `HAND-${randomUUID().slice(0, 8)}`, dueDate: null, note: null, incomeTaxCode: null, salesTaxCode: null, provincialTaxCode: null, goods: toBill.map((l) => ({ receiptLineId: l.receiptLineId, quantity: l.received, unitPrice: l.orderCost, taxCategoryId: null })), expenses: [] });
+    const bill = await saveBillDraftIn(tx, as.owner, null, { date: DAY, supplierId: market.id, branchId: mainBranch, supplierInvoiceNo: `HAND-${randomUUID().slice(0, 8)}`, dueDate: null, note: null, incomeTaxCode: null, salesTaxCode: null, provincialTaxCode: null, goods: toBill.map((l) => (upTo === "half-billed-at-double" ? { receiptLineId: l.receiptLineId, quantity: new Decimal(1), unitPrice: new Decimal(200), taxCategoryId: null } : { receiptLineId: l.receiptLineId, quantity: l.received, unitPrice: l.orderCost, taxCategoryId: null })), expenses: [] });
     await tx.execute(sql`update public.market_purchases set bill_id = ${bill.id} where order_id = ${order.id}`);
     await postBillIn(tx, as.owner, bill.id);
     if (upTo === "billed") return;
@@ -234,14 +236,18 @@ describe.skipIf(!hasDb)("quick market purchases", { timeout: 600_000 }, () => {
     const before = await counts();
     const stockBefore = await stock();
     const tomorrow = new Date(Date.now() + 36 * 3600 * 1000).toISOString().slice(0, 10);
-    await expect(postMarketPurchase(as.owner, purchase({ date: tomorrow }))).rejects.toThrow("never before it");
-    // The order itself would go through on that day; the goods cannot come in before the books were opened.
+    await expect(postMarketPurchase(as.owner, purchase({ date: tomorrow }))).rejects.toThrow("That date has not come yet");
+    // The order itself would go through on these days; the goods cannot come in on a day with no fiscal period, or in a locked one.
     await expect(postMarketPurchase(as.owner, purchase({ date: "2026-06-15" }))).rejects.toThrow();
+    const [october] = await admin<{ id: string }[]>`select id from public.fiscal_periods where tenant_id = ${tenantA} and '2026-10-15'::date between starts_on and ends_on`;
+    await setPeriodLocked(as.owner, october.id, true);
+    await expect(postMarketPurchase(as.owner, purchase({ date: "2026-10-15" }))).rejects.toThrow(/locked|closed/i);
+    await setPeriodLocked(as.owner, october.id, false);
     await expect(postMarketPurchase(as.owner, purchase({ method: "cash", accountId: bank }))).rejects.toThrow("Choose the cash account");
     await expect(postMarketPurchase(as.owner, purchase({ method: "bank", accountId: cash }))).rejects.toThrow("Choose the bank account");
     await expect(postMarketPurchase(as.owner, purchase({ lines: [line("4", "0")] }))).rejects.toThrow("more than zero");
     await expect(postMarketPurchase(as.owner, purchase({ lines: [] }))).rejects.toThrow("Enter at least one line");
-    await expect(postMarketPurchase(as.owner, purchase({ lines: [line("1", "10"), line("2", "10")] }))).rejects.toThrow("twice in the same unit");
+    await expect(postMarketPurchase(as.owner, purchase({ lines: [line("4", "650"), line("0.001", "1")] }))).rejects.toThrow("less than one paisa");
     await expect(postMarketPurchase(as.owner, purchase({ sellerName: "" }))).rejects.toThrow("Enter the seller's name");
     await expect(postMarketPurchase(as.owner, purchase({ sellerPhone: "call me" }))).rejects.toThrow("seller's phone");
     await expect(postMarketPurchase(as.owner, purchase({ sellerKind: "supplier", supplierId: randomUUID() }))).rejects.toThrow("Choose the supplier from the list");
@@ -300,6 +306,19 @@ describe.skipIf(!hasDb)("quick market purchases", { timeout: 600_000 }, () => {
     expect(await byHand("billed")).toBe("SE268");
     expect(await byHand("part-paid")).toBe("SE268");
     expect(await byHand("part-received")).toBe("SE268");
+    // The right total for the wrong goods: one of the two billed at twice the cost, which would leave one never billed.
+    expect(await byHand("half-billed-at-double")).toBe("SE268");
+    expect(await byHand("supplier-swapped")).toBe("SE268");
+    expect(await counts()).toBe(before);
+    // The other way round: an order to a supplier on the list, its row written with no seller named, then pointed at the market supplier.
+    const market = (await marketSupplier())!;
+    expect(
+      await refusedWith(as.owner, async (tx) => {
+        const order = await saveOrderDraftIn(tx, as.owner, null, { date: DAY, supplierId: wholesaler, warehouseId: mainWarehouse, expectedOn: null, supplierReference: null, note: null, lines: [{ itemId: helmet, unitId: null, quantity: new Decimal(1), unitCost: new Decimal(100), description: null }] });
+        await tx.execute(sql`insert into public.market_purchases (tenant_id, order_id, client_key, created_by) values (${tenantA}, ${order.id}, gen_random_uuid(), ${userIds.owner})`);
+        await tx.execute(sql`update public.purchase_orders set supplier_id = ${market} where id = ${order.id}`);
+      }),
+    ).toBe("SE268");
     expect(await counts()).toBe(before);
 
     const [made] = await admin<{ id: string; order_id: string; bill_id: string; payment_id: string }[]>`select id, order_id, bill_id, payment_id from public.market_purchases where tenant_id = ${tenantA} order by created_at limit 1`;
@@ -319,16 +338,27 @@ describe.skipIf(!hasDb)("quick market purchases", { timeout: 600_000 }, () => {
     const supplier = (await marketSupplier())!;
     // An ordinary order to the market supplier can be written, and is refused when it is submitted.
     const order = await saveOrderDraft(as.owner, null, { date: DAY, supplierId: supplier, warehouseId: mainWarehouse, lines: [line("1", "500")] });
-    await expect(submitOrder(as.owner, order.id)).rejects.toThrow();
+    await expect(submitOrder(as.owner, order.id)).rejects.toThrow("is bought from only with Purchases, Quick market purchase");
     expect(await codeOf(as.owner, sql`select app.submit_purchase_order(${order.id}::uuid)`)).toBe("SE267");
     // An expense billed in its name, which would leave money owed to nobody in particular.
     const rent = (await admin<{ id: string }[]>`select id from public.accounts where tenant_id = ${tenantA} and code = '5230'`)[0].id;
     const bill = await saveBillDraft(as.accountant, null, { date: DAY, supplierId: supplier, branchId: mainBranch, supplierInvoiceNo: "X-1", expenses: [{ accountId: rent, description: "Rent", amount: "100" }] });
-    await expect(postBill(as.accountant, bill.id)).rejects.toThrow();
+    await expect(postBill(as.accountant, bill.id)).rejects.toThrow("is bought from only with Purchases, Quick market purchase");
     expect(await codeOf(as.accountant, sql`select app.post_supplier_bill(${bill.id}::uuid)`)).toBe("SE267");
     expect(await balance("ap")).toBe("0.00");
 
-    await expect(setPartyArchived(as.owner, "supplier", supplier, true)).rejects.toThrow();
+    // Nothing is paid to it ahead: a payment with no bill on it would be an advance to nobody in particular.
+    const before = await counts();
+    const advance = await savePaymentDraft(as.accountant, null, { date: DAY, supplierId: supplier, branchId: mainBranch, accountId: cash, amount: "5000", allocations: [] });
+    await expect(postPayment(as.accountant, advance.id)).rejects.toThrow("never in advance");
+    expect(await codeOf(as.accountant, sql`select app.post_supplier_payment(${advance.id}::uuid)`)).toBe("SE267");
+    expect([await balance("supplier_advances"), await balance("ap")]).toEqual(["0.00", "0.00"]);
+    expect((await admin<{ status: string }[]>`select status from public.supplier_payments where id = ${advance.id}`)[0].status).toBe("draft");
+    expect((await counts()).replace(/\d+ payments/, "")).toBe(before.replace(/\d+ payments/, ""));
+
+    await expect(setPartyArchived(as.owner, "supplier", supplier, true)).rejects.toThrow("stands for sellers in the market");
+    await expect(updateParty(as.owner, "supplier", supplier, { name: "Market seller 2", ntn: "1234567" })).rejects.toThrow("stands for sellers in the market");
+    expect(await codeOf(as.owner, sql`update public.suppliers set credit_days = 30 where id = ${supplier}`)).toBe("SE269");
     expect(await codeOf(as.owner, sql`update public.suppliers set archived_at = now(), archived_by = ${userIds.owner} where id = ${supplier}`)).toBe("SE269");
     expect(await codeOf(as.owner, sql`update public.suppliers set registration_type = 'registered', ntn = '1234567', strn = '1234567890123' where id = ${supplier}`)).toBe("SE269");
     expect(await codeOf(as.owner, sql`update public.suppliers set cnic = '1234567890123' where id = ${supplier}`)).toBe("SE269");
@@ -346,9 +376,50 @@ describe.skipIf(!hasDb)("quick market purchases", { timeout: 600_000 }, () => {
     const supplier = (await marketSupplier())!;
     await cancelPayment(as.accountant, ids.payment_id, { date: DAY, reason: "Paid from the wrong account" });
     expect((await listBillsOwed(as.accountant, supplier, mainBranch)).map((b) => `${b.number}: ${b.owed.toFixed(2)}`)).toEqual([`${made.billNumber}: 660.00`]);
+    // Paid again for more than is owed: the rest would be an advance to the market seller, so it is refused whole.
+    const over = await savePaymentDraft(as.accountant, null, { date: DAY, supplierId: supplier, branchId: mainBranch, accountId: bank, amount: "1000", allocations: [{ billId: ids.bill_id, amount: "660" }] });
+    await expect(postPayment(as.accountant, over.id)).rejects.toThrow("never in advance");
     const again = await savePaymentDraft(as.accountant, null, { date: DAY, supplierId: supplier, branchId: mainBranch, accountId: bank, amount: "660", allocations: [{ billId: ids.bill_id, amount: "660" }] });
     await postPayment(as.accountant, again.id);
+    expect([await balance("ap"), await balance("grni"), await balance("supplier_advances")]).toEqual(["0.00", "0.00", "0.00"]);
+  });
+
+  it("keeps the order, the goods, the bill and the payment at one total, to the paisa, whatever the lines", async () => {
+    const stockBefore = (await stock()).split(" worth ").map((v) => new Decimal(v));
+    const made = await postMarketPurchase(as.owner, purchase({ lines: [line("0.3333", "99.9999"), line("1.5", "1234.5678", carton), line("3", "33.3333"), line("1", "0.0050")] }));
+    // 33.33 + 1851.85 + 100.00 + 0.01
+    expect(made.total).toBe("1985.19");
+    const ids = await idsOf(made.id);
+    const [totals] = await admin<{ o: string; b: string; p: string; g: string }[]>`
+      select (select total::numeric(20,2)::text from public.purchase_orders where id = ${ids.order_id}) as o, (select total::text from public.supplier_bills where id = ${ids.bill_id}) as b,
+             (select amount::text from public.supplier_payments where id = ${ids.payment_id}) as p,
+             (select sum(l.debit)::numeric(20,2)::text from public.journals j join public.journal_lines l on l.journal_id = j.id where j.source_type = 'goods_receipt' and j.source_id = ${ids.receipt_id}) as g`;
+    expect(totals).toEqual({ o: "1985.19", b: "1985.19", p: "1985.19", g: "1985.19" });
+    const stockAfter = (await stock()).split(" worth ").map((v) => new Decimal(v));
+    expect([stockAfter[0].minus(stockBefore[0]).toFixed(), stockAfter[1].minus(stockBefore[1]).toFixed()]).toEqual(["19.3333", "1985.19"]);
     expect([await balance("ap"), await balance("grni")]).toEqual(["0.00", "0.00"]);
+    expect((await admin<{ n: number }[]>`select count(*)::int as n from public.journal_lines l join public.accounts a on a.id = l.account_id where l.tenant_id = ${tenantA} and a.control_type = 'purchase_price_difference'`)[0].n).toBe(0);
+  });
+
+  it("three requests at once with one key make one purchase", async () => {
+    const clientKey = randomUUID();
+    const all = await Promise.all([1, 2, 3].map(() => postMarketPurchase(as.owner, purchase({ clientKey, lines: [line("1", "600")] }))));
+    expect(new Set(all.map((made) => made.orderNumber)).size).toBe(1);
+    expect((await admin<{ n: number }[]>`select count(*)::int as n from public.market_purchases where tenant_id = ${tenantA} and client_key = ${clientKey}`)[0].n).toBe(1);
+    // The key of a purchase someone cannot see (another branch's) is refused in plain words, and makes nothing.
+    await expect(postMarketPurchase(north, purchase({ clientKey, warehouseId: northWarehouse, lines: [line("1", "600")] }))).rejects.toThrow("could not be recorded as it stands");
+  });
+
+  it("a company that withholds tax buys from a supplier on its list with a bill, where the tax is worked out", async () => {
+    await setWithholding(as.owner, true);
+    const before = await counts();
+    await expect(postMarketPurchase(as.owner, purchase({ sellerKind: "supplier", supplierId: wholesaler }))).rejects.toThrow("Your company withholds tax from suppliers");
+    expect(await counts()).toBe(before);
+    expect((await getMarketPurchaseChoices(as.owner)).withholds).toBe(true);
+    // From a seller in the market it still goes through, with nothing withheld.
+    const made = await postMarketPurchase(as.owner, purchase({ lines: [line("1", "600")] }));
+    expect((await admin<{ withheld: string }[]>`select withheld::text from public.supplier_bills where id = ${made.billId}`)[0].withheld).toBe("0.00");
+    await setWithholding(as.owner, false);
   });
 
   it("the reason it exists: a delivery that is short goes through once the goods are bought", async () => {

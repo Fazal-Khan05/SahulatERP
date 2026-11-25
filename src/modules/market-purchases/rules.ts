@@ -11,6 +11,10 @@ import { readOrder, type OrderDraftLine, type RawOrder } from "@/modules/purchas
 export const NO_TAX_ON_MARKET_PURCHASE =
   "No sales tax is claimed and no tax is withheld on a quick market purchase. If the seller gave a sales tax invoice you want to claim, or tax must be withheld from them, use a purchase order and a supplier bill instead.";
 
+/** Said when a company that withholds tax tries a quick market purchase from a supplier on its list. */
+export const WITHHOLDS_FROM_SUPPLIERS =
+  "Your company withholds tax from suppliers, and a quick market purchase withholds nothing. Buy from a supplier on your list with a purchase order and a supplier bill, where the tax is worked out.";
+
 export type RawMarketPurchase = {
   date?: unknown;
   warehouseId?: unknown;
@@ -45,7 +49,7 @@ export const PHONE_PATTERN = /^\+?[0-9][0-9 -]{5,18}[0-9]$/;
 
 export function readMarketPurchase(raw: RawMarketPurchase, today: string): { ok: true; purchase: MarketPurchase } | { ok: false; reason: string } {
   if (!isIsoDate(raw.date)) return { ok: false, reason: "Enter the day the goods were bought." };
-  if (raw.date > today) return { ok: false, reason: "A purchase is recorded on the day the goods were bought or later, never before it." };
+  if (raw.date > today) return { ok: false, reason: "That date has not come yet. A purchase is recorded on the day the goods were bought, or later." };
   if (raw.sellerKind !== "supplier" && raw.sellerKind !== "market") return { ok: false, reason: "Say who the goods were bought from: a supplier on your list, or a seller in the market." };
   let seller: MarketPurchase["seller"];
   if (raw.sellerKind === "supplier") {
@@ -73,12 +77,9 @@ export function readMarketPurchase(raw: RawMarketPurchase, today: string): { ok:
   // A free sample is an order's business; goods bought in the market cost something, and a line at nothing would be paid nothing.
   const free = lines.findIndex((line) => line.unitCost.lte(0));
   if (free >= 0) return { ok: false, reason: `Line ${free + 1}, cost: enter what one cost, more than zero.` };
-  const seen = new Set<string>();
-  for (const [index, line] of lines.entries()) {
-    const key = `${line.itemId}|${line.unitId ?? ""}`;
-    if (seen.has(key)) return { ok: false, reason: `Line ${index + 1}: this item is on the purchase twice in the same unit. Put it on one line.` };
-    seen.add(key);
-  }
+  // Each line is paid something: one that comes to less than a paisa would bring goods in at no cost.
+  const nothing = lines.findIndex((line) => line.quantity.times(line.unitCost).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).lte(0));
+  if (nothing >= 0) return { ok: false, reason: `Line ${nothing + 1}: this line comes to less than one paisa. Check the quantity and what one cost.` };
   if (raw.method !== "cash" && raw.method !== "bank") return { ok: false, reason: "Choose how it was paid: in cash, or from a bank account." };
   const accountId = text(raw.accountId);
   if (accountId === "") return { ok: false, reason: raw.method === "cash" ? "Choose the cash account the money came out of." : "Choose the bank account the money came out of." };

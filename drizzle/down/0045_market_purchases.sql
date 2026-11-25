@@ -7,11 +7,13 @@
 
 BEGIN;
 DROP TRIGGER suppliers_market ON public.suppliers;
+DROP TRIGGER supplier_payments_market ON public.supplier_payments;
 DROP TRIGGER supplier_bills_market ON public.supplier_bills;
 DROP TRIGGER purchase_orders_market ON public.purchase_orders;
 DROP TRIGGER market_purchases_whole ON public.market_purchases;
 DROP TRIGGER market_purchases_check ON public.market_purchases;
 DROP FUNCTION app.check_market_supplier();
+DROP FUNCTION app.check_market_payment();
 DROP FUNCTION app.check_market_bill();
 DROP FUNCTION app.check_market_order();
 DROP FUNCTION app.check_market_purchase_whole();

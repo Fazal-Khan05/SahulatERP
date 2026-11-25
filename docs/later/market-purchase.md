@@ -78,14 +78,25 @@ other bill has, and the memo number is kept on the purchase and in the notes.
   supplier.
 - **Whole when its transaction ends** (a deferred check, SE268): the order submitted; one posted
   note that received all of every line; the posted bill from the same supplier for exactly
-  those goods at the order's total, with no tax on it and nothing withheld; one posted payment
-  to that supplier for the bill's total, all of it against that bill. A purchase left without
-  its bill, unpaid, paid in part or with only some of the goods in is refused.
+  those goods (every line received, once, in the quantity received and at the order's cost),
+  with no tax on it and nothing withheld; one posted payment to that supplier for the bill's
+  total, all of it against that bill. A purchase left without its bill, unpaid, paid in part,
+  with only some of the goods in, or billed for the right total but the wrong goods is refused.
+- **Who sold is said once** (SE268): the order a purchase was written with keeps its supplier,
+  and the seller is named on the purchase when, and only when, that supplier is the market
+  supplier (asked when the row is written and again as the transaction ends).
 - **The market supplier is bought from in no other way** (SE267): an order to it is submitted,
-  and a bill from it is posted, only as a quick market purchase's own. So nothing is left owed
-  to a seller nobody can name again, and no expense is billed in that name.
+  and a bill from it is posted, only as a quick market purchase's own. So no expense is billed
+  in that name.
+- **Nothing is paid to it ahead** (SE267): a payment to the market supplier is posted only with
+  every rupee set against its bills, which can only be quick market purchases' bills. The
+  purchase's own payment is of that kind; so is the one that pays a bill again after its
+  payment was cancelled. An advance, or a payment for more than is owed, is refused.
 - **The market supplier stays what it is** (SE269): renamed or given a code, yes; archived,
-  registered for tax, given an NTN, STRN or CNIC, or marked on the Active Taxpayers List, no.
+  given credit days, registered for tax, given an NTN, STRN or CNIC, or marked on the Active
+  Taxpayers List, no.
+- On the ordinary screens these refusals are said in plain words (a draft order or bill to the
+  market supplier that is submitted or posted, a payment ahead, archiving it).
 - It is left out of the supplier lists of an ordinary order and an ordinary bill, and the quick
   purchase refuses it as "a supplier on the list".
 - Who reads a market purchase is who reads its order (the owner, an accountant, the auditor,
@@ -104,23 +115,34 @@ other bill has, and the memo number is kept on the purchase and in the notes.
    the screen is one step precisely because nothing has to be chosen. Nothing is typed as a
    rate anywhere: there is simply no tax category on the bill's lines and no withholding line
    chosen. The screen says so, and says what to do instead (a purchase order and a supplier
-   bill) when the seller gave a sales tax invoice or tax must be withheld. A company that has
-   withholding switched on is reminded to check whether this seller is one it must withhold
-   from. What is typed as "cost of one" is what was paid, so any tax inside the price becomes
-   part of what the goods cost, which is right when it is not claimed.
+   bill) when the seller gave a sales tax invoice or tax must be withheld. What is typed as
+   "cost of one" is what was paid, so any tax inside the price becomes part of what the goods
+   cost, which is right when it is not claimed.
+   **A company that has withholding switched on** cannot make a quick market purchase from a
+   supplier on its list at all: the system knows that supplier and that the company withholds,
+   so it is sent to the bill, where the tax is worked out. From a seller in the market it still
+   can, and is reminded to check whether this seller is one it must withhold from (the reviewer
+   thought this the weakest point; it is on the tax adviser's list below).
 4. **A purchase from a supplier on the list is paid at once too.** If it is on credit it is an
    ordinary purchase order and bill.
-5. **The cost of every line must be more than zero.** A free sample is an ordinary order's
-   business; a line at nothing would be "paid" nothing.
-6. **After it is made, each document follows its own rules.** Goods that go back are a supplier
-   return. A payment entered by mistake (the wrong account, say) is cancelled and the bill paid
-   again by an ordinary payment; this is the one way money can come to be owed to the market
+5. **The cost of every line must be more than zero**, and every line must come to at least a
+   paisa. A free sample is an ordinary order's business; a line at nothing would be "paid"
+   nothing and bring goods in at no cost.
+6. **After it is made, each document follows its own rules.** A payment entered by mistake (the
+   wrong account, say) is cancelled and the bill paid again by an ordinary payment, for exactly
+   what is owed and no more; this is the one way money can come to be owed to the market
    supplier, it is deliberate, and the audit trail shows it. (A counter sale's receipt, by
    contrast, cannot be cancelled; there the remedy is a credit note. Here refusing to cancel
    would leave a wrongly entered bank payment with no remedy at all.)
+   **Goods that go back** are a supplier return, as for any supplier, and that leaves a gap
+   that is not this work's to close: see "Money back from a supplier" under Later.
 7. **Where it returns to.** Opened from a delivery or an invoice it comes back to that document
    and nowhere else, whatever the address asks for; opened from Purchases it opens the bill it
    made.
+
+8. **A purchase sent again with the same key is the first purchase**, even if what was typed
+   changed in between (the counter sale does the same). The form makes a new key each time the
+   screen is opened.
 
 ## Questions for a tax adviser
 
@@ -131,9 +153,27 @@ other bill has, and the memo number is kept on the purchase and in the notes.
   instead when it applies" enough, or should large market purchases be stopped or flagged?
 - Section 21(l) of the Income Tax Ordinance disallows an expense paid in cash above a limit for
   one transaction. Should the screen warn above an amount when "Cash" is chosen?
+- The reviewer recalled, without looking it up, a newer disallowance of part of what is bought
+  from sellers who have no NTN. If it exists and applies, purchases from the market supplier
+  are exactly those; the books can already list them (every bill of that one supplier).
 
 ## Later
 
+- **Money back from a supplier is not built, for any supplier.** A supplier return of goods
+  already paid for leaves the supplier owing the company (a debit in Trade payables), which an
+  ordinary supplier works off against later bills. The market supplier's bills are all paid at
+  once, so a return to a market seller leaves that debit standing even after the seller has
+  handed the cash back, with no document to record the cash. Until a supplier refund exists:
+  the return is still right about the stock and about who owes whom; the cash received cannot
+  be entered against it. This wants a small step of its own (a refund from a supplier, the
+  mirror of Step 34's refund to a customer).
+- Every quick market purchase from an unlisted seller is one supplier's, so the list of goods
+  still to bill reads that supplier's whole history each time (twice per purchase), and the
+  bill's posting takes the supplier in turn. Fine for years of a shop's purchases; if a company
+  makes thousands, give that list a filter in the database.
+- `src/modules/supplier-payments/payments.test.ts` picks "a posted payment" with `limit 1` and
+  no order, and fails now and then when it picks one that settled no bill (seen once while
+  building this; not caused by it).
 - **The accountant's menu has no Purchases entry** (their "Bills and payments" link is not built
   yet; noted before this work). An accountant reaches the quick market purchase from a short
   delivery, or by the address, or from the Purchases screens once they are there. The menu is
@@ -149,7 +189,48 @@ other bill has, and the memo number is kept on the purchase and in the notes.
 - Shipments' supplier list still offers the market supplier; a bill from it is refused there as
   everywhere.
 
-## How it was checked
+## Review
 
-See the pull request: the database tests (`src/modules/market-purchases`), the browser spec
-(`e2e/market-purchase.spec.ts`), and the independent review.
+An independent reviewer, who had not seen the work, attacked it with SQL of their own as the
+app's role in each role and from another company, on a database of their own.
+
+**Found and put right before the migration was sent:**
+
+- *High.* An ordinary supplier payment could pay the market supplier ahead, with no bill on it,
+  or for more than a bill after its payment was cancelled. Now refused (SE267): every rupee of
+  a payment to it is set against its bills.
+- *Medium.* The "whole" check tied the bill to the goods only by its total: by hand, two
+  received and one billed at twice the cost went through, leaving one never billable. The check
+  now asks for every line received, once, in its quantity and at the order's cost.
+- *Medium-low.* A draft order's supplier could be changed after the purchase's row was written,
+  ending with a market purchase with no seller named, or a named seller on a listed supplier's
+  order. The order now keeps its supplier, and the rule is asked again as the transaction ends.
+- *Medium-low.* The new refusals reached the ordinary screens as "That did not work". Each now
+  has its own words.
+- *Low.* The market supplier could be given credit days (now refused); a line that came to less
+  than a paisa went through beside another (now refused); the message for a day that has not
+  come was hard to read (reworded); an item sold only by the carton showed its shortage with no
+  unit (now says it is counted in the item's own unit); a reused key from someone who cannot
+  see the first purchase got a misleading message (now a plain one).
+- The same item on two lines was refused only when both left the unit empty; that rule is gone
+  (an order may carry an item twice).
+
+**Found and left, with the reason:** goods returned to a market seller (see Later: money back
+from a supplier); a key reused with other contents (decision 8); `?bought=` shows a real
+purchase of the company on any draft delivery, to someone who may read it anyway; the list of
+goods to bill grows with the one supplier (Later).
+
+**Tried and held** (the reviewer's list): rows forged, changed, deleted, pointed at another
+company's documents or written by another role; orders and bills inserted already submitted or
+posted; a draft bill's supplier swapped to the market supplier and posted; a purchase left at
+any half-way point, including after `set constraints all immediate`; two calls for the market
+supplier at once (one supplier); six different purchases at once (numbers without a gap, nothing
+owed); a refusal at the receipt and at the bill leaving no row, audit row, stock move or number
+taken; branch and company limits. Five lines with four-decimal costs, fractions and cartons
+came to one total on the order, the stock, the bill and the payment, with no price difference.
+
+## Tests
+
+`src/modules/market-purchases/market-purchases.test.ts` (against a real database, through the
+app's own path), `rules.test.ts`, and `e2e/market-purchase.spec.ts`. See the pull request for
+what was run where.

@@ -11,7 +11,7 @@ import { recordAuthEvent } from "@/modules/tenant/commands";
 import { loadWorkspace } from "@/modules/tenant/queries";
 import { DEFAULT_PRODUCT_NAME } from "@/modules/tenant/rules";
 import { requestDetail } from "./request";
-import { cleanCode, provedRecently, twoStepRequiredFor } from "./rules";
+import { cleanCode, provedRecently, twoStepRequiredFor, twoStepRequiredOfCreator } from "./rules";
 import { getSignedInAccount } from "./session";
 
 const NOT_RIGHT = "That code is not right. Check the time on your phone and try the newest code.";
@@ -168,7 +168,7 @@ export async function removeTwoStepAction(): Promise<FormState> {
   if (!account || account.gate !== "ok") return { location: "/sign-in" };
 
   const { memberships } = await loadWorkspace(account.id, null);
-  if (account.canCreateCompany || memberships.some((m) => m.active && twoStepRequiredFor(m.role))) {
+  if (twoStepRequiredOfCreator(account.canCreateCompany) || memberships.some((m) => m.active && twoStepRequiredFor(m.role))) {
     return { error: "Your role needs two-step sign-in, so it stays on." };
   }
 

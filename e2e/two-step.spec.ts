@@ -10,6 +10,8 @@ import { freshCode, keyFromPage, sessionIdOf } from "./support/two-step";
 
 test.describe.configure({ mode: "serial" });
 test.skip(!hasE2EEnv(), "needs the Supabase and database settings in .env.local");
+// The rule as it holds: e2e/two-step-optional.spec.ts is the same site with the founder's switch off.
+test.skip(process.env.TWO_STEP_REQUIRED?.trim().toLowerCase() === "off", "the rule is switched off (TWO_STEP_REQUIRED=off)");
 
 const COMPANY = "E2E Two Step Traders";
 

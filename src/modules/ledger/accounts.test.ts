@@ -296,7 +296,8 @@ describe.skipIf(!hasDb)("the chart of accounts", () => {
       // The old way, by the two settings. With a key installed they mean nothing. Without one
       // (a development database) they are still believed, and this is the hole as it was: it
       // shows that the statement above is a real attempt and not one that would read nothing anyway.
-      const [{ keyed }] = await admin<{ keyed: boolean }[]>`select exists (select 1 from app.identity_keys) as keyed`;
+      // A key is a shared secret or a public key (IDENTITY_SIGNING_KEY): either one ends the old way.
+      const [{ keyed }] = await admin<{ keyed: boolean }[]>`select exists (select 1 from app.identity_keys) or exists (select 1 from app.identity_public_keys) as keyed`;
       const bySettings = await read(
         (tx) => tx`select set_config('app.user_id', ${seller}, true), set_config('app.tenant_id', ${tenantA}, true)`,
         (tx) => tx`set_config('app.tenant_id', ${tenantC}, true)`,

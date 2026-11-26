@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { audit, isUuid, withTenant, type Tx } from "@/db";
 import { UserError, pgCode } from "@/lib/errors";
+import { finishImport, type ImportOptions } from "@/lib/import-options";
 import { can, type TenantContext } from "@/modules/tenant/rules";
 import { selectItem, selectItemSetup } from "./queries";
 import {
@@ -216,8 +217,9 @@ export type ItemImportOutcome = { imported: number } | { problems: ImportProblem
 /**
  * Imports a CSV file of items, all or nothing. If any row is wrong, or has the code of an item
  * that already exists, no row is kept and every bad row is returned with what is wrong.
+ * `options` let Settings, Import data preview a file or record what it imported (Step 49).
  */
-export async function importItems(ctx: TenantContext, file: { name: string; text: string }): Promise<ItemImportOutcome> {
+export async function importItems(ctx: TenantContext, file: { name: string; text: string }, options?: ImportOptions): Promise<ItemImportOutcome> {
   requireManager(ctx);
   try {
     return await withTenant(ctx.userId, ctx.tenantId, async (tx): Promise<ItemImportOutcome> => {
@@ -243,6 +245,7 @@ export async function importItems(ctx: TenantContext, file: { name: string; text
         // The ids tie each imported item back to this import; it has no audit row of its own.
         after: { rows: list.length, file: file.name.replace(/[^\P{Cc}]/gu, "").slice(0, 120), ids: list.map((entry) => entry.id) },
       });
+      await finishImport(tx, options, list.length);
       return { imported: list.length };
     });
   } catch (error) {

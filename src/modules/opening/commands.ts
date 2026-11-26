@@ -2,6 +2,7 @@ import "server-only";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { audit, isUuid, withTenant, type Tx } from "@/db";
 import { UserError, pgCode } from "@/lib/errors";
+import { finishImport, type ImportOptions } from "@/lib/import-options";
 import { AMOUNT_SCALE } from "@/lib/money";
 import { cleanText } from "@/lib/text";
 import { isIsoDate } from "@/modules/currencies/rules";
@@ -241,8 +242,15 @@ export type OpeningImportOutcome = { imported: number } | { problems: ImportProb
  * Imports a CSV file into the draft, all or nothing: a trial balance (`account`), unpaid
  * customer invoices (`receivable`) or unpaid supplier bills (`payable`). If any row is wrong,
  * or names something already on the draft, no row is kept and every bad row is returned.
+ * `options` let Settings, Import data preview a file or record what it imported (Step 49).
  */
-export async function importOpeningLines(ctx: TenantContext, kind: "account" | PartyKind, file: { name: string; text: string }, loadedAt?: unknown): Promise<OpeningImportOutcome> {
+export async function importOpeningLines(
+  ctx: TenantContext,
+  kind: "account" | PartyKind,
+  file: { name: string; text: string },
+  loadedAt?: unknown,
+  options?: ImportOptions,
+): Promise<OpeningImportOutcome> {
   requireManager(ctx);
   try {
     return await withTenant(ctx.userId, ctx.tenantId, async (tx): Promise<OpeningImportOutcome> => {
@@ -286,6 +294,7 @@ export async function importOpeningLines(ctx: TenantContext, kind: "account" | P
       }
       await touch(tx, ctx, entry.id);
       await audit(tx, ctx, { action: `opening.import_${kind}`, entity: "opening_entry", entityId: entry.id, after: { rows: imported, file: file.name.replace(/[^\P{Cc}]/gu, "").slice(0, 120) } });
+      await finishImport(tx, options, imported);
       return { imported };
     });
   } catch (error) {

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { audit, isUuid, withTenant, type Tx } from "@/db";
 import { UserError, pgCode } from "@/lib/errors";
+import { finishImport, type ImportOptions } from "@/lib/import-options";
 import { can, type TenantContext } from "@/modules/tenant/rules";
 import { partyTable, selectParties } from "./queries";
 import { PARTY_WORDS, partyChanges, readParty, readPartyImport, type ImportProblem, type PartyInput, type PartyKind, type RawParty } from "./rules";
@@ -216,8 +217,9 @@ export type ImportOutcome = { imported: number } | { problems: ImportProblem[] }
 /**
  * Imports a CSV file of customers or suppliers, all or nothing. If any row is wrong, or names a
  * party that already exists, no row is kept and every bad row is returned with what is wrong.
+ * `options` let Settings, Import data preview a file or record what it imported (Step 49).
  */
-export async function importParties(ctx: TenantContext, kind: PartyKind, file: { name: string; text: string }): Promise<ImportOutcome> {
+export async function importParties(ctx: TenantContext, kind: PartyKind, file: { name: string; text: string }, options?: ImportOptions): Promise<ImportOutcome> {
   requireManager(ctx, kind);
   const read = readPartyImport(kind, file.text);
   if (read.status === "unreadable") throw new UserError(read.reason);
@@ -254,6 +256,7 @@ export async function importParties(ctx: TenantContext, kind: PartyKind, file: {
         // The ids tie each imported party back to this import; it has no audit row of its own.
         after: { rows: list.length, file: file.name.replace(/[\u0000-\u001f]/g, "").slice(0, 120), ids: list.map((item) => item.id) },
       });
+      await finishImport(tx, options, list.length);
       return { imported: list.length };
     });
   } catch (error) {

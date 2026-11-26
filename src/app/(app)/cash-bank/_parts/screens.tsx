@@ -16,7 +16,7 @@ import { ReceiptsCard } from "../../daily-expenses/_parts/receipts";
 import { addAccountAction, archiveAccountAction, bankDetailsAction, cancelExpenseAction, cancelTransferAction, expenseAction, transferAction } from "./actions";
 
 type Session = Awaited<ReturnType<typeof requireTenant>>;
-const SELECT = "h-8 w-full min-w-0 rounded-lg border border-input bg-card px-2 text-sm";
+export const SELECT = "h-8 w-full min-w-0 rounded-lg border border-input bg-card px-2 text-sm";
 const EXPENSE_ROWS = 5;
 
 /** Why this member cannot open the cash and bank screens, or null. */
@@ -32,7 +32,7 @@ export function Shut({ title, why }: { title: string; why: string }) {
   );
 }
 
-export function CashNav({ here }: { here: "accounts" | "transfers" | "expenses" | "reconcile" }) {
+export function CashNav({ here }: { here: "accounts" | "transfers" | "expenses" | "money-in" | "money-out" | "reconcile" }) {
   const tab = (key: typeof here, href: string, label: string) => (
     <Link
       href={href}
@@ -47,16 +47,18 @@ export function CashNav({ here }: { here: "accounts" | "transfers" | "expenses" 
       {tab("accounts", "/cash-bank", "Accounts")}
       {tab("transfers", "/cash-bank/transfers", "Transfers")}
       {tab("expenses", "/cash-bank/expenses", "Expenses")}
+      {tab("money-in", "/cash-bank/money-in", "Money in")}
+      {tab("money-out", "/cash-bank/money-out", "Money out")}
       {tab("reconcile", "/cash-bank/reconcile", "Reconcile")}
     </nav>
   );
 }
 
-const Status = ({ status }: { status: "posted" | "cancelled" }) => (
+export const Status = ({ status }: { status: "posted" | "cancelled" }) => (
   <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${status === "posted" ? "bg-accent text-accent-foreground" : "bg-muted text-muted-foreground"}`}>{status === "posted" ? "Posted" : "Cancelled"}</span>
 );
 
-function Books({ title, lines }: { title: string; lines: JournalLine[] }) {
+export function Books({ title, lines }: { title: string; lines: JournalLine[] }) {
   if (lines.length === 0) return null;
   return (
     <Card title={title}>
@@ -84,7 +86,7 @@ function Books({ title, lines }: { title: string; lines: JournalLine[] }) {
   );
 }
 
-function CancelCard({ action, word }: { action: Parameters<typeof ActionForm>[0]["action"]; word: string }) {
+export function CancelCard({ action, word }: { action: Parameters<typeof ActionForm>[0]["action"]; word: string }) {
   return (
     <Card title={`Cancel this ${word}`}>
       <p className="mb-3 text-sm text-muted-foreground">A {word} entered by mistake is taken back with a reversal on the day you choose. It is never changed or removed.</p>

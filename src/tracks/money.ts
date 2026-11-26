@@ -88,6 +88,10 @@ export const documents = {
   // Step 42: a loan to staff, and what is repaid on it in cash.
   SL: "Staff loan",
   LR: "Staff loan repayment",
+  // Batch A (2026-11-27): money into or out of a cash or bank account that no other form records:
+  // capital, a loan, drawings, other income.
+  MI: "Money in",
+  MO: "Money out",
 } as const satisfies Record<string, string>;
 
 /** This track's reports, listed on the Reports page under headings of its own. */

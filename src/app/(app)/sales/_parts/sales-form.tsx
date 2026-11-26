@@ -30,8 +30,8 @@ type Credit = { limit: string | null; receivable: string; openOrders: string };
 
 export type SalesFormProps = {
   action: FormAction<SalesFormState>;
-  /** "counter": a sale to a walk-in buyer, who pays at once (Step 22). */
-  kind: "quotation" | "order" | "counter";
+  /** "counter": a sale to a walk-in buyer, who pays at once (Step 22). "invoice": an order, its delivery and its invoice in one go (batch A). */
+  kind: "quotation" | "order" | "counter" | "invoice";
   /** For a counter sale: the cash and bank accounts the buyer's money can go into. */
   moneyAccounts?: { id: string; code: string; name: string; kind: "cash" | "bank" }[];
   /** Whether the company charges sales tax, and whether its prices already hold it. */
@@ -106,7 +106,7 @@ export function SalesForm({ action, kind, moneyAccounts = [], taxed, pricesInclu
   const askReason = state.needsReason ?? needsReason ?? false;
   const error = state.error ?? (state.message ? undefined : refused);
   const counter = kind === "counter";
-  const word = kind === "order" ? "order" : kind === "counter" ? "sale" : "quotation";
+  const word = kind === "order" ? "order" : kind === "counter" ? "sale" : kind === "invoice" ? "invoice" : "quotation";
   const [method, setMethod] = useState<"cash" | "bank">("cash");
   // One key for this sale, however many times it is sent: the server records it once.
   const [clientKey] = useState(() => crypto.randomUUID());
@@ -147,7 +147,7 @@ export function SalesForm({ action, kind, moneyAccounts = [], taxed, pricesInclu
     if (!choice) return;
     // The customer decides the prices: every line whose price was not typed is priced again.
     for (const row of rows) if (row.item && !row.priceTyped) void loadLine(row.key, row.item, choice, date);
-    if (kind === "order") {
+    if (kind === "order" || kind === "invoice") {
       void fetchJson<{ credit: Credit | null }>(`/sales/lookup?what=credit&customer=${choice.id}&except=${documentId ?? ""}`).then((found) => setCredit(found?.credit ?? null));
     }
   };
@@ -353,7 +353,7 @@ export function SalesForm({ action, kind, moneyAccounts = [], taxed, pricesInclu
           </tfoot>
         </table>
       </div>
-      {taxed ? <p className="text-sm text-muted-foreground">Sales tax is worked out line by line when the {word} is {counter ? "recorded" : "saved"}.</p> : null}
+      {taxed ? <p className="text-sm text-muted-foreground">Sales tax is worked out line by line when the {word} is {counter ? "recorded" : kind === "invoice" ? "made" : "saved"}.</p> : null}
 
       {counter ? (
         <fieldset className="flex flex-col gap-3 rounded-lg border px-3 py-3">
@@ -438,7 +438,7 @@ export function SalesForm({ action, kind, moneyAccounts = [], taxed, pricesInclu
 
       {askReason ? (
         <div className="flex max-w-xl flex-col gap-1.5">
-          <Label htmlFor="reason">Reason for approving this order over the credit limit</Label>
+          <Label htmlFor="reason">Reason for approving this {kind === "invoice" ? "sale" : "order"} over the credit limit</Label>
           <Input id="reason" name="reason" maxLength={300} autoComplete="off" autoFocus placeholder="Such as: cheque due on Monday" />
         </div>
       ) : null}
@@ -453,10 +453,10 @@ export function SalesForm({ action, kind, moneyAccounts = [], taxed, pricesInclu
         </p>
       ) : null}
       {/* Saving comes first in the page, so pressing Enter in a field saves the draft and never submits. */}
-      {counter ? (
+      {counter || kind === "invoice" ? (
         <div className="flex flex-wrap gap-2">
           <Button type="submit" name="intent" value="submit" disabled={!ready || busy}>
-            {busy ? "Working…" : "Record the sale and the payment"}
+            {busy ? "Working…" : counter ? "Record the sale and the payment" : askReason ? "Approve and make the invoice" : "Make the invoice"}
           </Button>
         </div>
       ) : (

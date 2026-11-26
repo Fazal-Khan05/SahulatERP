@@ -209,6 +209,12 @@ export const OPENING_COLUMNS = [
 ] as const;
 export type OpeningColumn = (typeof OPENING_COLUMNS)[number]["key"];
 export type OpeningProblem = { row: number; name: string; problems: string[] };
+/**
+ * A file may also say which warehouse each row is for, by the warehouse's name (Step 49): one
+ * file then brings in the opening stock of every warehouse, a draft for each.
+ */
+export const OPENING_FILE_COLUMNS = [...OPENING_COLUMNS, { key: "warehouse", header: "Warehouse" }] as const;
+export type OpeningFileColumn = (typeof OPENING_FILE_COLUMNS)[number]["key"];
 
 /**
  * Reads the rows of an opening stock file: an item's code, how many the warehouse holds in the

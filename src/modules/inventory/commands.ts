@@ -4,6 +4,8 @@ import { and, eq, sql } from "drizzle-orm";
 import { audit, isUuid, withTenant, type Tx } from "@/db";
 import { readCsvTable } from "@/lib/csv-table";
 import { UserError, pgCode } from "@/lib/errors";
+import { finishImport, type ImportOptions } from "@/lib/import-options";
+import { cleanText } from "@/lib/text";
 import { periodRefusal } from "@/modules/numbering/rules";
 import { can, type Permission, type TenantContext } from "@/modules/tenant/rules";
 import { warehouses } from "@/modules/warehouses/schema";
@@ -11,6 +13,7 @@ import { selectItemsByCode, selectStockAdjustment, selectStockCount, selectStock
 import {
   MAX_OPENING_ROWS,
   OPENING_COLUMNS,
+  OPENING_FILE_COLUMNS,
   QUANTITY_SCALE,
   formatQuantity,
   readAdjustment,
@@ -269,37 +272,104 @@ export async function saveAdjustmentDraft(ctx: TenantContext, kind: AdjustmentKi
   return withTenant(ctx.userId, ctx.tenantId, (tx) => writeAdjustment(tx, ctx, id, read.draft, loadedAt));
 }
 
-export type OpeningImport = { ok: true; id: string; lines: number } | { ok: false; reason?: string; problems?: OpeningProblem[] };
+export type OpeningImport = { ok: true; id: string; ids: string[]; lines: number } | { ok: false; reason?: string; problems?: OpeningProblem[] };
 
 /**
  * Reads a CSV file of opening stock (item code, quantity, unit cost) into a new draft for one
- * warehouse. Every row must be right, or nothing is kept and each wrong row is named. The draft
- * is then looked over and posted like any other.
+ * warehouse, or, when the file has a Warehouse column, into a draft for each warehouse it names
+ * (Step 49). Every row must be right, or nothing is kept and each wrong row is named. An item
+ * that already has opening stock in a warehouse, in a draft or posted, is refused there, so the
+ * same stock never comes in twice. The drafts are then looked over and posted like any other.
+ * `options` let Settings, Import data preview a file or record what it imported.
  */
-export async function importOpeningStock(ctx: TenantContext, raw: { date?: unknown; warehouseId?: unknown; note?: unknown; csv: string }): Promise<OpeningImport> {
+export async function importOpeningStock(
+  ctx: TenantContext,
+  raw: { date?: unknown; warehouseId?: unknown; note?: unknown; csv: string },
+  options?: ImportOptions,
+): Promise<OpeningImport> {
   requirePermission(ctx, "stock_adjustment.manage", ONLY_BOOKS);
-  const head = readAdjustment("opening", { date: raw.date, warehouseId: raw.warehouseId, note: raw.note, lines: [] });
-  if (!head.ok) return { ok: false, reason: head.reason };
-  const table = readCsvTable(raw.csv, OPENING_COLUMNS, "code", MAX_OPENING_ROWS);
+  const table = readCsvTable(raw.csv, OPENING_FILE_COLUMNS, "code", MAX_OPENING_ROWS);
   if (!table.ok) return { ok: false, reason: table.reason };
   const missing = OPENING_COLUMNS.filter((column) => table.rows.every((row) => row.raw[column.key] === undefined));
   if (missing.length > 0) return { ok: false, reason: `The file needs a "${missing[0].header}" column in its first row.` };
-  const read = readOpeningRows(table.rows);
-  if (!read.ok) return { ok: false, problems: read.problems };
+  const byFile = table.rows.some((row) => row.raw.warehouse !== undefined);
+  const chosen = typeof raw.warehouseId === "string" ? raw.warehouseId.trim() : "";
+  if (byFile && chosen !== "") return { ok: false, reason: 'The file says which warehouse each row is for, and a warehouse was chosen as well. Leave the warehouse to the file, or take its "Warehouse" column out.' };
+  // The file's warehouses are checked by name below; the head is checked here with a stand-in.
+  const head = readAdjustment("opening", { date: raw.date, warehouseId: byFile ? "by-file" : raw.warehouseId, note: raw.note, lines: [] });
+  if (!head.ok) return { ok: false, reason: head.reason };
   return withTenant(ctx.userId, ctx.tenantId, async (tx) => {
+    const problems: OpeningProblem[] = [];
+    // Each row's warehouse: the one chosen, or the one the file names.
+    const groups = new Map<string, typeof table.rows>();
+    if (byFile) {
+      const known = await tx.select({ id: warehouses.id, name: warehouses.name }).from(warehouses).where(eq(warehouses.tenantId, ctx.tenantId));
+      const byName = new Map(known.map((warehouse) => [warehouse.name.toLowerCase(), warehouse.id]));
+      for (const row of table.rows) {
+        const name = cleanText(row.raw.warehouse);
+        const id = byName.get(name.toLowerCase());
+        if (!id) {
+          problems.push({
+            row: row.row,
+            name: cleanText(row.raw.code),
+            problems: [name === "" ? "Say which warehouse this row is for." : `There is no warehouse named "${name.slice(0, 60)}". Add it first, or correct the name.`],
+          });
+          continue;
+        }
+        groups.set(id, [...(groups.get(id) ?? []), row]);
+      }
+    } else {
+      groups.set(head.draft.warehouseId, table.rows);
+    }
+    const drafts: { warehouseId: string; rows: typeof table.rows; lines: AdjustmentLine[] }[] = [];
+    for (const [warehouseId, rows] of groups) {
+      const read = readOpeningRows(rows);
+      if (!read.ok) problems.push(...read.problems);
+      else drafts.push({ warehouseId, rows, lines: read.lines });
+    }
     const found = await selectItemsByCode(
       tx,
       ctx.tenantId,
-      read.lines.map((line) => line.itemCode),
+      drafts.flatMap((draft) => draft.lines.map((line) => line.itemCode)),
     );
-    const problems: OpeningProblem[] = [];
-    read.lines.forEach((line, index) => {
-      const item = found.get(line.itemCode.toLowerCase());
-      if (!item) problems.push({ row: table.rows[index].row, name: line.itemCode, problems: ["There is no item with this code. Add it to the item list first, or correct the code."] });
-    });
-    if (problems.length > 0) return { ok: false as const, problems };
-    const saved = await writeAdjustment(tx, ctx, null, { ...head.draft, lines: read.lines }, undefined);
-    return { ok: true as const, id: saved.id, lines: read.lines.length };
+    // What each warehouse already has as opening stock, in a draft or posted.
+    const already = drafts.length === 0
+      ? []
+      : await tx.execute<{ warehouse_id: string; item_id: string; number: string | null }>(sql`
+          select a.warehouse_id, l.item_id, a.number
+          from public.stock_adjustment_lines l
+          join public.stock_adjustments a on a.tenant_id = l.tenant_id and a.id = l.adjustment_id
+          where l.tenant_id = ${ctx.tenantId} and a.kind = 'opening'
+            and a.warehouse_id in (${sql.join(drafts.map((draft) => sql`${draft.warehouseId}::uuid`), sql`, `)})`);
+    const held = new Map(already.map((row) => [`${row.warehouse_id} ${row.item_id}`, row.number]));
+    for (const draft of drafts) {
+      draft.lines.forEach((line, index) => {
+        const item = found.get(line.itemCode.toLowerCase());
+        const row = draft.rows[index].row;
+        if (!item) {
+          problems.push({ row, name: line.itemCode, problems: ["There is no item with this code. Add it to the item list first, or correct the code."] });
+          return;
+        }
+        const key = `${draft.warehouseId} ${item.id}`;
+        if (held.has(key)) {
+          const number = held.get(key);
+          problems.push({
+            row,
+            name: line.itemCode,
+            problems: [number ? `This item already has opening stock in this warehouse, posted as ${number}. Leave this row out, or correct that stock with an adjustment.` : "This item already has opening stock in this warehouse, in a draft not yet posted. Change that draft, or throw it away first."],
+          });
+        }
+      });
+    }
+    if (problems.length > 0) return { ok: false as const, problems: problems.sort((a, b) => a.row - b.row) };
+    const ids: string[] = [];
+    for (const draft of drafts) {
+      const saved = await writeAdjustment(tx, ctx, null, { ...head.draft, warehouseId: draft.warehouseId, lines: draft.lines }, undefined);
+      ids.push(saved.id);
+    }
+    const lines = drafts.reduce((total, draft) => total + draft.lines.length, 0);
+    await finishImport(tx, options, lines);
+    return { ok: true as const, id: ids[0], ids, lines };
   });
 }
 

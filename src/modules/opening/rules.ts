@@ -132,7 +132,7 @@ export function readDocument(
 /** One row that cannot be imported. `row` is its row in the file as a spreadsheet numbers it. */
 export type ImportProblem = { row: number; name: string; problems: string[] };
 
-const ACCOUNT_COLUMNS: readonly CsvColumn<"code" | "name" | "debit" | "credit">[] = [
+export const ACCOUNT_COLUMNS: readonly CsvColumn<"code" | "name" | "debit" | "credit">[] = [
   { key: "code", header: "Account code" },
   { key: "name", header: "Account name" },
   { key: "debit", header: "Debit" },
@@ -186,7 +186,7 @@ export function readAccountImport(csv: string, known: AccountLookup): AccountImp
   return { status: "read", lines, problems };
 }
 
-const PARTY_COLUMNS = {
+export const PARTY_COLUMNS = {
   receivable: [
     { key: "party", header: "Customer" },
     { key: "documentNumber", header: "Invoice number" },

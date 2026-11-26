@@ -154,7 +154,9 @@ export function BillForm({ action, goods, expenses, accounts, taxCategories, wit
                           <TaxSelect name="goodsTax" label={`Sales tax, line ${index + 1}`} value={row.taxCategoryId} onChange={(value) => setRow(row.receiptLineId, { taxCategoryId: value })} categories={taxCategories} />
                         </td>
                       ) : (
-                        <input type="hidden" name="goodsTax" value="" />
+                        <td className="hidden">
+                          <input type="hidden" name="goodsTax" value="" />
+                        </td>
                       )}
                       <td className="py-1 text-right tabular-nums" data-testid={`goods-amount-${index + 1}`}>
                         {amount ? formatAmount(amount) : ""}

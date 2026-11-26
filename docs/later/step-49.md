@@ -1,9 +1,9 @@
 # Step 49: bringing a company in from another system
 
 Joint step, built by the Finisher (2026-11-26) after Fazal signed in as the demo owner and asked
-for importing Excel files ("everything from old erps"). Migration `0047_data_imports` (one table,
-the record of each import), after the Builder's `0046_daily_expenses`; the coordinator applies it
-to the shared database once merged. Version 1.4. The checklist for a company moving in is
+for importing Excel files ("everything from old erps"). Migration `0048_data_imports` (one table,
+the record of each import), after `0047_tax_paid_over`; the coordinator applies it
+to the shared database once merged. Version 1.6. The checklist for a company moving in is
 `docs/MIGRATION.md`.
 
 ## What is built

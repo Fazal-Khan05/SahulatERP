@@ -323,6 +323,13 @@
       "when": 1795630067800,
       "tag": "0045_market_purchases",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1795673420652,
+      "tag": "0046_daily_expenses",
+      "breakpoints": true
     }
   ]
 }

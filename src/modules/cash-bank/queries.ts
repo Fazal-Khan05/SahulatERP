@@ -96,12 +96,13 @@ export async function getTransfer(ctx: TenantContext, id: string): Promise<Trans
   };
 }
 
-export type ExpenseRow = { id: string; number: string; date: string; paidTo: string; from: string; total: Decimal; withheld: Decimal; paid: Decimal; status: "posted" | "cancelled" };
+/** `paidTo` is null for an expense that names nobody (a small daily expense). */
+export type ExpenseRow = { id: string; number: string; date: string; paidTo: string | null; from: string; total: Decimal; withheld: Decimal; paid: Decimal; status: "posted" | "cancelled" };
 
 export async function listExpenses(ctx: TenantContext): Promise<ExpenseRow[]> {
   requireCashBank(ctx);
   const rows = await withTenant(ctx.userId, ctx.tenantId, (tx) =>
-    tx.execute<{ id: string; number: string; date: string; paid_to: string; from_name: string; total: string; withheld: string; paid: string; status: "posted" | "cancelled" }>(sql`
+    tx.execute<{ id: string; number: string; date: string; paid_to: string | null; from_name: string; total: string; withheld: string; paid: string; status: "posted" | "cancelled" }>(sql`
       select e.id, e.number, e.expense_date::text as date, coalesce(s.name, e.payee) as paid_to, a.name as from_name, e.total::text, e.withheld::text, e.paid::text, e.status
       from public.expenses e
       join public.accounts a on a.tenant_id = e.tenant_id and a.id = e.account_id
@@ -129,7 +130,7 @@ export async function getExpense(ctx: TenantContext, id: string): Promise<Expens
   if (!isUuid(id)) return null;
   return withTenant(ctx.userId, ctx.tenantId, async (tx) => {
     const [e] = await tx.execute<{
-      id: string; number: string; date: string; paid_to: string; from_name: string; total: string; withheld: string; paid: string; status: "posted" | "cancelled";
+      id: string; number: string; date: string; paid_to: string | null; from_name: string; total: string; withheld: string; paid: string; status: "posted" | "cancelled";
       reference: string | null; memo: string | null; branch: string | null; amount: string; provincial_tax: string; cancel_reason: string | null; journal_id: string; reversal_journal_id: string | null;
     }>(sql`
       select e.id, e.number, e.expense_date::text as date, coalesce(s.name, e.payee) as paid_to, a.name as from_name, e.total::text, e.withheld::text, e.paid::text, e.status,

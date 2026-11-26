@@ -1,7 +1,7 @@
 import "server-only";
 import { and, eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { audit, isUuid, withTenant } from "@/db";
+import { audit, isUuid, withTenant, type Tx } from "@/db";
 import { UserError, pgCode } from "@/lib/errors";
 import { todayIso } from "@/lib/format";
 import { formatAmount } from "@/lib/money";
@@ -10,19 +10,19 @@ import { addAccount, setAccountArchived } from "@/modules/ledger/commands";
 import { accounts } from "@/modules/ledger/schema";
 import { periodRefusal } from "@/modules/numbering/rules";
 import { can, type TenantContext } from "@/modules/tenant/rules";
-import { readBankDetails, readCancel, readExpense, readNewAccount, readTransfer, type RawCancel, type RawExpense, type RawNewAccount, type RawTransfer } from "./rules";
+import { readBankDetails, readCancel, readExpense, readNewAccount, readTransfer, type Expense, type RawCancel, type RawExpense, type RawNewAccount, type RawTransfer } from "./rules";
 
 // The commands behind the cash and bank screens (Step 34). A bank account's details are written
 // by the app under row-level security. Transfers and expenses are not: each command only asks the
 // database's own function, which writes the document and its journal in one act, or refuses
 // (drizzle/0038_cash_bank.sql).
 
-function requireManager(ctx: TenantContext): void {
+export function requireManager(ctx: TenantContext): void {
   if (!can(ctx.role, "cash_bank.manage")) throw new UserError("Only the owner or an accountant moves or spends the company's money.");
 }
 
-/** What the database's refusals mean, in words. */
-function refusal(error: unknown, date: string | null): unknown {
+/** What the database's refusals mean, in words; null for one that is not known. */
+export function refusal(error: unknown, date: string | null): unknown {
   if (error instanceof UserError) return error;
   const code = pgCode(error);
   const closed = date ? periodRefusal(code, date) : null;
@@ -35,7 +35,7 @@ function refusal(error: unknown, date: string | null): unknown {
   if (code === "SE334") return new UserError("That is not in this company.");
   if (code === "SE335") return new UserError("It has already been cancelled.");
   if (code === "SE336") return new UserError("Choose one of your branches.");
-  if (code === "SE337") return new UserError("Choose the supplier, or name who was paid.");
+  if (code === "SE337") return new UserError("Choose the supplier or name who was paid, not both; a supplier chosen must be one of the company's, in use.");
   if (code === "SE338") return new UserError("Tax is withheld only from a supplier on the list, and only by a company that withholds (Purchases, settings).");
   if (code === "SE339") return new UserError("A line, or the tax withheld, will not do: check the accounts, the amounts and the tax lines chosen.");
   if (code === "SE230") return new UserError("That withholding line is not in force on that date. Check the tax rates.");
@@ -148,6 +148,19 @@ export async function cancelTransfer(ctx: TenantContext, id: unknown, raw: RawCa
   }
 }
 
+/**
+ * Records one expense inside the caller's transaction, by asking the database's own function: the
+ * only way an expense, its journal and its number are written. Sent again with the same key it is
+ * recorded once. The caller has checked the role and reads the refusal (refusal, above).
+ */
+export async function recordExpenseIn(tx: Tx, e: Expense, key: string): Promise<{ id: string; number: string }> {
+  const lines = JSON.stringify(e.lines.map((line) => ({ account: line.accountId, description: line.description, amount: line.amount.toFixed(2) })));
+  const [row] = await tx.execute<{ number: string }>(sql`
+    select app.record_expense(${key}::uuid, ${e.date}::date, ${e.accountId}::uuid, ${e.supplierId}::uuid, ${e.payee}, ${e.branchId}::uuid, ${e.reference}, ${e.memo},
+      ${lines}::jsonb, ${e.incomeTaxCode}, ${e.provincialTaxCode}) as number`);
+  return { id: key, number: row.number };
+}
+
 /** Records money spent out of a cash or bank account, with any tax withheld. Returns its id and number. */
 export async function recordExpense(ctx: TenantContext, raw: RawExpense & { clientKey?: unknown }): Promise<{ id: string; number: string }> {
   requireManager(ctx);
@@ -156,14 +169,8 @@ export async function recordExpense(ctx: TenantContext, raw: RawExpense & { clie
   const e = read.expense;
   // Sent twice from the same form, it is recorded once: the key is the expense's own id.
   const key = isUuid(raw.clientKey) ? raw.clientKey : randomUUID();
-  const lines = JSON.stringify(e.lines.map((line) => ({ account: line.accountId, description: line.description, amount: line.amount.toFixed(2) })));
   try {
-    return await withTenant(ctx.userId, ctx.tenantId, async (tx) => {
-      const [row] = await tx.execute<{ number: string }>(sql`
-        select app.record_expense(${key}::uuid, ${e.date}::date, ${e.accountId}::uuid, ${e.supplierId}::uuid, ${e.payee}, ${e.branchId}::uuid, ${e.reference}, ${e.memo},
-          ${lines}::jsonb, ${e.incomeTaxCode}, ${e.provincialTaxCode}) as number`);
-      return { id: key, number: row.number };
-    });
+    return await withTenant(ctx.userId, ctx.tenantId, (tx) => recordExpenseIn(tx, e, key));
   } catch (error) {
     // A row id or account id the form could not have sent.
     if (pgCode(error) === "22P02") throw new UserError("Choose the accounts again: one of them is not in this company.");

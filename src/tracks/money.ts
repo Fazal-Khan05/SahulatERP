@@ -52,6 +52,8 @@ export const permissions = {
  */
 export const links = {
   cashAndBank: "/cash-bank",
+  // The quick way to enter each day's expenses (the founder's request, 2026-11-26).
+  dailyExpenses: "/daily-expenses",
   commissions: "/commissions",
   myCommission: "/commissions/earned",
   payroll: "/payroll",

@@ -25,6 +25,12 @@ import { MODULES, type MemberRole, type TenantContext } from "@/modules/tenant/r
 import { createWarehouse } from "@/modules/warehouses/commands";
 import { adminSql, deleteTenants, type AdminSql } from "../../tests/support/admin-db";
 import { seedBuying } from "./parts/buying";
+import { checkBooks } from "./parts/checks";
+import { seedMoney, seedOpening } from "./parts/money";
+import { seedPayroll } from "./parts/payroll";
+import { seedReconciliation } from "./parts/reconcile";
+import { seedSellingMore } from "./parts/selling-more";
+import { seedStock, seedWaitingCount } from "./parts/stock";
 import type { Demo } from "./world";
 
 // The demo company: an invented motorcycle-parts importer with two months of trading, built
@@ -389,6 +395,16 @@ export async function seedDemo(): Promise<string[]> {
       cash, bank, petty: "", invoices,
     };
     await seedBuying(d);
+    await seedOpening(d);
+    await seedStock(d);
+    await seedSellingMore(d);
+    await seedMoney(d);
+    await seedPayroll(d);
+    await seedReconciliation(d);
+    await seedWaitingCount(d);
+    await checkBooks(d);
+    // The numbers and figures the walk quotes, for checking docs/DEMO.md against this company.
+    said.push("For docs/DEMO.md:", ...Object.entries(d.facts).map(([name, value]) => `  ${name}: ${value}`));
     return said;
   } finally {
     await sql.end();

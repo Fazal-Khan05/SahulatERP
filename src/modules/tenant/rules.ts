@@ -345,6 +345,7 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
         ["Suppliers", "purchasing", "/suppliers"],
         ["Stock", "inventory", LINKS.stock],
         ["Items", "inventory", "/items"],
+        ["Daily expenses", "cash_bank", LINKS.dailyExpenses],
         ["Cash and bank", "cash_bank", LINKS.cashAndBank],
         ["Commissions", "commissions", LINKS.commissions],
         ["Payroll", "payroll", LINKS.payroll],
@@ -362,6 +363,7 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
         ["Suppliers", "purchasing", "/suppliers"],
         ["Stock", "inventory", LINKS.stock],
         ["Items", "inventory", "/items"],
+        ["Daily expenses", "cash_bank", LINKS.dailyExpenses],
         ["Cash and bank", "cash_bank", LINKS.cashAndBank],
         ["Commissions", "commissions", LINKS.commissions],
         ["Payroll", "payroll", LINKS.payroll],
@@ -379,6 +381,7 @@ function roleNav(role: MemberRole, on: ModuleState): readonly NavSpec[] {
         // The founder's decision of 2026-11-18: the accountant sees the stock the books value.
         ["Stock", "inventory", LINKS.stock],
         ["Items", "inventory", "/items"],
+        ["Daily expenses", "cash_bank", LINKS.dailyExpenses],
         ["Bank and cash", "cash_bank", LINKS.cashAndBank],
         ["Chart of accounts", null, "/settings/accounts"],
         ["Journals", null, "/journals"],

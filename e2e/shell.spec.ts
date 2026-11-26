@@ -21,6 +21,7 @@ const OWNER_MENU = [
   "Suppliers",
   "Stock",
   "Items",
+  "Daily expenses",
   "Cash and bank",
   "Commissions",
   "Journals",
@@ -81,7 +82,7 @@ test("the owner gets the shell: their menu, an empty inbox and their company in 
   expect(await railLabels(page)).toEqual(OWNER_MENU);
   // Only screens that exist are links.
   const rail = page.getByRole("navigation", { name: "Main" });
-  await expect(rail.getByRole("link")).toHaveText(["Home", "Needs attention", "Sales", "Customers", "Price lists", "Collections", "Purchases and imports", "Suppliers", "Stock", "Items", "Cash and bank", "Commissions", "Journals", "Reports", "Settings"]);
+  await expect(rail.getByRole("link")).toHaveText(["Home", "Needs attention", "Sales", "Customers", "Price lists", "Collections", "Purchases and imports", "Suppliers", "Stock", "Items", "Daily expenses", "Cash and bank", "Commissions", "Journals", "Reports", "Settings"]);
   await expect(rail.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
 
   await expect(page.getByText("Nothing needs your attention.").filter({ visible: true })).toHaveCount(1);
@@ -118,6 +119,7 @@ test("an accountant gets the books and the stock, and reaches the stock from the
     "Suppliers",
     "Stock",
     "Items",
+    "Daily expenses",
     "Bank and cash",
     "Chart of accounts",
     "Journals",

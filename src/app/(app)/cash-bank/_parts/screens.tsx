@@ -12,6 +12,7 @@ import { formatAmount } from "@/lib/money";
 import { getExpense, getExpenseChoices, getTransfer, listCashBankAccounts, listExpenses, listTransfers, type JournalLine } from "@/modules/cash-bank/queries";
 import { formatIsoDate } from "@/modules/currencies/rules";
 import { can } from "@/modules/tenant/rules";
+import { ReceiptsCard } from "../../daily-expenses/_parts/receipts";
 import { addAccountAction, archiveAccountAction, bankDetailsAction, cancelExpenseAction, cancelTransferAction, expenseAction, transferAction } from "./actions";
 
 type Session = Awaited<ReturnType<typeof requireTenant>>;
@@ -501,20 +502,22 @@ export async function NewExpenseScreen() {
   );
 }
 
-export async function ExpenseScreen({ params }: { params: Promise<{ id: string }> }) {
+export async function ExpenseScreen({ params, searchParams }: { params: Promise<{ id: string }>; searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await requireTenant();
   const why = closed(session);
   if (why) return <Shut title="Expense" why={why} />;
   const expense = await getExpense(session, (await params).id);
   if (!expense) notFound();
+  // Opened from Daily expenses, it leads back there.
+  const fromDaily = (await searchParams)?.from === "daily";
   return (
     <>
       <p className="mb-2 text-sm">
-        <Link href="/cash-bank/expenses" className="text-muted-foreground underline-offset-4 hover:underline">
-          Expenses
+        <Link href={fromDaily ? "/daily-expenses" : "/cash-bank/expenses"} className="text-muted-foreground underline-offset-4 hover:underline">
+          {fromDaily ? "Daily expenses" : "Expenses"}
         </Link>
       </p>
-      <PageHead title={expense.number} sub={`Paid to ${expense.paidTo} from ${expense.from}, ${formatIsoDate(expense.date)}${expense.branch ? `, ${expense.branch}` : ""}.`} />
+      <PageHead title={expense.number} sub={`${expense.paidTo ? `Paid to ${expense.paidTo} from` : "Paid from"} ${expense.from}, ${formatIsoDate(expense.date)}${expense.branch ? `, ${expense.branch}` : ""}.`} />
       <div className="flex max-w-5xl flex-col gap-5">
         <p className="text-sm" data-testid="document-status">
           <Status status={expense.status} />
@@ -569,6 +572,7 @@ export async function ExpenseScreen({ params }: { params: Promise<{ id: string }
             </ul>
           </Card>
         ) : null}
+        <ReceiptsCard session={session} expenseId={expense.id} />
         <Books title="In the books" lines={expense.journal} />
         <Books title="Taken back" lines={expense.reversal} />
         {expense.status === "posted" && can(session.role, "cash_bank.manage") ? <CancelCard action={cancelExpenseAction.bind(null, expense.id)} word="expense" /> : null}

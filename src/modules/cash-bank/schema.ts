@@ -83,7 +83,8 @@ export const cashTransfers = pgTable(
 
 /**
  * Money spent out of a cash or bank account on one or more expense lines: EX-2627-00001. Paid to a
- * supplier on the list (needed when tax is withheld) or to a payee named in words. The province's
+ * supplier on the list (needed when tax is withheld), to a payee named in words, or, since
+ * drizzle/0046_daily_expenses.sql, to nobody named: a small daily expense. The province's
  * tax on services is added to the lines and withheld whole; income tax is withheld at the
  * supplier's rate; what is left is what left the account. Cancelled by a reversal, never changed.
  */
@@ -129,7 +130,8 @@ export const expenses = pgTable(
     foreignKey({ name: "expenses_journal_fk", columns: [t.tenantId, t.journalId], foreignColumns: [journals.tenantId, journals.id] }),
     foreignKey({ name: "expenses_reversal_fk", columns: [t.tenantId, t.reversalJournalId], foreignColumns: [journals.tenantId, journals.id] }),
     index("expenses_tenant_date_idx").on(t.tenantId, t.expenseDate),
-    check("expenses_paid_to_someone", sql`(${t.supplierId} is null) <> (${t.payee} is null)`),
+    // Paid to a supplier on the list, to someone named in words, or to nobody named (a small daily expense); never to two.
+    check("expenses_paid_to_one_at_most", sql`${t.supplierId} is null or ${t.payee} is null`),
     check("expenses_figures_add_up", sql`${t.amount} > 0 and ${t.provincialTax} >= 0 and ${t.total} = ${t.amount} + ${t.provincialTax} and ${t.withheld} >= 0 and ${t.paid} = ${t.total} - ${t.withheld} and ${t.paid} >= 0 and ${t.total} < 1e16`),
     check("expenses_status_known", sql`${t.status} in ('posted', 'cancelled')`),
     check("expenses_number_format", sql`${t.number} ~ '^EX-[0-9]{4}-[0-9]{5,}$'`),

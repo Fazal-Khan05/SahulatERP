@@ -66,10 +66,17 @@ export function overdueCustomers(rows: readonly CustomerAgeing[]): CustomerAgein
   return rows.filter((row) => row.overdue.gt(0)).sort((a, b) => b.overdue.comparedTo(a.overdue) || b.oldestDays - a.oldestDays || a.name.localeCompare(b.name));
 }
 
-/** The aged receivables report: every customer who owes anything, by name, with a total row. */
-export function ageingTable(rows: readonly CustomerAgeing[], today: string): ReportTable {
+/**
+ * The aged receivables report: every customer who owes anything, by name, with a total row.
+ * With `books`, what the Trade receivables account holds, the total is set beside it; they must
+ * agree. It is given only for someone who reads the books and works in every branch.
+ */
+export function ageingTable(rows: readonly CustomerAgeing[], today: string, books: Decimal | null = null): ReportTable {
   const owing = rows.filter((row) => row.total.gt(0)).sort((a, b) => a.name.localeCompare(b.name));
   const cell = (amount: Decimal) => (amount.isZero() ? null : amount);
+  const total = sum(owing.map((row) => row.total));
+  const blank = OVERDUE_BANDS.map(() => null);
+  const difference = books === null ? null : total.minus(books);
   return {
     title: "Aged receivables",
     period: `As at ${formatIsoDate(today)}, by days past the due date`,
@@ -81,10 +88,17 @@ export function ageingTable(rows: readonly CustomerAgeing[], today: string): Rep
     ],
     rows: [
       ...owing.map((row): ReportRow => ({ kind: "line", depth: 0, cells: [row.code ?? "", row.name, ...row.bands.map(cell), row.total] })),
-      { kind: "grand", depth: 0, cells: ["", "Total", ...OVERDUE_BANDS.map((_, at) => sum(owing.map((row) => row.bands[at]))), sum(owing.map((row) => row.total))] },
+      { kind: "grand", depth: 0, cells: ["", "Total", ...OVERDUE_BANDS.map((_, at) => sum(owing.map((row) => row.bands[at]))), total] },
+      ...(books === null || difference === null
+        ? []
+        : ([
+            { kind: "total", depth: 0, cells: ["", "Trade receivables, in the books", ...blank, books] },
+            { kind: "total", depth: 0, cells: ["", "Difference", ...blank, difference] },
+          ] satisfies ReportRow[])),
     ],
     notes: [
-      "What is still owed on each posted invoice and opening balance. Money received but not yet set against an invoice (an advance) is not taken off here.",
+      "What is still owed on each posted invoice and opening balance. Money received but not yet set against an invoice (an advance) is not taken off here: the books hold it apart, in Advances from customers.",
+      ...(difference !== null && !difference.isZero() ? ["What customers owe on their invoices and the Trade receivables account in the books do not agree. An entry made to that account by hand would do this; please report it."] : []),
     ],
   };
 }

@@ -72,7 +72,7 @@ describe("the withholding register", () => {
     const zero = { income_tax: d("0"), sales_tax: d("0"), provincial_sales_tax: d("0") };
     const table = withholdingRegisterTable(
       [entry({ challanNo: "IT-1", paidOn: "2026-11-10" }), entry({ date: "2026-11-08", billNumber: "PB-2627-00004", base: d("10000"), amount: d("1000") }), entry({ kind: "provincial_sales_tax", supplierName: "Karachi Clearing", ntn: null, cnic: "35202-1234567-1", label: "Sindh", rate: d("15"), base: d("3000"), amount: d("450") })],
-      { unpaid: { ...zero, income_tax: d("1000"), provincial_sales_tax: d("450") }, books: { ...zero, income_tax: d("1000"), provincial_sales_tax: d("450") } },
+      { unpaid: { ...zero, income_tax: d("1000"), provincial_sales_tax: d("450") }, books: { ...zero, income_tax: d("1000"), provincial_sales_tax: d("450") }, salaries: d("0"), onExpenses: d("0") },
       filter,
     );
     expect(show(table)).toEqual([
@@ -98,7 +98,39 @@ describe("the withholding register", () => {
 
   it("says so when the two do not agree, and leaves the comparison out for one branch or supplier", () => {
     const zero = { income_tax: d("0"), sales_tax: d("0"), provincial_sales_tax: d("0") };
-    expect(withholdingRegisterTable([entry({})], { unpaid: { ...zero, income_tax: d("10000") }, books: { ...zero, income_tax: d("9000") } }, filter).notes[0]).toMatch(/do not agree/);
+    expect(withholdingRegisterTable([entry({})], { unpaid: { ...zero, income_tax: d("10000") }, books: { ...zero, income_tax: d("9000") }, salaries: d("0"), onExpenses: d("0") }, filter).notes[0]).toMatch(/do not agree/);
     expect(withholdingRegisterTable([entry({})], null, filter).notes[0]).toMatch(/challans are for the whole company/);
+  });
+
+  it("sets the income tax deducted from salaries in a section of its own, and counts it in what is still to be paid", () => {
+    const zero = { income_tax: d("0"), sales_tax: d("0"), provincial_sales_tax: d("0") };
+    // 10,000 withheld on a bill and paid over; 2,800 withheld on an expense; 3,800 deducted from October's salaries.
+    // The income tax account holds the last two.
+    const table = withholdingRegisterTable(
+      [entry({ challanNo: "IT-1", paidOn: "2026-11-10" }), entry({ date: "2026-11-12", billNumber: "EX-2627-00007", supplierInvoiceNo: "KM-SRV-9", label: "Services, other", base: d("10000"), rate: d("28"), amount: d("2800") })],
+      { unpaid: { ...zero, income_tax: d("2800") }, books: { ...zero, income_tax: d("6600") }, salaries: d("3800"), onExpenses: d("2800") },
+      filter,
+      [{ date: "2026-11-30", month: "2026-11-01", runNumber: "PR-2627-00002", people: 1, taxable: d("130000"), amount: d("3800") }],
+    );
+    expect(show(table)).toEqual([
+      "Income tax |  |  |  |  |  |  |  |  |  |  | ",
+      "04-11-2026 | Karachi Motors | 7654321 | PB-2627-00002 | KM-7 | Goods, from a company | No | 100000.00 | 10.00 | 10000.00 | IT-1 | 10-11-2026",
+      "12-11-2026 | Karachi Motors | 7654321 | EX-2627-00007 | KM-SRV-9 | Services, other | No | 10000.00 | 28.00 | 2800.00 |  | ",
+      " | Total, income tax |  |  |  |  |  |  |  | 12800.00 |  | ",
+      "Income tax deducted from salaries (section 149) |  |  |  |  |  |  |  |  |  |  | ",
+      "30-11-2026 | Salaries for November 2026 |  | PR-2627-00002 |  | Salary, 1 person taxed |  | 130000.00 |  | 3800.00 |  | ",
+      " | Total, income tax deducted from salaries |  |  |  |  |  |  |  | 3800.00 |  | ",
+      " | Withheld in the period |  |  |  |  |  |  |  | 16600.00 |  | ",
+      "Still to be paid to the government, as at the end of 30-11-2026 |  |  |  |  |  |  |  |  |  |  | ",
+      " | Income tax |  |  |  |  |  |  |  | 2800.00 |  | ",
+      " | Income tax deducted from salaries (section 149) |  |  |  |  |  |  |  | 3800.00 |  | ",
+      " | Withheld and not yet paid over |  |  |  |  |  |  |  | 6600.00 |  | ",
+      " | Withholding payable accounts in the books |  |  |  |  |  |  |  | 6600.00 |  | ",
+      " | Difference |  |  |  |  |  |  |  | 0.00 |  | ",
+    ]);
+    // They agree; the one note says why these two stay under what is still to be paid.
+    expect(table.notes).toEqual([expect.stringMatching(/^A challan here pays over tax withheld on supplier bills\./)]);
+    // With no salary tax and nothing on an expense, the register is as it always was.
+    expect(withholdingRegisterTable([], { unpaid: zero, books: zero, salaries: d("0"), onExpenses: d("0") }, filter).notes).toEqual([]);
   });
 });

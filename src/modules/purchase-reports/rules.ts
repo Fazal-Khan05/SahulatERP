@@ -230,15 +230,30 @@ export type WithheldEntry = {
   paidOn: string | null;
 };
 
-/** What is still to be paid over on a day, kind by kind, and what the withholding payable accounts hold in the books that day. */
-export type WithheldPosition = { unpaid: Record<WithholdingKind, Decimal>; books: Record<WithholdingKind, Decimal> };
+/**
+ * What is still to be paid over on a day and what the withholding payable accounts hold in the
+ * books that day. `unpaid` is tax withheld from suppliers, kind by kind: on bills not yet under
+ * a challan, and on expenses (`onExpenses` of it, which no challan covers yet). `salaries` is
+ * the income tax deducted from pay by approved payroll runs (section 149), credited to the same
+ * account as income tax withheld from suppliers.
+ */
+export type WithheldPosition = { unpaid: Record<WithholdingKind, Decimal>; books: Record<WithholdingKind, Decimal>; salaries: Decimal; onExpenses: Decimal };
+
+/** The income tax a payroll run deducted from pay, from the run's own figures. */
+export type SalaryTaxLine = { date: string; month: string; runNumber: string; people: number; taxable: Decimal; amount: Decimal };
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const monthWords = (month: string) => `${MONTHS[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`;
+export const SALARY_TAX_WORDS = "Income tax deducted from salaries (section 149)";
 
 /**
  * The withholding register: every amount withheld in the period, by kind of tax, with the
- * challan it was paid under. With `position`, what is still to be paid over at the end of the
- * period is set beside the withholding payable accounts in the books; they must agree.
+ * challan it was paid under: from suppliers on their bills and on expenses, and, for the whole
+ * company, from salaries by the payroll runs approved in the period. With `position`, what is
+ * still to be paid over at the end of the period is set beside the withholding payable accounts
+ * in the books; they must agree.
  */
-export function withholdingRegisterTable(entries: readonly WithheldEntry[], position: WithheldPosition | null, filter: PurchaseFilter): ReportTable {
+export function withholdingRegisterTable(entries: readonly WithheldEntry[], position: WithheldPosition | null, filter: PurchaseFilter, salaries: readonly SalaryTaxLine[] = []): ReportTable {
   const rows: ReportRow[] = [];
   const blank = (label: string, amount: Decimal, kind: ReportRow["kind"]): ReportRow => ({ kind, depth: 0, cells: ["", label, null, null, null, null, null, null, null, amount, null, null] });
   for (const kind of KINDS) {
@@ -254,7 +269,18 @@ export function withholdingRegisterTable(entries: readonly WithheldEntry[], posi
     }
     rows.push(blank(`Total, ${KIND_WORDS[kind].toLowerCase()}`, sum(mine.map((entry) => entry.amount)), "total"));
   }
-  rows.push(blank("Withheld in the period", sum(entries.map((entry) => entry.amount)), "grand"));
+  if (salaries.length > 0) {
+    rows.push({ kind: "heading", depth: 0, cells: [SALARY_TAX_WORDS, null, null, null, null, null, null, null, null, null, null, null] });
+    for (const run of salaries) {
+      rows.push({
+        kind: "line",
+        depth: 0,
+        cells: [formatIsoDate(run.date), `Salaries for ${monthWords(run.month)}`, null, run.runNumber, null, `Salary, ${run.people} ${run.people === 1 ? "person" : "people"} taxed`, null, run.taxable, null, run.amount, null, null],
+      });
+    }
+    rows.push(blank("Total, income tax deducted from salaries", sum(salaries.map((run) => run.amount)), "total"));
+  }
+  rows.push(blank("Withheld in the period", sum([...entries.map((entry) => entry.amount), ...salaries.map((run) => run.amount)]), "grand"));
   const notes: string[] = [];
   if (position) {
     rows.push({ kind: "heading", depth: 0, cells: [`Still to be paid to the government, ${asAt(filter.to).toLowerCase()}`, null, null, null, null, null, null, null, null, null, null, null] });
@@ -262,12 +288,16 @@ export function withholdingRegisterTable(entries: readonly WithheldEntry[], posi
       if (position.unpaid[kind].isZero() && position.books[kind].isZero()) continue;
       rows.push(blank(KIND_WORDS[kind], position.unpaid[kind], "line"));
     }
-    const unpaid = sum(KINDS.map((kind) => position.unpaid[kind]));
+    if (!position.salaries.isZero()) rows.push(blank(SALARY_TAX_WORDS, position.salaries, "line"));
+    const unpaid = sum(KINDS.map((kind) => position.unpaid[kind])).plus(position.salaries);
     const books = sum(KINDS.map((kind) => position.books[kind]));
     rows.push(blank("Withheld and not yet paid over", unpaid, "grand"));
     rows.push(blank("Withholding payable accounts in the books", books, "total"));
     rows.push(blank("Difference", unpaid.minus(books), "total"));
     if (!unpaid.eq(books)) notes.push("What is still to be paid over and the withholding payable accounts in the books do not agree. An entry made to those accounts by hand would do this; please report it.");
+    if (!position.salaries.isZero() || !position.onExpenses.isZero()) {
+      notes.push("A challan here pays over tax withheld on supplier bills. Tax withheld on an expense, and income tax deducted from salaries, stay under what is still to be paid: recording their payment to the government is not built yet.");
+    }
   } else {
     notes.push("Shown for one branch or one supplier: challans are for the whole company, so what is still to be paid over is not set beside the books here.");
   }
@@ -324,7 +354,8 @@ export function section165Table(entries: readonly WithheldEntry[], filter: Purch
       { kind: "grand", depth: 0, cells: ["", null, null, "Total", null, null, null, null, null, sum(mine.map((entry) => entry.base)), null, sum(mine.map((entry) => entry.amount)), null, null] },
     ],
     notes: [
-      "Choose the quarter as the period. The date is the day of the bill, when the tax was recorded as withheld.",
+      "Choose the quarter as the period. The date is the day of the bill or the expense, when the tax was recorded as withheld.",
+      "Income tax deducted from salaries (section 149) is not in this statement: it is reported in the employer's yearly statement, which Payroll, Year's statement gives.",
       "Set out for copying into the statement FBR asks for under section 165. Check the columns against the form in IRIS before filing; this has not been checked by a tax adviser.",
       ...(mine.some((entry) => entry.challanNo === null) ? ["Some of this tax has not been paid over yet: it has no CPR number."] : []),
     ],

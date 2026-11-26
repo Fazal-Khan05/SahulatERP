@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { getSessionUser, getTenantSession } from "@/lib/auth/session";
 import { UserError, logFailure } from "@/lib/errors";
 import { todayIso } from "@/lib/format";
-import { listCustomerAgeing } from "@/modules/recovery/queries";
+import { getReceivablesInBooks, listCustomerAgeing } from "@/modules/recovery/queries";
 import { ageingTable } from "@/modules/recovery/rules";
 import { tableToCsv } from "@/modules/reports/rules";
 import { can } from "@/modules/tenant/rules";
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
   if (format !== "csv" && format !== "xlsx") return plain(404, "Not found");
   try {
     const today = todayIso(new Date());
-    const table = ageingTable(await listCustomerAgeing(session, today), today);
+    const table = ageingTable(await listCustomerAgeing(session, today), today, await getReceivablesInBooks(session));
     const headers = { "Content-Disposition": `attachment; filename="aged-receivables-${today}.${format}"`, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
     if (format === "csv") return new Response(tableToCsv(table, session.tenantName), { headers: { ...headers, "Content-Type": "text/csv; charset=utf-8" } });
     const file = await tableToXlsx(table, session.tenantName);

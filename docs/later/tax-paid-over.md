@@ -77,7 +77,42 @@ journal and not one line of its SQL.
 
 ## Review
 
-(Filled in when the independent review is back.)
+An independent reviewer who had not seen the work recorded challans of its own on a scratch
+database, two at once and against a cancelling and an approval, ran the register for every day
+of a month after each step, and attacked the tables and the function in every role.
+
+Found sound: the journal always equals exactly the rows a challan marks; nothing could be paid
+twice (duplicates, two challans at once, Step 26's function racing the new one either way
+round); a cancelling and a challan cannot pass each other; no deadlock in the order rows are
+held; "still to be paid" equalled the books on every day tried, with challans recorded out of
+date order, expenses cancelled later and runs approved out of order; the functions' rights; no
+role or company that should not record or read does; the stand-in id used when no bill entry
+is ticked cannot reach the database; the migration changes nothing of another track's.
+
+Found, and put right before the migration was sent:
+
+1. **(low to medium) Someone limited to a branch could read each payroll run's salary tax**
+   from `challan_payroll_runs`, and other branches' rows of `challan_expense_entries`, though
+   payroll and those expenses are hidden from them. The two read policies now go no further
+   than the rows they are about.
+2. **(low) A run's tax not to the paisa** (which the app never writes) would have been stored
+   rounded. Such a run is now refused.
+3. **(low) The down file** now holds the two tables before asking whether they are empty.
+4. **(low) Wording for a member limited to a branch**, who is shown their branches' bills only,
+   and **words for a wait** when another challan holds an amount.
+5. **(a product point) The expense's page still offered Cancel** and refused on submit. It now
+   says the expense stands, and why, in place of the form.
+
+Known and left: every challan's amount is read by the owner, an accountant and the auditor
+whatever their branches (Step 26's policy, track B's), so a challan that pays salary tax alone
+shows that figure to an accountant limited to a branch. The register prints a challan's number
+on a line even when the challan is dated after the report's last day, as it always did for
+bills; what is still to be paid is right for the day regardless. The comment in
+`drizzle/0032_supplier_payments.sql` that challans are written only by
+`app.record_withholding_challan` is no longer the whole truth: `app.record_tax_challan`
+writes them too.
+
+Not checked by the reviewer: the browser, and the hosted database.
 
 ## Tests
 

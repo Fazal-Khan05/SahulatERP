@@ -136,16 +136,24 @@ describe.skipIf(!hasDb)("the posting engine", () => {
     });
 
     // Five at a time, as five people would; each batch is one transaction, as one document would be.
-    const batches = Array.from({ length: 50 }, (_, i) => journalsToPost.slice(i * 20, i * 20 + 20));
+    // A batch holds the company's number series from its first journal until it commits, so the
+    // other four wait their turn behind it. The batches are kept short: the database cancels a
+    // statement that has waited a minute (drizzle/0044_security_clean_up.sql), and against a
+    // database a continent away a long batch makes the last in line wait longer than that.
+    const BATCH = 5;
+    const batches = Array.from({ length: journalsToPost.length / BATCH }, (_, i) => journalsToPost.slice(i * BATCH, i * BATCH + BATCH));
+    // If one batch fails, the others stop before the test does: nothing is still posting when the next test counts.
+    const failures: unknown[] = [];
     const worker = async () => {
-      for (let batch = batches.pop(); batch; batch = batches.pop()) {
+      for (let batch = batches.pop(); batch && failures.length === 0; batch = batches.pop()) {
         const mine = batch;
         await withTenant(userIds.accountant, tenantA, async (tx) => {
           for (const journal of mine) await postBacked(tx, as.accountant, { id: journal.id, date: journal.date }, journal.lines);
-        });
+        }).catch((error: unknown) => failures.push(error));
       }
     };
     await Promise.all(Array.from({ length: 5 }, worker));
+    if (failures.length > 0) throw failures[0];
 
     const [totals] = await admin`
       select (select count(*)::int from public.journals where tenant_id = ${tenantA}) as journals,

@@ -11,6 +11,7 @@ import { formatAmount } from "@/lib/money";
 import { formatIsoDate } from "@/modules/currencies/rules";
 import { getMarketPurchaseOfPayment } from "@/modules/market-purchases/queries";
 import { getPayment, getPaymentChoices, getWithholdingPosition, listBillsOwed, listPayments, type PaymentAllocation } from "@/modules/supplier-payments/queries";
+import { listOtherTaxUnpaid } from "@/modules/tax-paid-over/queries";
 import { PAYMENT_STATUS_LABELS, impliedRate, type BillOwed } from "@/modules/supplier-payments/rules";
 import { WITHHOLDING_KIND_LABELS, type WithholdingKind } from "@/modules/tax/rules";
 import { can } from "@/modules/tenant/rules";
@@ -338,12 +339,21 @@ export async function PaymentScreen({ params, searchParams }: { params: Promise<
 // ── tax withheld, and its challans ──────────────────────────────────────────────────────────────
 
 const KIND_WORDS: Record<WithholdingKind, string> = { income_tax: "Income tax", sales_tax: "Sales tax", provincial_sales_tax: "Provincial sales tax" };
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const monthWords = (month: string) => `${MONTHS[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`;
 
 /** What has been withheld and not yet paid over, with the form that records a challan, and the challans recorded. Shown under Withholding tax. */
 export async function ChallanCards({ session }: { session: TenantSession }) {
   if (!can(session.role, "supplier_payment.read")) return null;
-  const [{ unpaid, challans }, choices] = await Promise.all([getWithholdingPosition(session), getPaymentChoices(session)]);
+  const [{ unpaid: onBills, challans }, choices, other] = await Promise.all([getWithholdingPosition(session), getPaymentChoices(session), listOtherTaxUnpaid(session)]);
   const record = can(session.role, "supplier_payment.manage") && session.branchIds === null && choices.accounts.length > 0;
+  // One list of everything still to be paid: withheld on supplier bills, withheld on expenses, and deducted from salaries.
+  type Unpaid = { key: string; field: "entryId" | "expenseEntryId" | "runId"; id: string; date: string; tax: string; from: string; document: string; line: string; amount: Decimal };
+  const unpaid: Unpaid[] = [
+    ...onBills.map((entry): Unpaid => ({ key: `b${entry.entryId}`, field: "entryId", id: entry.entryId, date: entry.date, tax: KIND_WORDS[entry.kind], from: entry.supplierName, document: entry.billNumber, line: entry.label, amount: entry.amount })),
+    ...other.expenses.map((entry): Unpaid => ({ key: `e${entry.entryId}`, field: "expenseEntryId", id: entry.entryId, date: entry.date, tax: KIND_WORDS[entry.kind], from: entry.supplierName, document: entry.expenseNumber, line: entry.label, amount: entry.amount })),
+    ...other.salaries.map((run): Unpaid => ({ key: `r${run.runId}`, field: "runId", id: run.runId, date: run.date, tax: KIND_WORDS.income_tax, from: `Salaries for ${monthWords(run.month)}`, document: run.runNumber, line: "Deducted from pay (section 149)", amount: run.amount })),
+  ].sort((a, b) => a.date.localeCompare(b.date) || a.document.localeCompare(b.document));
   const total = unpaid.reduce((sum, entry) => sum.plus(entry.amount), new Decimal(0));
   const table = (
     <div className="overflow-x-auto">
@@ -353,25 +363,25 @@ export async function ChallanCards({ session }: { session: TenantSession }) {
             {record ? <th className="w-8 py-2" /> : null}
             <th className="py-2 pr-4 font-medium">Withheld on</th>
             <th className="py-2 pr-4 font-medium">Tax</th>
-            <th className="py-2 pr-4 font-medium">Supplier</th>
-            <th className="py-2 pr-4 font-medium">Bill</th>
+            <th className="py-2 pr-4 font-medium">Withheld from</th>
+            <th className="py-2 pr-4 font-medium">Bill, expense or payroll run</th>
             <th className="py-2 pr-4 font-medium">Line</th>
             <th className="py-2 text-right font-medium">Amount</th>
           </tr>
         </thead>
         <tbody className="divide-y">
           {unpaid.map((entry, index) => (
-            <tr key={entry.entryId}>
+            <tr key={entry.key}>
               {record ? (
                 <td className="py-2">
-                  <input type="checkbox" name="entryId" value={entry.entryId} aria-label={`Paid by this challan, row ${index + 1}`} />
+                  <input type="checkbox" name={entry.field} value={entry.id} aria-label={`Paid by this challan, row ${index + 1}`} />
                 </td>
               ) : null}
               <td className="py-2 pr-4 whitespace-nowrap">{formatIsoDate(entry.date)}</td>
-              <td className="py-2 pr-4">{KIND_WORDS[entry.kind]}</td>
-              <td className="py-2 pr-4">{entry.supplierName}</td>
-              <td className="py-2 pr-4 whitespace-nowrap">{entry.billNumber}</td>
-              <td className="py-2 pr-4 text-muted-foreground">{entry.label}</td>
+              <td className="py-2 pr-4">{entry.tax}</td>
+              <td className="py-2 pr-4">{entry.from}</td>
+              <td className="py-2 pr-4 whitespace-nowrap">{entry.document}</td>
+              <td className="py-2 pr-4 text-muted-foreground">{entry.line}</td>
               <td className="py-2 text-right tabular-nums">{formatAmount(entry.amount)}</td>
             </tr>
           ))}
@@ -383,7 +393,7 @@ export async function ChallanCards({ session }: { session: TenantSession }) {
     <>
       <Card title="Tax withheld, not yet paid to the government" className="max-w-5xl">
         <p className="mb-3 text-sm text-muted-foreground" data-testid="challan-scope">
-          Tax withheld on supplier bills is paid over here. Tax withheld on an expense, and income tax deducted from salaries, are in the Withholding register under Reports with everything else still to be paid; recording their payment is not built yet.
+          Everything withheld and not yet paid over: from suppliers on their bills and on expenses, and from salaries by the payroll runs. A challan pays whole amounts of one kind of tax.
         </p>
         {unpaid.length === 0 ? (
           <Empty>Nothing withheld is waiting to be paid over.</Empty>

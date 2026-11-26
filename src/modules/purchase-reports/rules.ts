@@ -232,15 +232,15 @@ export type WithheldEntry = {
 
 /**
  * What is still to be paid over on a day and what the withholding payable accounts hold in the
- * books that day. `unpaid` is tax withheld from suppliers, kind by kind: on bills not yet under
- * a challan, and on expenses (`onExpenses` of it, which no challan covers yet). `salaries` is
- * the income tax deducted from pay by approved payroll runs (section 149), credited to the same
+ * books that day. `unpaid` is tax withheld from suppliers, kind by kind, on bills and on
+ * expenses, that no challan had paid by that day. `salaries` is the income tax deducted from
+ * pay by approved payroll runs (section 149) and not yet paid over; it is credited to the same
  * account as income tax withheld from suppliers.
  */
-export type WithheldPosition = { unpaid: Record<WithholdingKind, Decimal>; books: Record<WithholdingKind, Decimal>; salaries: Decimal; onExpenses: Decimal };
+export type WithheldPosition = { unpaid: Record<WithholdingKind, Decimal>; books: Record<WithholdingKind, Decimal>; salaries: Decimal };
 
-/** The income tax a payroll run deducted from pay, from the run's own figures. */
-export type SalaryTaxLine = { date: string; month: string; runNumber: string; people: number; taxable: Decimal; amount: Decimal };
+/** The income tax a payroll run deducted from pay, from the run's own figures, with the challan it was paid under. */
+export type SalaryTaxLine = { date: string; month: string; runNumber: string; people: number; taxable: Decimal; amount: Decimal; challanNo: string | null; paidOn: string | null };
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const monthWords = (month: string) => `${MONTHS[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`;
@@ -275,7 +275,7 @@ export function withholdingRegisterTable(entries: readonly WithheldEntry[], posi
       rows.push({
         kind: "line",
         depth: 0,
-        cells: [formatIsoDate(run.date), `Salaries for ${monthWords(run.month)}`, null, run.runNumber, null, `Salary, ${run.people} ${run.people === 1 ? "person" : "people"} taxed`, null, run.taxable, null, run.amount, null, null],
+        cells: [formatIsoDate(run.date), `Salaries for ${monthWords(run.month)}`, null, run.runNumber, null, `Salary, ${run.people} ${run.people === 1 ? "person" : "people"} taxed`, null, run.taxable, null, run.amount, run.challanNo, run.paidOn ? formatIsoDate(run.paidOn) : null],
       });
     }
     rows.push(blank("Total, income tax deducted from salaries", sum(salaries.map((run) => run.amount)), "total"));
@@ -295,9 +295,6 @@ export function withholdingRegisterTable(entries: readonly WithheldEntry[], posi
     rows.push(blank("Withholding payable accounts in the books", books, "total"));
     rows.push(blank("Difference", unpaid.minus(books), "total"));
     if (!unpaid.eq(books)) notes.push("What is still to be paid over and the withholding payable accounts in the books do not agree. An entry made to those accounts by hand would do this; please report it.");
-    if (!position.salaries.isZero() || !position.onExpenses.isZero()) {
-      notes.push("A challan here pays over tax withheld on supplier bills. Tax withheld on an expense, and income tax deducted from salaries, stay under what is still to be paid: recording their payment to the government is not built yet.");
-    }
   } else {
     notes.push("Shown for one branch or one supplier: challans are for the whole company, so what is still to be paid over is not set beside the books here.");
   }

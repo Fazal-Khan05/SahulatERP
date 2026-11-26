@@ -40,7 +40,7 @@ order, so the walk's numbers did not move. After them, each in a file of its own
   aged payables equal the payables accounts and goods received not billed equal theirs. It then
   prints the numbers and figures docs/DEMO.md quotes.
 
-Seeded on 2026-11-26 on a local database: trial balance 1,34,55,194.75 each side; stock
+Seeded on 2026-11-26 on a local database (figures as first seeded; the salary tax of 320.00 has since been paid over with a challan, which takes 320.00 off the trial balance): trial balance 1,34,55,194.75 each side; stock
 43,53,814.80; customers owe 16,23,150.00; suppliers are owed 5,78,222.00; goods received and
 not billed 71,250.00; October's profit 16,283 and November's 96,071. Ali's statement is as the
 walk says: 12,308.40 earned in October, 1,976.00 released and paid (CP-2627-00001), 45.00 taken

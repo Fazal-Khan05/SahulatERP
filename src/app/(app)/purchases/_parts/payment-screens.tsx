@@ -393,7 +393,9 @@ export async function ChallanCards({ session }: { session: TenantSession }) {
     <>
       <Card title="Tax withheld, not yet paid to the government" className="max-w-5xl">
         <p className="mb-3 text-sm text-muted-foreground" data-testid="challan-scope">
-          Everything withheld and not yet paid over: from suppliers on their bills and on expenses, and from salaries by the payroll runs. A challan pays whole amounts of one kind of tax.
+          {session.branchIds === null
+            ? "Everything withheld and not yet paid over: from suppliers on their bills and on expenses, and from salaries by the payroll runs. A challan pays whole amounts of one kind of tax; tax deducted from salaries is paid with an income tax challan."
+            : "Tax withheld on the supplier bills of your branches and not yet paid over. Tax withheld on expenses and deducted from salaries, and the recording of challans, are with someone who works in every branch."}
         </p>
         {unpaid.length === 0 ? (
           <Empty>Nothing withheld is waiting to be paid over.</Empty>

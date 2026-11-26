@@ -38,6 +38,8 @@ export async function recordTaxChallan(ctx: TenantContext, raw: RawTaxChallan): 
       throw new UserError("A challan pays whole amounts of its own kind of tax, withheld or deducted on or before its date, each once. Another challan may have paid one of them since you opened this page, or an expense among them was cancelled: reload and tick again.");
     }
     if (code === "SE333") throw new UserError("That date has not come yet.");
+    // Another challan, or a cancelling, holds one of these amounts and has not finished within the time allowed.
+    if (code === "55P03") throw new UserError("Someone else is recording a challan, or changing one of these, just now. Try again in a moment.");
     if (code === "42501") throw new UserError("Only an owner or an accountant who works in every branch can record a challan.");
     throw paymentRefusal(error, challan.paidOn) ?? error;
   }

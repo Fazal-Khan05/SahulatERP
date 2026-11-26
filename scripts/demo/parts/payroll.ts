@@ -4,6 +4,7 @@ import { getRun } from "@/modules/payroll-runs/queries";
 import { importAttendance, saveEmployee, setPay } from "@/modules/payroll/commands";
 import { issueLoan, repayLoan } from "@/modules/staff-loans/commands";
 import { listLoans } from "@/modules/staff-loans/queries";
+import { recordTaxChallan } from "@/modules/tax-paid-over/commands";
 import { formatAmount } from "@/lib/money";
 import type { Demo } from "../world";
 
@@ -47,6 +48,10 @@ export async function seedPayroll(d: Demo): Promise<void> {
   const approved = await approveRun(accountant, lastRun);
   await payRun(accountant, lastRun, { date: day(1, 1), accountId: d.bank });
   const paid = (await getRun(owner, lastRun))!;
+  // The income tax deducted from last month's pay is paid over to the government with its challan.
+  const salaryChallan = paid.tax.gt(0)
+    ? (await recordTaxChallan(accountant, { kind: "income_tax", paidOn: day(1, 10), accountId: d.bank, challanNo: "IT-20261110-005102", note: "Income tax deducted from last month's salaries", runIds: [lastRun] })).number
+    : "";
 
   // Ali pays five thousand of his loan back in cash; then this month is worked out and left as a draft.
   const [owed] = await listLoans(owner, employees["E-003"]);
@@ -54,6 +59,6 @@ export async function seedPayroll(d: Demo): Promise<void> {
   await importAttendance(payroll, thisMonth, attendance(Math.max(1, Math.min(22, Math.floor(Number(today.slice(8, 10)) * 0.8)))));
   await worked(thisMonth);
 
-  Object.assign(d.facts, { payrollRun: approved.number, payrollNet: formatAmount(paid.net), loan: loan.number, loanRepayment: repaid.number });
-  d.said.push(`Payroll: ${PEOPLE.length} employees; last month's run ${approved.number} approved and paid, ${formatAmount(paid.net)} to the staff, Sana's commission in it; this month's run is a draft; loan ${loan.number} to Ali, ${repaid.number} paid back in cash.`);
+  Object.assign(d.facts, { salaryChallan, salaryTaxPaid: formatAmount(paid.tax), payrollRun: approved.number, payrollNet: formatAmount(paid.net), loan: loan.number, loanRepayment: repaid.number });
+  d.said.push(`Payroll: ${PEOPLE.length} employees; last month's run ${approved.number} approved and paid, ${formatAmount(paid.net)} to the staff, Sana's commission in it; this month's run is a draft; loan ${loan.number} to Ali, ${repaid.number} paid back in cash${salaryChallan ? `; ${salaryChallan} pays over the ${formatAmount(paid.tax)} of income tax deducted from the salaries` : ""}.`);
 }

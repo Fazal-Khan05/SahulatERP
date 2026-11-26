@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb, withTenant } from "@/db";
 import { cancelExpense, recordExpense } from "@/modules/cash-bank/commands";
+import { getExpense } from "@/modules/cash-bank/queries";
 import { setBaseCurrency } from "@/modules/currencies/commands";
 import { addUnit, createItem } from "@/modules/items/commands";
 import { addAccount, seedAccounts } from "@/modules/ledger/commands";
@@ -270,14 +271,19 @@ describe.skipIf(!hasDb)("tax paid over", { timeout: 600_000 }, () => {
     expect(await seen(as.auditor)).toBe(2);
     expect(await seen(as.salesperson)).toBe(0);
     expect(await seen(otherOwner)).toBe(0);
+    // Someone limited to a branch reads no payroll, so no payroll run's tax here either; and an expense's row only with the expense.
+    expect(await seen(north)).toBe(0);
   });
 
   it("an expense whose tax has been paid over stands; one whose tax has not can be cancelled, and is then not paid", async () => {
     await expect(cancelExpense(as.owner, expense.id, { date: "2026-11-15", reason: "Entered against the wrong supplier" })).rejects.toThrow("Tax withheld on this expense has been paid to the government under a challan, so the expense stands.");
+    // Its page says so in place of the way to cancel it.
+    expect((await getExpense(as.owner, expense.id))?.taxPaidOver).toBe(true);
     expect((await admin<{ status: string }[]>`select status from public.expenses where id = ${expense.id}`)[0].status).toBe("posted");
     // A second expense, its tax not yet paid: cancelled on the 16th, and its tax cannot be paid after that.
     const second = await recordExpense(as.accountant, { date: "2026-11-15", accountId: bank, supplierId: supplier, incomeTaxCode: "income_tax.services.other", lines: [{ accountId: repairs, description: "Tyre change", amount: "5000" }] });
     const [{ id: secondTax }] = await admin<{ id: string }[]>`select id from public.expense_withholdings where tenant_id = ${tenantA} and expense_id = ${second.id}`;
+    expect((await getExpense(as.owner, second.id))?.taxPaidOver).toBe(false);
     await cancelExpense(as.owner, second.id, { date: "2026-11-16", reason: "Entered twice" });
     await expect(recordTaxChallan(as.owner, challan({ challanNo: "IT-LATE", paidOn: "2026-11-17", expenseEntryIds: [secondTax] }))).rejects.toThrow("A challan pays whole amounts of its own kind of tax");
     expect((await listOtherTaxUnpaid(as.owner)).expenses.map((e) => e.expenseNumber)).toEqual([expense.number]);

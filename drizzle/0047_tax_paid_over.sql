@@ -16,7 +16,9 @@
 --
 --   1. challan_expense_entries and challan_payroll_runs: which expense's tax and which payroll
 --      run's tax a challan paid. Each once, whole. Written only by the function below; never
---      changed or removed. Read by whoever reads challans (the owner, an accountant, the auditor).
+--      changed or removed. Read by the owner, an accountant and the auditor: an expense's row by
+--      whoever may read that expense, a payroll run's row only by someone who works in every
+--      branch, as payroll itself is read.
 --
 --   2. app.record_tax_challan: one challan that pays any mix of tax withheld on bills, tax
 --      withheld on expenses, and (for income tax) the salary tax of approved payroll runs. It
@@ -64,8 +66,10 @@ CREATE INDEX "challan_payroll_runs_challan_idx" ON "challan_payroll_runs" USING 
 --> statement-breakpoint
 
 -- ── hand-written: who may read the two tables ───────────────────────────────────────────────────
--- Challans are the whole company's: read by the owner and whoever keeps or checks the books,
--- as withholding_challans is. Written only by app.record_tax_challan.
+-- Read by the owner and whoever keeps or checks the books, and no further than what each row
+-- is about: an expense's row by whoever may read that expense's withheld tax (a member limited
+-- to some branches, the expenses of those), a payroll run's row only by someone who works in
+-- every branch, as payroll_runs is. Written only by app.record_tax_challan.
 REVOKE ALL ON public.challan_expense_entries, public.challan_payroll_runs FROM anon, authenticated, service_role;
 --> statement-breakpoint
 GRANT SELECT ON public.challan_expense_entries, public.challan_payroll_runs TO app_runtime;
@@ -79,10 +83,14 @@ ALTER TABLE public.challan_payroll_runs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.challan_payroll_runs FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint
 CREATE POLICY challan_expense_entries_select ON public.challan_expense_entries FOR SELECT TO app_runtime
-  USING (tenant_id = (SELECT app.tenant_id()) AND (SELECT app.tenant_role()) IN ('owner', 'accountant', 'auditor'));
+  USING (
+    tenant_id = (SELECT app.tenant_id())
+    AND (SELECT app.tenant_role()) IN ('owner', 'accountant', 'auditor')
+    AND EXISTS (SELECT 1 FROM public.expense_withholdings x WHERE x.tenant_id = challan_expense_entries.tenant_id AND x.id = challan_expense_entries.entry_id)
+  );
 --> statement-breakpoint
 CREATE POLICY challan_payroll_runs_select ON public.challan_payroll_runs FOR SELECT TO app_runtime
-  USING (tenant_id = (SELECT app.tenant_id()) AND (SELECT app.tenant_role()) IN ('owner', 'accountant', 'auditor'));
+  USING (tenant_id = (SELECT app.tenant_id()) AND (SELECT app.tenant_role()) IN ('owner', 'accountant', 'auditor') AND (SELECT app.tenant_branch_ids()) IS NULL);
 --> statement-breakpoint
 
 -- What a challan paid is written once and stays.
@@ -184,9 +192,9 @@ BEGIN
     JOIN public.expenses e ON e.tenant_id = x.tenant_id AND e.id = x.expense_id
     WHERE x.tenant_id = v_tenant AND x.id = ANY (v_expenses) AND x.kind = p_kind AND x.entry_date <= p_paid_on AND e.status = 'posted'
       AND NOT EXISTS (SELECT 1 FROM public.challan_expense_entries c WHERE c.tenant_id = x.tenant_id AND c.entry_id = x.id);
-  -- The tax an approved payroll run deducted from pay, whole, once its journal's day has come.
+  -- The tax an approved payroll run deducted from pay, whole and to the paisa, once its journal's day has come.
   SELECT count(*), coalesce(sum(r.tax), 0) INTO v_run_count, v_run_amount FROM public.payroll_runs r
-    WHERE r.tenant_id = v_tenant AND r.id = ANY (v_runs) AND r.status IN ('approved', 'paid') AND r.tax > 0 AND r.journal_date <= p_paid_on
+    WHERE r.tenant_id = v_tenant AND r.id = ANY (v_runs) AND r.status IN ('approved', 'paid') AND r.tax > 0 AND r.tax = round(r.tax, 2) AND r.journal_date <= p_paid_on
       AND NOT EXISTS (SELECT 1 FROM public.challan_payroll_runs c WHERE c.tenant_id = r.tenant_id AND c.run_id = r.id);
   IF v_bill_count <> cardinality(v_bills) OR v_bill_count <> (SELECT count(DISTINCT x) FROM unnest(v_bills) AS x)
      OR v_expense_count <> cardinality(v_expenses) OR v_expense_count <> (SELECT count(DISTINCT x) FROM unnest(v_expenses) AS x)

@@ -119,6 +119,8 @@ export type ExpenseDetail = ExpenseRow & {
   amount: Decimal;
   provincialTax: Decimal;
   cancelReason: string | null;
+  /** Tax withheld on it has been paid to the government under a challan: it is no longer cancelled. */
+  taxPaidOver: boolean;
   lines: { account: string; description: string; amount: Decimal; provincialShare: Decimal }[];
   withholdings: { kind: string; code: string; legalReference: string; base: Decimal; rate: Decimal; amount: Decimal; onActiveList: boolean }[];
   journal: JournalLine[];
@@ -148,6 +150,10 @@ export async function getExpense(ctx: TenantContext, id: string): Promise<Expens
     const withholdings = await tx.execute<{ kind: string; code: string; legal_reference: string; base_amount: string; rate: string; amount: string; on_active_list: boolean }>(sql`
       select kind, code, legal_reference, base_amount::text, rate::text, amount::text, on_active_list from public.expense_withholdings
       where tenant_id = ${ctx.tenantId} and expense_id = ${id} order by kind desc`);
+    const [paidOver] = await tx.execute<{ paid: boolean }>(sql`
+      select exists (
+        select 1 from public.challan_expense_entries c join public.expense_withholdings x on x.tenant_id = c.tenant_id and x.id = c.entry_id
+        where x.tenant_id = ${ctx.tenantId} and x.expense_id = ${id}) as paid`);
     return {
       id: e.id,
       number: e.number,
@@ -164,6 +170,7 @@ export async function getExpense(ctx: TenantContext, id: string): Promise<Expens
       amount: exact(e.amount),
       provincialTax: exact(e.provincial_tax),
       cancelReason: e.cancel_reason,
+      taxPaidOver: paidOver?.paid ?? false,
       lines: lines.map((l) => ({ account: l.account, description: l.description, amount: exact(l.amount), provincialShare: exact(l.provincial_share) })),
       withholdings: withholdings.map((w) => ({ kind: w.kind, code: w.code, legalReference: w.legal_reference, base: exact(w.base_amount), rate: exact(w.rate), amount: exact(w.amount), onActiveList: w.on_active_list })),
       journal: await journalLinesOf(ctx, e.journal_id),

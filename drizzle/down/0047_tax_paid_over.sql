@@ -5,6 +5,8 @@
 -- that challan's amount would no longer be explained by what it paid.
 
 BEGIN;
+-- Held from here on, so that no challan is recorded between the question below and the drop.
+LOCK TABLE public.challan_expense_entries, public.challan_payroll_runs IN ACCESS EXCLUSIVE MODE;
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM public.challan_expense_entries) OR EXISTS (SELECT 1 FROM public.challan_payroll_runs) THEN

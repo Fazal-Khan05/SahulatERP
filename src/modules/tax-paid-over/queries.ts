@@ -15,7 +15,11 @@ const d = (value: string | null | undefined) => new Decimal(value ?? "0");
 export type ExpenseTaxUnpaid = { entryId: string; kind: WithholdingKind; date: string; supplierName: string; expenseNumber: string; label: string; amount: Decimal };
 export type SalaryTaxUnpaid = { runId: string; date: string; month: string; runNumber: string; amount: Decimal };
 
-/** Tax withheld on expenses, and salary tax, that no challan has paid yet: oldest first. */
+/**
+ * Tax withheld on expenses, and salary tax, that no challan has paid yet: oldest first. Nothing
+ * for someone limited to some branches: a challan is recorded by someone who works in every
+ * branch, and payroll is the whole company's.
+ */
 export async function listOtherTaxUnpaid(ctx: TenantContext): Promise<{ expenses: ExpenseTaxUnpaid[]; salaries: SalaryTaxUnpaid[] }> {
   requirePaymentAccess(ctx);
   // Expenses of a branch and payroll are read whole only by someone who works in every branch, as challans are recorded.

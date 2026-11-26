@@ -37,7 +37,7 @@ export function Refused({ title, children }: { title: string; children: React.Re
   );
 }
 
-const SECTIONS: readonly { href: string; label: string; permission: Permission; module?: ModuleKey }[] = [
+const SECTIONS: readonly { href: string; label: string; permission: Permission | readonly Permission[]; module?: ModuleKey }[] = [
   { href: "/purchases", label: "Purchase orders", permission: "purchase_order.read" },
   { href: "/purchases/receive", label: "Receive goods", permission: "goods_receipt.read" },
   { href: "/purchases/bills", label: "Supplier bills", permission: "supplier_bill.read" },
@@ -46,11 +46,13 @@ const SECTIONS: readonly { href: string; label: string; permission: Permission; 
   { href: "/purchases/shipments", label: "Shipments", permission: "shipment.read", module: "imports" },
   { href: "/purchases/grni", label: "Goods received, not yet billed", permission: "purchase_order.read" },
   { href: "/purchases/withholding", label: "Withholding tax", permission: "supplier_bill.read" },
+  // Batch A: every buying document together, for a role that reads any of them.
+  { href: "/purchases/all", label: "All", permission: ["purchase_order.read", "goods_receipt.read", "supplier_bill.read", "supplier_payment.read", "supplier_return.read"] },
 ];
 
 /** The buying screens this role may open, as a row of links above each of them. */
 export function Sections({ session, current }: { session: TenantSession; current: string }) {
-  const open = SECTIONS.filter((section) => can(session.role, section.permission) && (!section.module || session.modules[section.module]));
+  const open = SECTIONS.filter((section) => (typeof section.permission === "string" ? [section.permission] : section.permission).some((permission) => can(session.role, permission)) && (!section.module || session.modules[section.module]));
   if (open.length < 2) return null;
   return (
     <nav aria-label="Purchases" className="mb-4 flex flex-wrap gap-x-5 gap-y-1 border-b pb-2 text-sm">

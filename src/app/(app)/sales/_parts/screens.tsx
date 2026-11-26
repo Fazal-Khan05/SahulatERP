@@ -16,6 +16,7 @@ import { standingLabel } from "@/modules/commission-ledger/rules";
 import { getCounterSaleOfInvoice } from "@/modules/counter-sales/queries";
 import { getCreditNoteFacts, getInvoiceReturns } from "@/modules/credit-notes/queries";
 import { getDocumentJournal, type Journal } from "@/modules/ledger/queries";
+import { listAllSales } from "@/modules/document-lists/queries";
 import { getCustomerCredit, getDeliveryRows, getLineDefaults, getOrderDelivery, getSalesDocument, listInvoicesOf, listOrdersToDeliver, listSalesDocuments, listSalesPeople, listSalesWarehouses, type SalesDocument } from "@/modules/sales/queries";
 import { KIND_LABELS, KIND_PLURALS, creditRefusal, isEntryKind, isSalesKind, statusLabel, type CreditFacts, type EntryKind, type SalesKind, type SalesStatus } from "@/modules/sales/rules";
 import { listMoneyAccounts } from "@/modules/receipts/queries";
@@ -23,6 +24,7 @@ import { getCompanySetup } from "@/modules/setup/queries";
 import { can } from "@/modules/tenant/rules";
 import { approveSalesAction, cancelDeliveryAction, cancelSalesAction, discardSalesAction, orderFromQuotationAction, releaseSalesAction, saveDeliveryAction, saveInvoiceAction, saveSalesAction, startDeliveryAction, startInvoiceAction } from "./actions";
 import { counterSaleAction } from "./counter-actions";
+import { invoiceNowAction } from "./invoice-now-actions";
 import { applyCreditAction, saveCreditNoteAction, startCreditNoteAction } from "./credit-actions";
 import { CreditNoteForm } from "./credit-note-form";
 import { ShortOfStock } from "../../purchases/_parts/market-screens";
@@ -65,26 +67,31 @@ export async function SalesListScreen({ searchParams }: { searchParams: Promise<
     );
   }
   const query = await searchParams;
+  // "All": every kind this member reads, together (batch A).
+  const all = query.kind === "all";
   const kind = kindOf(session, query.kind);
   const search = typeof query.q === "string" ? query.q : "";
-  const [{ rows, more }, toDeliver] = await Promise.all([listSalesDocuments(session, { kind, search }), kind === "delivery" ? listOrdersToDeliver(session) : []]);
+  const [{ rows, more }, toDeliver] = await Promise.all([all ? listAllSales(session, search) : listSalesDocuments(session, { kind, search }), !all && kind === "delivery" ? listOrdersToDeliver(session) : []]);
   // A delivery note has no total, and the warehouse is not shown what an order sells for.
-  const showTotals = kind !== "delivery" && can(session.role, "sales.read");
-  const tab = (other: SalesKind) => (
+  const showTotals = (all || kind !== "delivery") && can(session.role, "sales.read");
+  const tab = (other: SalesKind | "all") => (
     <Link
       href={`/sales?kind=${other}`}
-      aria-current={other === kind ? "page" : undefined}
-      className={`rounded-lg px-3 py-1.5 text-sm font-medium ${other === kind ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground"}`}
+      aria-current={(other === "all" ? all : !all && other === kind) ? "page" : undefined}
+      className={`rounded-lg px-3 py-1.5 text-sm font-medium ${(other === "all" ? all : !all && other === kind) ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground"}`}
     >
-      {KIND_PLURALS[other]}
+      {other === "all" ? "All" : KIND_PLURALS[other]}
     </Link>
   );
+  const listName = all ? "All sales documents" : KIND_PLURALS[kind];
   return (
     <>
       <PageHead
         title="Sales"
         sub={
-          kind === "delivery"
+          all
+            ? "Every quotation, order, delivery note, invoice and credit note you can see, newest first."
+            : kind === "delivery"
             ? "Delivery notes are made from submitted sales orders. Posting one takes its goods out of stock."
             : kind === "invoice"
               ? "Sales invoices are made from a posted delivery note, or straight from a sales order. Posting one puts it into the books. A walk-in buyer who pays at once is a counter sale."
@@ -100,19 +107,25 @@ export async function SalesListScreen({ searchParams }: { searchParams: Promise<
           {can(session.role, "delivery.read") ? tab("delivery") : null}
           {can(session.role, "sales.read") ? tab("invoice") : null}
           {can(session.role, "sales.read") ? tab("credit_note") : null}
+          {tab("all")}
         </nav>
-        {isEntryKind(kind) && can(session.role, "sales.manage") ? (
+        {!all && isEntryKind(kind) && can(session.role, "sales.manage") ? (
           <Link href={`/sales/new?kind=${kind}`} className={buttonVariants({ className: "ml-auto" })}>
             New {KIND_LABELS[kind].toLowerCase()}
           </Link>
         ) : null}
-        {kind === "invoice" && can(session.role, "counter_sale.manage") ? (
-          <Link href="/sales/counter" className={buttonVariants({ className: "ml-auto" })}>
+        {!all && kind === "invoice" && can(session.role, "sales.manage") ? (
+          <Link href="/sales/new-invoice" className={buttonVariants({ className: "ml-auto" })}>
+            New invoice
+          </Link>
+        ) : null}
+        {!all && kind === "invoice" && can(session.role, "counter_sale.manage") ? (
+          <Link href="/sales/counter" className={buttonVariants({ variant: can(session.role, "sales.manage") ? "outline" : "default", className: can(session.role, "sales.manage") ? undefined : "ml-auto" })}>
             New counter sale
           </Link>
         ) : null}
       </div>
-      {kind === "delivery" ? (
+      {!all && kind === "delivery" ? (
         <Card title="Orders waiting to be delivered" className="mb-5 max-w-5xl">
           {toDeliver.length === 0 ? (
             <Empty>No order is waiting to be delivered.</Empty>
@@ -135,19 +148,20 @@ export async function SalesListScreen({ searchParams }: { searchParams: Promise<
       ) : null}
       <Card className="max-w-5xl">
         <form className="mb-3 flex max-w-sm gap-2" role="search">
-          <input type="hidden" name="kind" value={kind} />
+          <input type="hidden" name="kind" value={all ? "all" : kind} />
           <Input name="q" defaultValue={search} placeholder="Find by number or customer" aria-label="Find by number or customer" />
           <button type="submit" className={buttonVariants({ variant: "outline" })}>
             Find
           </button>
         </form>
         {rows.length === 0 ? (
-          <Empty>{search === "" ? `No ${KIND_PLURALS[kind].toLowerCase()} yet.` : "Nothing matches."}</Empty>
+          <Empty>{search === "" ? `No ${all ? "sales documents" : KIND_PLURALS[kind].toLowerCase()} yet.` : "Nothing matches."}</Empty>
         ) : (
           <div className="overflow-x-auto">
-            <table aria-label={KIND_PLURALS[kind]} className="w-full min-w-[560px] text-left text-sm">
+            <table aria-label={listName} className="w-full min-w-[560px] text-left text-sm">
               <thead className="border-b text-muted-foreground">
                 <tr>
+                  {all ? <th className="py-2 pr-4 font-medium">Type</th> : null}
                   <th className="py-2 pr-4 font-medium">Number</th>
                   <th className="py-2 pr-4 font-medium">Date</th>
                   <th className="py-2 pr-4 font-medium">Customer</th>
@@ -158,6 +172,7 @@ export async function SalesListScreen({ searchParams }: { searchParams: Promise<
               <tbody className="divide-y">
                 {rows.map((row) => (
                   <tr key={row.id}>
+                    {all ? <td className="py-2 pr-4 whitespace-nowrap">{KIND_LABELS[row.kind]}</td> : null}
                     <td className="py-2 pr-4 font-medium whitespace-nowrap">
                       <Link href={`/sales/${row.id}`} className="underline-offset-4 hover:underline">
                         {row.number ?? "Draft"}
@@ -165,7 +180,7 @@ export async function SalesListScreen({ searchParams }: { searchParams: Promise<
                     </td>
                     <td className="py-2 pr-4 whitespace-nowrap">{formatIsoDate(row.date)}</td>
                     <td className="py-2 pr-4">{row.customerName}</td>
-                    {showTotals ? <td className="py-2 pr-4 text-right whitespace-nowrap tabular-nums">{formatAmount(row.total)}</td> : null}
+                    {showTotals ? <td className="py-2 pr-4 text-right whitespace-nowrap tabular-nums">{all && row.kind === "delivery" ? "" : formatAmount(row.total)}</td> : null}
                     <td className="py-2">
                       <StatusPill kind={row.kind} status={row.status} />
                     </td>
@@ -444,6 +459,52 @@ export async function CounterSaleScreen() {
             documentId={null}
             credit={null}
             initial={{ date: todayIso(new Date()), validUntil: "", customer: null, warehouseId: choices.warehouses[0].id, customerReference: "", notes: "", furtherTaxExcluded: false, lines: [], shares: [] }}
+          />
+        </Card>
+      )}
+    </>
+  );
+}
+
+/** One-step "New invoice" (batch A): an order, its delivery and its invoice for a customer on the list, at once. */
+export async function NewInvoiceScreen() {
+  const session = await requireTenant();
+  const title = "New invoice";
+  if (closed(session) || !can(session.role, "sales.manage")) {
+    return (
+      <>
+        <PageHead title={title} />
+        <p className="text-muted-foreground">{closed(session) ?? NO_WRITE}</p>
+      </>
+    );
+  }
+  const choices = await formChoices(session);
+  const mine = session.role !== "owner" && choices.team.some((person) => person.userId === session.userId);
+  return (
+    <>
+      <p className="mb-2 text-sm">
+        <Link href="/sales?kind=invoice" className="text-muted-foreground underline-offset-4 hover:underline">
+          Sales invoices
+        </Link>
+      </p>
+      <PageHead
+        title={title}
+        sub="For a customer on your list. The order, the delivery and the invoice are made at once: the goods leave stock and the invoice goes into the books. Over the credit limit it waits for the owner's approval as an order; short of stock, the invoice waits as a draft until the goods are in."
+      />
+      {choices.warehouses.length === 0 ? (
+        <NoWarehouse />
+      ) : (
+        <Card className="max-w-5xl">
+          <SalesForm
+            action={invoiceNowAction}
+            kind="invoice"
+            taxed={choices.taxed}
+            pricesIncludeTax={choices.pricesIncludeTax}
+            warehouses={choices.warehouses}
+            salesPeople={choices.salesPeople}
+            documentId={null}
+            credit={null}
+            initial={{ date: todayIso(new Date()), validUntil: "", customer: null, warehouseId: choices.warehouses[0].id, customerReference: "", notes: "", furtherTaxExcluded: false, lines: [], shares: mine ? [{ userId: session.userId, percent: "100" }] : [] }}
           />
         </Card>
       )}

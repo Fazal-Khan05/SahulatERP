@@ -275,6 +275,27 @@ describe.skipIf(!hasDb)("tax paid over", { timeout: 600_000 }, () => {
     expect(await seen(north)).toBe(0);
   });
 
+  it("a payroll run whose tax has been paid over stands, as every approved run does: nothing cancels, reverses or changes it", async () => {
+    // A challan takes only an approved or paid run (a draft was refused above), and Step 41 lets no approved run go back:
+    // its cancel function refuses, the app's role may only work a draft or reviewed run out again, and a run's journal
+    // has no way to be reversed, so the tax a challan paid can never leave the books behind it.
+    expect(await codeOf(as.owner, sql`select app.cancel_payroll_run(${october.id}::uuid, 'Approved by mistake')`)).toBe("SE354");
+    expect(await codeOf(as.owner, sql`update public.payroll_runs set status = 'draft', updated_by = ${userIds.owner} where id = ${october.id}`)).toBe("SE351");
+    expect(await codeOf(as.owner, sql`update public.payroll_runs set status = 'cancelled', updated_by = ${userIds.owner} where id = ${october.id}`)).toBe("SE351");
+    expect(await codeOf(as.owner, sql`update public.payroll_runs set tax = 0, updated_by = ${userIds.owner} where id = ${october.id}`)).toBe("SE351");
+    expect(await codeOf(as.owner, sql`delete from public.payroll_runs where id = ${october.id}`)).toMatch(/^(SE351|42501)$/);
+    await expect(workOutRun(as.owner, "2026-10-01")).rejects.toThrow();
+    const [made] = await admin<{ reverses: boolean; cancels: number }[]>`
+      select to_regprocedure('app.reversal_backed_payroll_run(public.journals, public.journals)') is not null as reverses,
+        (select count(*)::int from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'app' and p.prosrc ilike '%update public.payroll_runs%' and p.prosrc ilike '%status = ''cancelled''%') as cancels`;
+    // No reversal of a run's journal exists, and one function alone sets a run to cancelled: the one that refused above.
+    expect(made).toEqual({ reverses: false, cancels: 1 });
+    const [row] = await admin<{ status: string; tax: string; paid: string }[]>`
+      select r.status, r.tax::numeric(20,2)::text as tax, c.amount::text as paid from public.payroll_runs r join public.challan_payroll_runs c on c.run_id = r.id where r.id = ${october.id}`;
+    expect(row).toEqual({ status: "approved", tax: october.tax, paid: october.tax });
+    await agreed("2026-11-30");
+  });
+
   it("an expense whose tax has been paid over stands; one whose tax has not can be cancelled, and is then not paid", async () => {
     await expect(cancelExpense(as.owner, expense.id, { date: "2026-11-15", reason: "Entered against the wrong supplier" })).rejects.toThrow("Tax withheld on this expense has been paid to the government under a challan, so the expense stands.");
     // Its page says so in place of the way to cancel it.

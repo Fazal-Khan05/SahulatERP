@@ -68,6 +68,23 @@ journal and not one line of its SQL.
   mix them in one challan; today it allows either.
 - The two questions in docs/later/withholding-register.md stand.
 
+## Why there is no rule for a payroll run like the one for an expense
+
+An expense can be cancelled after it is posted, so one whose tax was paid over needed a rule of
+its own. A payroll run cannot: a challan takes only an approved or paid run, and Step 41 lets
+none go back, in the database itself (`drizzle/0040_payroll_runs.sql`):
+
+- `app.cancel_payroll_run` refuses any run that is not a draft or reviewed (SE354);
+- the row guard `payroll_runs_check` lets the app's role change a run only by working a draft
+  or reviewed one out again (SE351), and never remove one;
+- no function reverses a run's journal, and none can post such a reversal: the shared rule
+  that every journal stands with its document asks `app.reversal_backed_<kind>`, and there is
+  none for a payroll run.
+
+A test holds the three. **If a later step lets an approved run be cancelled or reversed, it
+must first refuse a run that is in `challan_payroll_runs`**, as `expenses_tax_paid_over` does
+for an expense; that step's own cancel function is the place for it.
+
 ## Later
 
 - **The year's salary statement does not show the CPR numbers** of the challans that paid each

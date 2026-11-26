@@ -53,6 +53,24 @@ export async function listCustomerAgeing(ctx: TenantContext, today: string): Pro
   return [...byCustomer.values()].map((entry) => ageOpenItems(entry.customer, entry.items, today));
 }
 
+/**
+ * What the Trade receivables account holds in the books, to set beside the aged receivables
+ * total; null for someone who does not read the books, or who works in some branches only and
+ * so sees only those branches' invoices.
+ */
+export async function getReceivablesInBooks(ctx: TenantContext): Promise<Decimal | null> {
+  requireRecoveryAccess(ctx);
+  if (!can(ctx.role, "report.read") || ctx.branchIds !== null) return null;
+  const [row] = await withTenant(ctx.userId, ctx.tenantId, (tx) =>
+    tx.execute<{ balance: string }>(sql`
+      select coalesce(sum(l.debit - l.credit), 0)::text as balance
+      from public.journal_lines l
+      join public.accounts a on a.tenant_id = l.tenant_id and a.id = l.account_id
+      where l.tenant_id = ${ctx.tenantId} and a.is_control and a.control_type = 'ar'`),
+  );
+  return d(row?.balance);
+}
+
 export type FollowUpRow = { id: string; customerId: string; customerName: string; note: string; nextOn: string | null; createdAt: Date; by: string };
 export type PromiseRow = { id: string; customerId: string; customerName: string; amount: Decimal; madeOn: string; promisedOn: string; note: string | null; received: Decimal; state: PromiseState; createdAt: Date; by: string };
 

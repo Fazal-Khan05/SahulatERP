@@ -24,6 +24,14 @@ import { createBranch, createCompany, setModuleEnabled } from "@/modules/tenant/
 import { MODULES, type MemberRole, type TenantContext } from "@/modules/tenant/rules";
 import { createWarehouse } from "@/modules/warehouses/commands";
 import { adminSql, deleteTenants, type AdminSql } from "../../tests/support/admin-db";
+import { seedBuying } from "./parts/buying";
+import { checkBooks } from "./parts/checks";
+import { seedMoney, seedOpening } from "./parts/money";
+import { seedPayroll } from "./parts/payroll";
+import { seedReconciliation } from "./parts/reconcile";
+import { seedSellingMore } from "./parts/selling-more";
+import { seedStock, seedWaitingCount } from "./parts/stock";
+import type { Demo } from "./world";
 
 // The demo company: an invented motorcycle-parts importer with two months of trading, built
 // through the app's own commands and posting functions, exactly as people would through the
@@ -34,13 +42,22 @@ import { adminSql, deleteTenants, type AdminSql } from "../../tests/support/admi
 // .env.demo-accounts.local (git-ignored) and never printed.
 
 export const DEMO_COMPANY = "Shaheen Bike Parts (Demo)";
-const DOMAIN = "demo.sahulaterp.test";
-const ACCOUNTS_FILE = ".env.demo-accounts.local";
+// Seeded into a database on this computer (npm run db:local), the demo gets sign-ins and a
+// passwords file of its own, so that trying the seed here never touches the sign-ins of the demo
+// on the live site. The sign-in service is the hosted one either way: a local database has none.
+const LOCAL_DATABASE = /@(127\.0\.0\.1|localhost)[:/]/.test(process.env.MIGRATION_DATABASE_URL ?? "");
+const DOMAIN = LOCAL_DATABASE ? "demo-local.sahulaterp.test" : "demo.sahulaterp.test";
+const ACCOUNTS_FILE = LOCAL_DATABASE ? ".env.demo-accounts-localdb.local" : ".env.demo-accounts.local";
 export const DEMO_LOGINS = [
   { key: "OWNER", local: "demo-owner", role: "owner" as MemberRole, label: "Owner" },
   { key: "MANAGER", local: "demo-manager", role: "sales_manager" as MemberRole, label: "Sales manager (Imran)" },
   { key: "ALI", local: "demo-ali", role: "salesperson" as MemberRole, label: "Salesperson (Ali)" },
   { key: "SANA", local: "demo-sana", role: "salesperson" as MemberRole, label: "Salesperson (Sana)" },
+  { key: "ACCOUNTANT", local: "demo-accountant", role: "accountant" as MemberRole, label: "Accountant (Nadia)" },
+  { key: "PAYROLL", local: "demo-payroll", role: "payroll_administrator" as MemberRole, label: "Payroll administrator (Hina)" },
+  { key: "WAREHOUSE", local: "demo-warehouse", role: "warehouse_manager" as MemberRole, label: "Warehouse manager (Bilal)" },
+  { key: "RECOVERY", local: "demo-recovery", role: "recovery_officer" as MemberRole, label: "Recovery officer (Kamran)" },
+  { key: "AUDITOR", local: "demo-auditor", role: "auditor" as MemberRole, label: "Auditor (reads everything, changes nothing)" },
 ] as const;
 const emailOf = (local: string) => `${local}@${DOMAIN}`;
 
@@ -51,11 +68,23 @@ function supabaseAdmin() {
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
-/** The demo company's id and its logins' ids, as far as they exist. */
+/**
+ * The demo company's id and its logins' ids, as far as they exist. The logins are looked up at
+ * the sign-in service itself, by their exact addresses, so this works for a database that has
+ * no sign-in tables of its own.
+ */
 async function findDemo(sql: AdminSql): Promise<{ tenantIds: string[]; userIds: string[] }> {
-  const users = await sql<{ id: string }[]>`select id from auth.users where email = any(${DEMO_LOGINS.map((login) => emailOf(login.local))})`;
+  const wanted = new Set<string>(DEMO_LOGINS.map((login) => emailOf(login.local)));
+  const supabase = supabaseAdmin();
+  const userIds: string[] = [];
+  for (let page = 1; page <= 50; page++) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 200 });
+    if (error) throw new Error(`Could not read the sign-ins: ${error.message}`);
+    for (const user of data.users) if (user.email && wanted.has(user.email)) userIds.push(user.id);
+    if (data.users.length < 200) break;
+  }
   const tenants = await sql<{ id: string }[]>`select id from public.tenants where name = ${DEMO_COMPANY}`;
-  return { tenantIds: tenants.map((t) => t.id), userIds: users.map((u) => u.id) };
+  return { tenantIds: tenants.map((t) => t.id), userIds };
 }
 
 /** Days are counted in Pakistan, as the app counts them. */
@@ -105,23 +134,24 @@ export async function seedDemo(): Promise<string[]> {
     const tenantId = await createCompany({ id: people.OWNER.id, email: people.OWNER.email }, DEMO_COMPANY);
     const as = (key: string, role: MemberRole): TenantContext => ({ userId: people[key].id, email: people[key].email, tenantId, tenantName: DEMO_COMPANY, role, branchIds: null });
     const owner = as("OWNER", "owner");
-    const read = readSetup({ salesTaxRegistered: "no", currencyCode: "PKR", currencyName: "Pakistani Rupee", fiscalMonth: "7", fiscalYear: String(fyYear), bundle: "trading", branchName: "Karachi", warehouseName: "Karachi warehouse", accountsTemplate: "trading" });
+    const read = readSetup({ salesTaxRegistered: "no", currencyCode: "PKR", currencyName: "Pakistani Rupee", fiscalMonth: "7", fiscalYear: String(fyYear), bundle: "full", branchName: "Karachi", warehouseName: "Karachi warehouse", accountsTemplate: "trading" });
     if (!read.ok) throw new Error(read.reason);
     let karachi = "";
+    let karachiBranch = "";
+    // Everything that is built is switched on (the founder's request, 2026-11-26); FBR filing is not built.
+    const wanted = MODULE_BUNDLES.full.modules;
     await withSetupLock(owner, async () => {
       await setBaseCurrency(owner, read.setup.baseCurrency);
       await openFiscalYear(owner, { month: "7", year: String(fyYear) }, { onlyFirst: true });
       const branch = await createBranch(owner, "Karachi");
+      karachiBranch = branch.id;
       karachi = (await createWarehouse(owner, { name: "Karachi warehouse", branchId: branch.id })).id;
       await seedAccounts(owner, "trading");
-      const wanted = MODULE_BUNDLES.trading.modules;
       await recordSetup(owner, read.setup, { baseCurrency: "PKR", fiscalYearStart: read.setup.fiscalYearStart, branch: "Karachi", warehouse: "Karachi warehouse", modules: MODULES.filter((key) => wanted[key]) });
     });
-    // The same trading bundle, with commissions on: this importer pays its sales team commission.
-    for (const key of MODULES) {
-      const on = MODULE_BUNDLES.trading.modules[key] || key === "commissions";
-      await setModuleEnabled(owner, key, on);
-    }
+    // Switched on in an order the rules allow: what a module needs comes before it.
+    for (const key of ["inventory", "cash_bank", "sales", "purchasing", "collections", "imports", "commissions", "payroll"] as const) await setModuleEnabled(owner, key, wanted[key]);
+    await setModuleEnabled(owner, "fbr", false);
     const lahoreBranch = await createBranch(owner, "Lahore");
     const lahore = (await createWarehouse(owner, { name: "Lahore warehouse", branchId: lahoreBranch.id })).id;
     // The sales team joins the company (as accepting an invitation would make them members).
@@ -353,6 +383,28 @@ export async function seedDemo(): Promise<string[]> {
     await addPromise(manager, customers[chased], { amount: last[4].total.toFixed(2), promisedOn: shift(today, 7), note: "Bank transfer" }, today);
     await addFollowUp(owner, customers[last[6].customer], { note: "Asked for payment; they asked for a statement first.", nextOn: today }, today);
     said.push("Recovery: follow-ups, and a promise to pay for the bounced cheque.");
+
+    // ── Everything else that is built, each part in a file of its own (scripts/demo/parts) ──────
+    const d: Demo = {
+      sql, said, facts: {}, tenantId, people,
+      owner, manager, ali, sana,
+      accountant: as("ACCOUNTANT", "accountant"), payroll: as("PAYROLL", "payroll_administrator"), warehouse: as("WAREHOUSE", "warehouse_manager"), recovery: as("RECOVERY", "recovery_officer"), auditor: as("AUDITOR", "auditor"),
+      today, yesterday, lastMonth, thisMonth, day, shift, fyYear,
+      karachiBranch, lahoreBranch: lahoreBranch.id, karachi, lahore, shop: "",
+      units: { piece, set }, categories, items: itemIds, customers, suppliers: {},
+      cash, bank, petty: "", invoices,
+    };
+    await seedBuying(d);
+    await seedOpening(d);
+    await seedStock(d);
+    await seedSellingMore(d);
+    await seedMoney(d);
+    await seedPayroll(d);
+    await seedReconciliation(d);
+    await seedWaitingCount(d);
+    await checkBooks(d);
+    // The numbers and figures the walk quotes, for checking docs/DEMO.md against this company.
+    said.push("For docs/DEMO.md:", ...Object.entries(d.facts).map(([name, value]) => `  ${name}: ${value}`));
     return said;
   } finally {
     await sql.end();

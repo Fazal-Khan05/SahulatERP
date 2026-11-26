@@ -16,7 +16,7 @@ import { getSalesDocument } from "@/modules/sales/queries";
 import type { TenantContext } from "@/modules/tenant/rules";
 import { adminSql, deleteTenants, hasAdminDb, type AdminSql } from "../../../tests/support/admin-db";
 import { addFollowUp, addPromise } from "./commands";
-import { getCustomerRecovery, getCustomerStatement, listCustomerAgeing, listFollowUpsDue, listPromises, listRecoveryMarks } from "./queries";
+import { getCustomerRecovery, getCustomerStatement, getReceivablesInBooks, listCustomerAgeing, listFollowUpsDue, listPromises, listRecoveryMarks } from "./queries";
 import { ageingTable, overdueCustomers } from "./rules";
 
 // Step 33 against a real database, through the app's own path: invoices and receipts posted by
@@ -122,6 +122,20 @@ describe.skipIf(!hasDb)("recovery", () => {
     expect(cells("Khan Autos")).toEqual(["5000.00", "", "", "6000.00", "", "11000.00"]);
     expect(cells("Walk-in Rider")).toEqual(["", "", "", "3000.00", "", "3000.00"]);
     expect(cells("Total")).toEqual(["5000.00", "0.00", "0.00", "9000.00", "0.00", "14000.00"]);
+
+    // For those who read the books, the total is set beside the Trade receivables account: they agree.
+    for (const who of [as.owner, as.accountant, as.auditor]) {
+      const books = await getReceivablesInBooks(who);
+      expect(books && money(books), who.role).toBe("14000.00");
+      const compared = ageingTable(aged, ASAT, books);
+      expect(compared.rows.slice(-2).map((row) => `${row.cells[1]} ${money(row.cells.at(-1) as Decimal)}`), who.role).toEqual(["Trade receivables, in the books 14000.00", "Difference 0.00"]);
+      expect(compared.notes).toHaveLength(1);
+    }
+    // The recovery officer and the sales manager do not read the books, and someone limited to a branch sees only its invoices: no comparison for them.
+    expect(await getReceivablesInBooks(as.recovery_officer)).toBeNull();
+    expect(await getReceivablesInBooks(as.sales_manager)).toBeNull();
+    expect(await getReceivablesInBooks({ ...as.accountant, branchIds: [randomUUID()] })).toBeNull();
+    await expect(getReceivablesInBooks(as.warehouse_manager)).rejects.toThrow("Your role does not include recovery.");
 
     const overdue = overdueCustomers(aged);
     expect(overdue.map((row) => `${row.name} ${money(row.overdue)} ${row.oldestDays}`)).toEqual(["Khan Autos 6000.00 67", "Walk-in Rider 3000.00 75"]);

@@ -2,6 +2,9 @@ import { randomUUID } from "node:crypto";
 import Decimal from "decimal.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb } from "@/db";
+import { cancelExpense, recordExpense } from "@/modules/cash-bank/commands";
+import { approveRun, reviewRun, workOutRun } from "@/modules/payroll-runs/commands";
+import { saveEmployee, setPay } from "@/modules/payroll/commands";
 import { setBaseCurrency } from "@/modules/currencies/commands";
 import { addUnit, createItem } from "@/modules/items/commands";
 import { addAccount, seedAccounts } from "@/modules/ledger/commands";
@@ -241,6 +244,81 @@ describe.skipIf(!hasDb)("buying reports", { timeout: 600_000 }, () => {
       " |  |  |  |  | Goods received not invoiced, in the books |  | 1800.00",
       " |  |  |  |  | Difference |  | 0.00",
     ]);
+  });
+
+  it("the register also holds tax withheld on an expense and the salary tax of approved payroll runs, and still equals the books", async () => {
+    const last = (table: ReportTable, n: number) => show(table).slice(-n);
+    const agreed = (table: ReportTable) => expect(last(table, 1)).toEqual([" | Difference |  |  |  |  |  |  |  | 0.00 |  | "]);
+    // 12 November: van repairs of 20,000 paid to Karachi Motors out of the bank (Step 34). Sindh's
+    // tax on services, 15%, is added and withheld whole; income tax is 28% of the 23,000, since
+    // the supplier is not on the Active Taxpayers List.
+    const [{ id: repairs }] = await admin<{ id: string }[]>`select id from public.accounts where tenant_id = ${tenantA} and code = '5270'`;
+    const expense = await recordExpense(as.accountant, { date: "2026-11-12", accountId: bank, supplierId: company, reference: "KM-SRV-9", incomeTaxCode: "income_tax.services.other", provincialTaxCode: "provincial_sales_tax.sindh", lines: [{ accountId: repairs, description: "Van repairs", amount: "20000" }] });
+    let table = await getPurchaseReport(as.auditor, "withholding-register", november());
+    expect(show(table)).toContainEqual(expect.stringMatching(new RegExp(`^12-11-2026 \\| Karachi Motors \\(Pvt\\) Ltd \\| 7654321 \\| ${expense.number} \\| KM-SRV-9 \\| .+ \\| No \\| 23000\\.00 \\| 28\\.00 \\| 6440\\.00 \\|  \\| $`)));
+    expect(show(table)).toContainEqual(expect.stringMatching(new RegExp(`^12-11-2026 \\| Karachi Motors \\(Pvt\\) Ltd \\| 7654321 \\| ${expense.number} \\| KM-SRV-9 \\| .+ \\| No \\| 20000\\.00 \\| 15\\.00 \\| 3000\\.00 \\|  \\| $`)));
+    expect(last(table, 6)).toEqual([
+      "Still to be paid to the government, as at the end of 17-11-2026 |  |  |  |  |  |  |  |  |  |  | ",
+      " | Income tax |  |  |  |  |  |  |  | 7440.00 |  | ",
+      " | Provincial sales tax |  |  |  |  |  |  |  | 3000.00 |  | ",
+      " | Withheld and not yet paid over |  |  |  |  |  |  |  | 10440.00 |  | ",
+      " | Withholding payable accounts in the books |  |  |  |  |  |  |  | 10440.00 |  | ",
+      " | Difference |  |  |  |  |  |  |  | 0.00 |  | ",
+    ]);
+    expect(await books(["wht_income_tax", "wht_sales_tax", "wht_provincial_tax"], "2026-11-17")).toBe("10440.00");
+    expect(table.notes).toEqual([expect.stringMatching(/^A challan here pays over tax withheld on supplier bills\./)]);
+
+    // October's payroll, approved: one person paid enough to be taxed. The run credits its tax to
+    // the same account as income tax withheld from suppliers (Step 41).
+    const employee = await saveEmployee(as.owner, null, { code: "E-001", name: "Imran Qureshi", province: "sindh", payBasis: "monthly", joinedOn: "2026-07-01" });
+    await setPay(as.owner, employee.id, { component: "basic", amount: "200000", effectiveFrom: "2026-07-01" });
+    const worked = await workOutRun(as.owner, "2026-10-01");
+    if (!("id" in worked)) throw new Error(worked.problems.map((p) => p.reason).join("; "));
+    await reviewRun(as.owner, worked.id);
+    const run = await approveRun(as.accountant, worked.id);
+    const [{ tax, taxable }] = await admin<{ tax: string; taxable: string }[]>`
+      select r.tax::numeric(20,2)::text as tax, (select sum(p.taxable)::numeric(20,2)::text from public.payslips p where p.run_id = r.id) as taxable from public.payroll_runs r where r.tenant_id = ${tenantA} and r.number = ${run.number}`;
+    expect(Number(tax)).toBeGreaterThan(0);
+    // In November's register the run is not of the period, and its tax is still to be paid: the two agree again.
+    table = await getPurchaseReport(as.auditor, "withholding-register", november());
+    expect(show(table).some((row) => row.includes("Salaries for"))).toBe(false);
+    expect(last(table, 5)).toEqual([
+      " | Provincial sales tax |  |  |  |  |  |  |  | 3000.00 |  | ",
+      ` | Income tax deducted from salaries (section 149) |  |  |  |  |  |  |  | ${tax} |  | `,
+      ` | Withheld and not yet paid over |  |  |  |  |  |  |  | ${new Decimal(tax).plus("10440").toFixed(2)} |  | `,
+      ` | Withholding payable accounts in the books |  |  |  |  |  |  |  | ${new Decimal(tax).plus("10440").toFixed(2)} |  | `,
+      " | Difference |  |  |  |  |  |  |  | 0.00 |  | ",
+    ]);
+    // From October on, the run has a section of its own, from the run's own figures.
+    table = await getPurchaseReport(as.auditor, "withholding-register", november({ from: "2026-10-01" }));
+    expect(show(table)).toEqual(expect.arrayContaining([
+      "Income tax deducted from salaries (section 149) |  |  |  |  |  |  |  |  |  |  | ",
+      `31-10-2026 | Salaries for October 2026 |  | ${run.number} |  | Salary, 1 person taxed |  | ${taxable} |  | ${tax} |  | `,
+      ` | Total, income tax deducted from salaries |  |  |  |  |  |  |  | ${tax} |  | `,
+    ]));
+    agreed(table);
+    // The day before the run's journal, the books did not hold its tax, and the register does not count it.
+    agreed(await getPurchaseReport(as.auditor, "withholding-register", november({ from: "2026-10-01", to: "2026-10-30" })));
+    // For one supplier or one branch, salaries are left out with the comparison: payroll is the whole company's.
+    expect(show(await getPurchaseReport(as.auditor, "withholding-register", november({ from: "2026-10-01", supplierId: company }))).some((row) => row.includes("Salaries for"))).toBe(false);
+
+    // Section 165 is the suppliers' statement: the expense's income tax is in it, salaries are not.
+    const statement = await getPurchaseReport(as.accountant, "section-165", november({ from: "2026-10-01" }));
+    expect(show(statement)).toContainEqual(expect.stringMatching(new RegExp(`153.* \\| 7654321 \\|  \\| Karachi Motors \\(Pvt\\) Ltd \\| Company \\| No \\| ${expense.number} \\| KM-SRV-9 \\| 12-11-2026 \\| 23000\\.00 \\| 28\\.00 \\| 6440\\.00 \\|  \\| $`)));
+    expect(show(statement).at(-1)).toBe(" |  |  | Total |  |  |  |  |  | 133000.00 |  | 17440.00 |  | ");
+    expect(show(statement).some((row) => row.includes("Salar") || row.includes(run.number))).toBe(false);
+    expect(statement.notes).toContainEqual(expect.stringMatching(/^Income tax deducted from salaries \(section 149\) is not in this statement/));
+
+    // The expense is cancelled on the 13th: its tax goes back, and from that day the register no longer holds it.
+    await cancelExpense(as.owner, expense.id, { date: "2026-11-13", reason: "Entered against the wrong supplier" });
+    table = await getPurchaseReport(as.auditor, "withholding-register", november());
+    expect(show(table).some((row) => row.includes(expense.number))).toBe(false);
+    agreed(table);
+    expect(await books(["wht_income_tax", "wht_sales_tax", "wht_provincial_tax"], "2026-11-17")).toBe(new Decimal(tax).plus("1000").toFixed(2));
+    // As at the 12th it still stood, in the register and in the books of that day.
+    table = await getPurchaseReport(as.auditor, "withholding-register", november({ to: "2026-11-12" }));
+    expect(show(table).some((row) => row.includes(expense.number))).toBe(true);
+    agreed(table);
   });
 
   it("keeps the reports to those who keep or check the books, in their branches and their company", async () => {

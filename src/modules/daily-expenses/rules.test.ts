@@ -105,6 +105,7 @@ describe("a sheet of expenses", () => {
     expect(readSheetCells([])).toEqual({ ok: false, reason: "The file is empty." });
     expect(readSheetCells([["Date", "Amount", "What for"]])).toMatchObject({ ok: false, reason: expect.stringContaining("The first row must name the columns: Date, What for, Amount, Paid from, Paid to, Note.") });
     expect(readSheetCells([["Date", "What for", "Amount", "Paid from"]])).toEqual({ ok: false, reason: "The sheet has its headings and no expenses under them." });
+    expect(readSheetCells([["Date", "What for", "Amount", "Paid from", "amount"], ["25/11/2026", "Rent", "1", "Cash in hand", "2"]])).toEqual({ ok: false, reason: 'The sheet has two columns called "Amount". Keep one.' });
     const many = [["Date", "What for", "Amount", "Paid from"], ...Array.from({ length: 201 }, () => ["25/11/2026", "Rent", "1", "Cash in hand"])];
     expect(readSheetCells(many)).toEqual({ ok: false, reason: "The sheet has 201 expenses. Enter at most 200 at a time." });
   });

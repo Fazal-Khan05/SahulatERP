@@ -1,11 +1,19 @@
 -- Reverses drizzle/0046_daily_expenses.sql. Never run automatically. Run it by hand, as postgres,
 -- only after showing it to the founder and getting a yes. It DELETES the record of which file is
 -- the receipt of which expense (the files themselves stay, as files of the company the owner and
--- the auditor see), and an accountant can no longer store or read a receipt. Expenses that name
--- nobody stay as they are: the old rule is put back for new expenses only (NOT VALID), since a
--- posted expense is never changed.
+-- the auditor see, in every branch), and an accountant can no longer store or read a receipt.
+--
+-- It refuses to run once any company has an expense that names nobody: the old rule (a supplier
+-- or a name, always one) cannot be put back over such a row, and a rule that left them out
+-- would stop them ever being cancelled. Such a database goes forward, not back.
 
 BEGIN;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.expenses WHERE supplier_id IS NULL AND payee IS NULL) THEN
+    RAISE EXCEPTION 'expenses that name nobody exist: 0046 cannot be reversed on this database';
+  END IF;
+END $$;
 CREATE OR REPLACE FUNCTION app.record_expense(p_key uuid, p_date date, p_account uuid, p_supplier uuid, p_payee text, p_branch uuid, p_reference text, p_memo text, p_lines jsonb,
                                    p_income_tax_code text, p_provincial_tax_code text) RETURNS text
   LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
@@ -189,11 +197,17 @@ BEGIN
   RETURN v_number;
 END $$;
 ALTER TABLE public.expenses DROP CONSTRAINT expenses_paid_to_one_at_most;
-ALTER TABLE public.expenses ADD CONSTRAINT expenses_paid_to_someone CHECK ((supplier_id is null) <> (payee is null)) NOT VALID;
+ALTER TABLE public.expenses ADD CONSTRAINT expenses_paid_to_someone CHECK ((supplier_id is null) <> (payee is null));
+DROP POLICY files_bucket_select_receipt_branch ON storage.objects;
 DROP POLICY files_bucket_select_receipt ON storage.objects;
 DROP POLICY files_bucket_insert_receipt ON storage.objects;
+DROP FUNCTION app.storage_receipt_out_of_reach(text);
 DROP FUNCTION app.storage_receipt_reader(text);
 DROP FUNCTION app.storage_receipt_writer(text);
+DROP TRIGGER files_receipt_kept ON public.files;
+DROP FUNCTION app.check_receipt_file();
+DROP POLICY files_select_receipt_branch ON public.files;
+DROP FUNCTION app.receipt_file_out_of_reach(uuid, uuid);
 DROP POLICY files_update_receipt ON public.files;
 DROP POLICY files_select_receipt ON public.files;
 DROP POLICY files_insert_receipt ON public.files;

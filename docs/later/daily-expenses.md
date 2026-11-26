@@ -50,7 +50,7 @@ and bank, Expenses lists the same expenses, and the full form there is unchanged
   expense" for the owner and an accountant. A PDF, PNG, JPEG or WebP of 4 MB or less, checked by
   its contents; a large photo from a phone is made smaller in the browser before it is sent.
 
-## In the database (`drizzle/0046_daily_expenses.sql`, track C, error codes SE376 and SE377)
+## In the database (`drizzle/0046_daily_expenses.sql`, track C, error codes SE376 to SE378)
 
 1. `expense_receipts`: which stored file is the receipt of which expense. Written only by
    `app.attach_expense_receipt` (owner or accountant; the file is their own, stored, and not yet
@@ -64,6 +64,13 @@ and bank, Expenses lists the same expenses, and the full form there is unchanged
    they may see (`files_insert_receipt`, `files_select_receipt`, `files_update_receipt`;
    `files_bucket_insert_receipt`, `files_bucket_select_receipt` on `storage.objects`, asking
    `app.storage_receipt_writer` and `app.storage_receipt_reader`).
+   A receipt follows its expense, and an expense may belong to a branch, while 0002 shows the
+   owner and the auditor every file. So two restrictive policies of this migration's own
+   (`files_select_receipt_branch`, `files_bucket_select_receipt_branch`) hide the file of a
+   receipt from a member limited to branches unless its expense is in one of theirs; they hide
+   nothing else from anyone. And the file of a receipt stays stored (`files_receipt_kept`,
+   SE378): no one marks it pending again, which would have made the receipt vanish from its
+   expense.
 3. An expense may name nobody. `app.record_expense` is written out again (the same track) with
    one rule changed: a supplier, a payee in words, **or neither**; never both. With nobody named
    the journal's memo and the money's line say what the first line was for, where they said
@@ -139,11 +146,60 @@ No row of any company changes.
 - **Receipts on other documents** (supplier bills, payments). The table and the storage rules
   here are for expenses only; another document wants a table of its own and the same pattern.
 - **Recurring expenses** (rent on the first of each month). Not asked for.
-- **A branch accountant and the object store.** The store's rule for an accountant checks the
-  branch of the expense, as the app does. An auditor or owner limited to branches does not
-  exist (owners work in every branch; the auditor's rule in 0002 is by role only).
+- **Bytes left in the object store.** If the second step of keeping a receipt fails after the
+  bytes were sent (a race for the tenth receipt, a role changed in between), the file row stays
+  pending and the bytes stay in the store. Nothing claims a receipt, which is the design
+  (intent before, outcome after); nothing sweeps such bytes away either, here or for any other
+  file. A sweep of pending rows older than a day belongs to the worker.
+- **Who added a receipt, as an accountant sees it.** An accountant reads only their own
+  membership row, so a receipt added by someone else shows no name to them. The owner and the
+  auditor see every name.
+- **Other files limited by branch.** Only receipts are hidden by branch. Settings, Files still
+  shows an auditor limited to branches every other file of the company, as 0002 decided.
 - **A flaky test that is not this piece's**: `src/modules/supplier-payments/payments.test.ts`
   picks a posted payment with `limit 1` (noted in market-purchase.md too).
+
+## Review
+
+An independent reviewer who had not seen the work compared the rewritten `app.record_expense`
+with 0038's text, attacked the new access rules with SQL of their own as the app's role (every
+role, a member limited to a branch, a user who is an accountant in two companies, the object
+store's role), ran the down file, and ran the whole check on a database of their own.
+
+Found sound: only the intended lines of the function differ; with nobody named the journal
+balances and no description is ever empty; the same key answers the same number; tax is still
+withheld only from a supplier; no other reader of an expense's payee exists; no role or company
+reaches what it should not through the receipts table, its function or the accountant's
+policies; the app's role cannot write a receipt or its audit row; every new function has the
+safe search path and is taken from PUBLIC.
+
+Found, and put right before the migration was sent:
+
+1. **(medium) An auditor limited to branches could open the receipts of every branch** through
+   Settings, Files and the object store, because 0002 goes by role only. The notes had wrongly
+   said such an auditor does not exist. Two restrictive policies now hide a receipt's file from
+   a member limited to branches unless its expense is in one of theirs.
+2. **(medium, the down file)** The old constraint put back as NOT VALID would have refused
+   cancelling an expense that names nobody. The down file now refuses to run when such
+   expenses exist, and otherwise restores 0038 exactly.
+3. **(low to medium) A receipt could be made to vanish** by marking its file pending again
+   (SQL as the app's role; no screen does it). A trigger now keeps a receipt's file stored.
+4. **(low) The same key sent again with another account or note answered "Recorded"** and
+   changed nothing. The app now compares what was recorded and refuses; the quick form makes a
+   new key whenever what is typed has changed; and a retry does not keep the same receipt twice.
+5. **(low) The sheet's preview showed what was typed, not what was read**, so 11/5/2026 read as
+   the eleventh of May went unnoticed. The preview now shows the day and the amount as read.
+6. Smaller: a day cut short by the 500-row limit is left out, not shown with a partial total; a
+   CSV not saved as UTF-8 is refused, as the bank statement import refuses it; two columns
+   under one heading are refused; an error from a sheet is not shown under the next sheet.
+
+Left, and why: the two points under Later (bytes left in the store; who added a receipt as an
+accountant sees it); a crafted request with a note of two spaces or a name of one letter is
+refused with words meant for the full form (nothing is recorded); and the key of an expense of
+another company, which cannot be guessed, fails as a plain failure (0038's primary key).
+
+Not checked by the reviewer: the browser, and the real object store (its rules were tried on
+the local stand-in table).
 
 ## Tests
 

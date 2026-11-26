@@ -141,6 +141,9 @@ export function readSheetCells(rows: readonly (readonly string[])[]): { ok: true
   const head = rows[headAt].map(same);
   const at = SHEET_COLUMNS.map((name) => head.indexOf(same(name)));
   if (at.slice(0, NEEDED).some((index) => index === -1)) return { ok: false, reason: template };
+  // Two columns under one heading: which is meant cannot be known.
+  const twice = SHEET_COLUMNS.find((name) => head.indexOf(same(name)) !== head.lastIndexOf(same(name)));
+  if (twice) return { ok: false, reason: `The sheet has two columns called "${twice}". Keep one.` };
   const cell = (row: readonly string[], column: number) => (at[column] === -1 ? "" : (row[at[column]] ?? "").trim().replace(/\s+/g, " "));
   const cells: SheetCells[] = [];
   for (let r = headAt + 1; r < rows.length; r++) {

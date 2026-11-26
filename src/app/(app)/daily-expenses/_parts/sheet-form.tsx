@@ -98,9 +98,9 @@ export function SheetForm({ preview, record, branches, wholeCompany }: { preview
                 {shown.rows.map((row) => (
                   <tr key={row.row} className={row.problems.length > 0 ? "bg-destructive/5 align-top" : "align-top"}>
                     <td className="py-2 pr-3 tabular-nums text-muted-foreground">{row.row}</td>
-                    <td className="py-2 pr-3 whitespace-nowrap">{row.date}</td>
+                    <td className="py-2 pr-3 whitespace-nowrap">{row.dateRead ?? row.date}</td>
                     <td className="py-2 pr-3">{row.whatForName ?? row.whatFor}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{row.amount}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{row.amountRead ?? row.amount}</td>
                     <td className="py-2 pr-3">{row.paidFromName ?? row.paidFrom}</td>
                     <td className="py-2 pr-3">{row.paidTo}</td>
                     <td className="py-2">
@@ -130,7 +130,7 @@ export function SheetForm({ preview, record, branches, wholeCompany }: { preview
               }}
               className="flex flex-col gap-3"
             >
-              {enter.state.error ? (
+              {enter.state.error && enter.state.refusedKey === shown.clientKey ? (
                 <p role="alert" data-testid="form-error" className="text-sm text-destructive">
                   {enter.state.error}
                 </p>

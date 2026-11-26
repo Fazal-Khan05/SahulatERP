@@ -30,9 +30,11 @@ const ownerB = randomUUID();
 const lahoreBranch = randomUUID();
 const karachiBranch = randomUUID();
 const branchClerk = randomUUID();
+const branchAuditor = randomUUID();
 const ctx = (userId: string, role: TenantContext["role"], tenantId = tenantA, branchIds: string[] | null = null): TenantContext => ({ userId, email: `${role}-${userId.slice(0, 4)}@daily.test`, tenantId, tenantName: "x", role, branchIds });
 const as = Object.fromEntries(roles.map((role) => [role, ctx(userIds[role], role)])) as Record<(typeof roles)[number], TenantContext>;
 const lahoreAccountant = ctx(branchClerk, "accountant", tenantA, [lahoreBranch]);
+const lahoreAuditor = ctx(branchAuditor, "auditor", tenantA, [lahoreBranch]);
 const otherOwner = ctx(ownerB, "owner", tenantB);
 // A day of the fiscal year the company opens, which has come; and one of a year it has not opened.
 const DAY = "2026-10-20";
@@ -87,10 +89,15 @@ const account = async (tenant: string, code: string) => (await admin<{ id: strin
  * auth.uid() says is signed in and nothing else, so they are asked here with that set; that the
  * object store's role may call them, and nothing else, is in src/modules/tenant/policies.test.ts.
  */
-const storeAsks = async (userId: string, fn: "storage_receipt_writer" | "storage_receipt_reader", key: string) =>
+const storeAsks = async (userId: string, fn: "storage_receipt_writer" | "storage_receipt_reader" | "storage_receipt_out_of_reach", key: string) =>
   admin.begin(async (tx) => {
     await tx`select set_config('request.jwt.claim.sub', ${userId}, true)`;
-    const [row] = fn === "storage_receipt_writer" ? await tx<{ ok: boolean }[]>`select app.storage_receipt_writer(${key}) as ok` : await tx<{ ok: boolean }[]>`select app.storage_receipt_reader(${key}) as ok`;
+    const [row] =
+      fn === "storage_receipt_writer"
+        ? await tx<{ ok: boolean }[]>`select app.storage_receipt_writer(${key}) as ok`
+        : fn === "storage_receipt_reader"
+          ? await tx<{ ok: boolean }[]>`select app.storage_receipt_reader(${key}) as ok`
+          : await tx<{ ok: boolean }[]>`select app.storage_receipt_out_of_reach(${key}) as ok`;
     return row.ok;
   });
 const sheet = (rows: Partial<SheetCells>[]): SheetCells[] => rows.map((row, index) => ({ row: index + 2, date: "20/10/2026", whatFor: rentName, amount: "100", paidFrom: "Cash in hand", paidTo: "", note: "", ...row }));
@@ -105,6 +112,7 @@ describe.skipIf(!hasDb)("daily expenses", () => {
     await admin`insert into public.memberships ${admin([
       ...roles.map((role) => ({ tenant_id: tenantA, user_id: userIds[role], email: as[role].email, role, branch_ids: null, created_by: userIds.owner })),
       { tenant_id: tenantA, user_id: branchClerk, email: lahoreAccountant.email, role: "accountant", branch_ids: [lahoreBranch], created_by: userIds.owner },
+      { tenant_id: tenantA, user_id: branchAuditor, email: lahoreAuditor.email, role: "auditor", branch_ids: [lahoreBranch], created_by: userIds.owner },
       { tenant_id: tenantB, user_id: ownerB, email: otherOwner.email, role: "owner", branch_ids: null, created_by: ownerB },
     ])}`;
     for (const who of [as.owner, otherOwner]) {
@@ -179,6 +187,9 @@ describe.skipIf(!hasDb)("daily expenses", () => {
     expect(await recordDailyExpense(as.owner, entry)).toEqual(first);
     expect(await expenseCount()).toBe(before + 1);
     await expect(recordDailyExpense(as.owner, { ...entry, amount: "900" })).rejects.toThrow("already sent with other figures");
+    // Nor is one changed in what it was for, or in its note, answered as if it had been recorded.
+    await expect(recordDailyExpense(as.owner, { ...entry, whatForId: fuel })).rejects.toThrow("This was already sent, and recorded then, with something different in it.");
+    await expect(recordDailyExpense(as.owner, { ...entry, note: "Now with a note" })).rejects.toThrow("This was already sent, and recorded then, with something different in it.");
     // Two entries alike in every figure, each with its own key, are two expenses.
     await recordDailyExpense(as.owner, { ...entry, clientKey: randomUUID() });
     expect(await expenseCount()).toBe(before + 2);
@@ -334,6 +345,36 @@ describe.skipIf(!hasDb)("daily expenses", () => {
       await expect(attachReceipt(lahoreAccountant, store, first, { name: "x.pdf", bytes: PDF })).rejects.toThrow("That expense is not in this company.");
     });
 
+    it("hides a receipt from an auditor limited to other branches, on the files and in the object store, and nothing else", async () => {
+      // 0002 shows an auditor every file of the company; the file of a receipt follows its expense.
+      const seen = async (who: TenantContext) => (await withTenant(who.userId, who.tenantId, (tx) => tx.execute<{ name: string }>(sql`select name from public.files where tenant_id = ${tenantA} and status = 'stored' order by name`))).map((r) => r.name);
+      expect(await seen(as.auditor)).toEqual(["Agreement.pdf", "Bill رسید.pdf", "photo.jpg", "tap.jpg"]);
+      // Lahore's auditor: the Lahore receipt and the company's other files, not the receipts of a whole-company expense.
+      expect(await seen(lahoreAuditor)).toEqual(["Agreement.pdf", "tap.jpg"]);
+      expect((await listReceipts(lahoreAuditor, lahoreExpense)).map((r) => r.name)).toEqual(["tap.jpg"]);
+      expect(await listReceipts(lahoreAuditor, first)).toEqual([]);
+      expect(await getReceiptFile(lahoreAuditor, ownerReceipt)).toBeNull();
+      const [tap] = await admin<{ storage_key: string }[]>`select storage_key from public.files where tenant_id = ${tenantA} and name = 'tap.jpg'`;
+      const [agreement] = await admin<{ storage_key: string }[]>`select storage_key from public.files where tenant_id = ${tenantA} and name = 'Agreement.pdf'`;
+      expect(await storeAsks(branchAuditor, "storage_receipt_out_of_reach", `${tenantA}/${ownerFile}`)).toBe(true);
+      expect(await storeAsks(branchAuditor, "storage_receipt_out_of_reach", tap.storage_key)).toBe(false);
+      expect(await storeAsks(branchAuditor, "storage_receipt_out_of_reach", agreement.storage_key)).toBe(false);
+      // Someone who works in every branch has nothing out of reach; nor is a made-up name.
+      expect(await storeAsks(userIds.auditor, "storage_receipt_out_of_reach", `${tenantA}/${ownerFile}`)).toBe(false);
+      expect(await storeAsks(userIds.owner, "storage_receipt_out_of_reach", tap.storage_key)).toBe(false);
+      expect(await storeAsks(branchAuditor, "storage_receipt_out_of_reach", `${tenantA}/${randomUUID()}`)).toBe(false);
+      const policies = await admin<{ policyname: string; permissive: string; cmd: string }[]>`select policyname, permissive, cmd from pg_policies where policyname in ('files_select_receipt_branch', 'files_bucket_select_receipt_branch') order by 1`;
+      expect(policies.map((p) => `${p.policyname} ${p.permissive} ${p.cmd}`)).toEqual(["files_bucket_select_receipt_branch RESTRICTIVE SELECT", "files_select_receipt_branch RESTRICTIVE SELECT"]);
+    });
+
+    it("keeps the file of a receipt stored: no one marks it pending again", async () => {
+      const [photo] = await admin<{ id: string }[]>`select id from public.files where tenant_id = ${tenantA} and name = 'photo.jpg'`;
+      expect(await codeOf(as.accountant, sql`update public.files set status = 'pending', stored_at = null where id = ${photo.id}`)).toBe("SE378");
+      expect(await codeOf(as.owner, sql`update public.files set status = 'pending', stored_at = null where id = ${ownerFile}`)).toBe("SE378");
+      expect(await codeOf(as.owner, sql`update public.files set stored_at = now() - interval '1 day' where id = ${ownerFile}`)).toBe("SE378");
+      expect(await listReceipts(as.auditor, first)).toHaveLength(2);
+    });
+
     it("refuses what cannot be a receipt before anything is stored, and claims nothing when the store is down", async () => {
       const { store, objects } = memoryStore();
       const filesBefore = (await admin<{ n: number }[]>`select count(*)::int as n from public.files where tenant_id = ${tenantA}`)[0].n;
@@ -403,6 +444,9 @@ describe.skipIf(!hasDb)("daily expenses", () => {
       expect(await readExpenseSheetFile(as.owner, new TextEncoder().encode(csv))).toEqual({ ok: true, cells: wanted });
       expect(await readExpenseSheetFile(as.owner, new Uint8Array())).toMatchObject({ ok: false });
       expect(await readExpenseSheetFile(as.owner, new TextEncoder().encode("just,some,text\n1,2,3\n"))).toMatchObject({ ok: false, reason: expect.stringContaining("The first row must name the columns") });
+      // A CSV saved by Excel in its own encoding, with a letter that is not plain English.
+      const latin1 = Uint8Array.from([...new TextEncoder().encode("Date,What for,Amount,Paid from,Paid to,Note\n20/10/2026,Rent,100,Cash in hand,,caf"), 0xe9, 0x0a]);
+      expect(await readExpenseSheetFile(as.owner, latin1)).toMatchObject({ ok: false, reason: expect.stringContaining("not saved as UTF-8") });
       expect(await readExpenseSheetFile(as.owner, new Uint8Array(1024 * 1024 + 1))).toMatchObject({ ok: false, reason: expect.stringContaining("too large") });
       // No file is opened for someone who may not enter expenses.
       for (const role of ["auditor", "salesperson"] as const) await expect(readExpenseSheetFile(as[role], new TextEncoder().encode(csv)), role).rejects.toThrow("Only the owner or an accountant");

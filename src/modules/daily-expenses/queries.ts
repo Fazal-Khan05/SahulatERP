@@ -62,7 +62,7 @@ export type DailyRow = {
   receipts: number;
 };
 
-/** The most rows the list shows; a range that holds more says so. */
+/** The most rows the list shows; a range that holds more says so, and shows whole days only. */
 export const MAX_DAILY_ROWS = 500;
 
 /** The expenses of the days asked for, the newest day first and the newest entry first within it. */
@@ -85,9 +85,16 @@ export async function listDailyExpenses(ctx: TenantContext, from: string, to: st
       where e.tenant_id = ${ctx.tenantId} and e.expense_date between ${from}::date and ${to}::date
       order by e.expense_date desc, e.number desc limit ${MAX_DAILY_ROWS + 1}`),
   );
+  const more = rows.length > MAX_DAILY_ROWS;
+  let shown = rows.slice(0, MAX_DAILY_ROWS);
+  // A day cut short by the limit would show a total that is not the day's: it is left out, unless it is the only day.
+  if (more) {
+    const cut = shown.at(-1)!.date;
+    if (shown[0].date !== cut) shown = shown.filter((r) => r.date !== cut);
+  }
   return {
-    more: rows.length > MAX_DAILY_ROWS,
-    rows: rows.slice(0, MAX_DAILY_ROWS).map((r) => ({
+    more,
+    rows: shown.map((r) => ({
       id: r.id,
       number: r.number,
       date: r.date,

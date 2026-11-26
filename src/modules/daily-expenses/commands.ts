@@ -2,7 +2,7 @@ import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import Decimal from "decimal.js";
 import { and, eq, sql } from "drizzle-orm";
-import { isUuid, withTenant } from "@/db";
+import { isUuid, withTenant, type Tx } from "@/db";
 import { UserError, pgCode } from "@/lib/errors";
 import { parseCsv } from "@/lib/csv";
 import { todayIso } from "@/lib/format";
@@ -13,7 +13,7 @@ import { checkFile, fileNameSchema, storageKey } from "@/modules/files/rules";
 import { files } from "@/modules/files/schema";
 import { firstIssue, type TenantContext } from "@/modules/tenant/rules";
 import { getDailyChoices } from "./queries";
-import { checkSheet, readDailyExpense, readSheetCells, toExpense, type RawDailyExpense, type SheetCells, type SheetRow } from "./rules";
+import { checkSheet, readDailyExpense, readSheetCells, toExpense, type DailyExpense, type RawDailyExpense, type SheetCells, type SheetRow } from "./rules";
 
 // The commands behind the daily expenses screens. An entry is recorded by the cash and bank
 // module's own function inside the database (recordExpenseIn): there is no second way of writing
@@ -31,6 +31,24 @@ async function whatForNames(ctx: TenantContext, ids: readonly string[]): Promise
   return names;
 }
 
+const SENT_BEFORE = "This was already sent, and recorded then, with something different in it. Reload the page to enter another.";
+
+/**
+ * Records one entry inside the caller's transaction. Sent again with the same key, the database
+ * answers with the expense recorded the first time when the day, the account it was paid from,
+ * who was paid and the amount are the same; what it was charged to and its description are
+ * compared here, so that an entry changed and sent again under an old key is refused, not
+ * answered as if it had been recorded.
+ */
+async function recordEntryIn(tx: Tx, ctx: TenantContext, entry: DailyExpense, whatForName: string, key: string): Promise<{ id: string; number: string }> {
+  const expense = toExpense(entry, whatForName);
+  const recorded = await recordExpenseIn(tx, expense, key);
+  const lines = await tx.execute<{ account_id: string; description: string }>(sql`
+    select account_id, description from public.expense_lines where tenant_id = ${ctx.tenantId} and expense_id = ${key}::uuid order by line_no`);
+  if (lines.length !== 1 || lines[0].account_id !== expense.lines[0].accountId || lines[0].description !== expense.lines[0].description) throw new UserError(SENT_BEFORE);
+  return recorded;
+}
+
 /** Records one daily expense. Sent twice with the same key it is recorded once. Returns its id and number. */
 export async function recordDailyExpense(ctx: TenantContext, raw: RawDailyExpense & { clientKey?: unknown }): Promise<{ id: string; number: string }> {
   requireManager(ctx);
@@ -40,7 +58,7 @@ export async function recordDailyExpense(ctx: TenantContext, raw: RawDailyExpens
   const names = await whatForNames(ctx, [entry.whatForId]);
   const key = isUuid(raw.clientKey) ? raw.clientKey : randomUUID();
   try {
-    return await withTenant(ctx.userId, ctx.tenantId, (tx) => recordExpenseIn(tx, toExpense(entry, names.get(entry.whatForId)!), key));
+    return await withTenant(ctx.userId, ctx.tenantId, (tx) => recordEntryIn(tx, ctx, entry, names.get(entry.whatForId)!, key));
   } catch (error) {
     if (pgCode(error) === "22P02") throw new UserError(NOT_AN_ACCOUNT);
     throw refusal(error, entry.date) ?? error;
@@ -134,7 +152,9 @@ export async function readExpenseSheetFile(ctx: TenantContext, bytes: Uint8Array
     const sheet = await readSheet(bytes);
     return sheet.ok ? readSheetCells(sheet.rows) : sheet;
   }
-  const csv = parseCsv(new TextDecoder().decode(bytes));
+  const text = new TextDecoder().decode(bytes);
+  if (text.includes("\uFFFD")) return { ok: false, reason: 'The file is not saved as UTF-8. In Excel, save it as "CSV UTF-8 (Comma delimited)" or as an Excel workbook, and upload it again.' };
+  const csv = parseCsv(text);
   return csv.ok ? readSheetCells(csv.rows) : csv;
 }
 
@@ -173,7 +193,7 @@ export async function recordExpenseSheet(ctx: TenantContext, input: { cells: rea
       for (const row of rows) {
         at = row;
         const entry = row.expense!;
-        const { number } = await recordExpenseIn(tx, toExpense(entry, names.get(entry.whatForId)!), rowKey(batch, row.row));
+        const { number } = await recordEntryIn(tx, ctx, entry, names.get(entry.whatForId)!, rowKey(batch, row.row));
         numbers.push(number);
         total = total.plus(entry.amount);
       }

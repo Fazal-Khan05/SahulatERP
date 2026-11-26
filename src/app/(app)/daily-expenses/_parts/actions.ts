@@ -8,6 +8,8 @@ import type { FormState } from "@/lib/form-state";
 import { formatAmount } from "@/lib/money";
 import { objectStore } from "@/lib/storage";
 import Decimal from "decimal.js";
+import { formatIsoDate } from "@/modules/currencies/rules";
+import { listReceipts } from "@/modules/daily-expenses/queries";
 import { attachReceipt, MAX_SHEET_BYTES, previewExpenseSheet, readExpenseSheetFile, readReceipt, recordDailyExpense, recordExpenseSheet } from "@/modules/daily-expenses/commands";
 import type { SheetCells } from "@/modules/daily-expenses/rules";
 import { FILE_MAX_BYTES } from "@/modules/files/rules";
@@ -56,7 +58,9 @@ export async function addDailyExpenseAction(_: FormState, formData: FormData): P
     if (receipt) {
       // The expense is in the books whatever happens to its receipt: say so, and how to add it.
       try {
-        await attachReceipt(session, await objectStore(), recorded.id, receipt);
+        // Sent again after an answer that never arrived: the receipt kept the first time is not kept twice.
+        const already = (await listReceipts(session, recorded.id)).some((r) => r.sizeBytes === receipt.bytes.length);
+        if (!already) await attachReceipt(session, await objectStore(), recorded.id, receipt);
         kept = " Its receipt is kept with it.";
       } catch (error) {
         if (!(error instanceof UserError)) logFailure("attach receipt to a new expense", error);
@@ -85,13 +89,15 @@ export async function attachReceiptAction(expenseId: string, _: FormState, formD
   return { ok: true, message: "Kept with this expense." };
 }
 
-/** One row of the preview: what was typed, what it was matched to, and what is wrong with it. */
-export type PreviewRow = SheetCells & { problems: string[]; whatForName: string | null; paidFromName: string | null };
+/** One row of the preview: what was typed, what it was read as and matched to, and what is wrong with it. */
+export type PreviewRow = SheetCells & { problems: string[]; whatForName: string | null; paidFromName: string | null; dateRead: string | null; amountRead: string | null };
 export type SheetState = FormState & {
   /** The sheet as read, waiting to be entered: every row, and the key that makes it enter once. */
   preview?: { rows: PreviewRow[]; bad: number; total: string; clientKey: string; branchId: string };
   /** The key of the sheet that was entered, so its preview is not offered again. */
   enteredKey?: string;
+  /** The key of the sheet an error is about, so it is not shown under another one. */
+  refusedKey?: string;
 };
 
 /** Reads the sheet and shows what it would enter. Nothing is recorded. */
@@ -108,7 +114,12 @@ export async function previewSheetAction(_: SheetState, formData: FormData): Pro
     const total = rows.reduce((sum, row) => (row.expense ? sum.plus(row.expense.amount) : sum), new Decimal(0));
     return {
       preview: {
-        rows: rows.map(({ row, date, whatFor, amount, paidFrom, paidTo, note, problems, whatForName, paidFromName }) => ({ row, date, whatFor, amount, paidFrom, paidTo, note, problems, whatForName, paidFromName })),
+        // The day and the amount are shown as they were read, so "11/5" read as the eleventh of May is seen before it is entered.
+        rows: rows.map(({ row, date, whatFor, amount, paidFrom, paidTo, note, problems, whatForName, paidFromName, expense }) => ({
+          row, date, whatFor, amount, paidFrom, paidTo, note, problems, whatForName, paidFromName,
+          dateRead: expense ? formatIsoDate(expense.date) : null,
+          amountRead: expense ? formatAmount(expense.amount) : null,
+        })),
         bad: rows.filter((row) => row.problems.length > 0).length,
         total: formatAmount(total),
         clientKey: randomUUID(),
@@ -146,7 +157,7 @@ export async function recordSheetAction(_: SheetState, formData: FormData): Prom
     if (new Set(cells.map((c) => c.row)).size !== cells.length) throw new UserError("Upload the sheet again.");
     outcome = await recordExpenseSheet(session, { cells, branchId: formData.get("branchId"), clientKey: formData.get("clientKey") });
   } catch (error) {
-    return refusal("record expense sheet", error);
+    return { ...refusal("record expense sheet", error), refusedKey: String(formData.get("clientKey")) };
   }
   refresh();
   const numbers = outcome.count === 1 ? outcome.first : `${outcome.first} to ${outcome.last}`;

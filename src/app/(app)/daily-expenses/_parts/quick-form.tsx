@@ -34,8 +34,10 @@ const SELECT = "h-8 w-full min-w-0 rounded-lg border border-input bg-card px-2 t
  */
 export function QuickAddForm({ action, today, expenseAccounts, moneyAccounts, paidFromId, branches, wholeCompany, maxReceiptBytes, receiptTypes, taxNote }: QuickFormProps) {
   const { state, ready, busy, run } = useFormAction(action);
-  // One key for each expense, however many times it is sent: it is recorded once. A new one after each that is recorded.
-  const clientKey = useRef<string | null>(null);
+  // One key for each expense, however many times it is sent: it is recorded once. A new one after
+  // each that is recorded, and whenever what is typed has changed since the key was made, so an
+  // entry corrected after a failed attempt is never taken for the one sent before.
+  const clientKey = useRef<{ key: string; of: string } | null>(null);
   const [date, setDate] = useState(today);
   const [paidFrom, setPaidFrom] = useState(paidFromId);
   const [branch, setBranch] = useState(wholeCompany ? "" : (branches[0]?.id ?? ""));
@@ -62,9 +64,10 @@ export function QuickAddForm({ action, today, expenseAccounts, moneyAccounts, pa
       onSubmit={async (event) => {
         event.preventDefault();
         const data = new FormData(event.currentTarget);
-        clientKey.current ??= crypto.randomUUID();
-        data.set("clientKey", clientKey.current);
         const receipt = data.get("receipt");
+        const typed = JSON.stringify([...data.entries()].map(([name, value]) => [name, value instanceof File ? `${value.name}:${value.size}` : value]));
+        if (clientKey.current?.of !== typed) clientKey.current = { key: crypto.randomUUID(), of: typed };
+        data.set("clientKey", clientKey.current.key);
         if (receipt instanceof File && receipt.size > 0) {
           setPreparing(true);
           const ready = await shrinkPhoto(receipt);

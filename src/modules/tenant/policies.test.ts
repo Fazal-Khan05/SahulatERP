@@ -856,7 +856,7 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
 
   it("lets the Data API roles call nothing in the app schema but the functions storage needs", async () => {
     // `authenticated` can reach the app schema (Supabase Storage's policies call app.storage_role,
-    // and, for an accountant's receipts, the two functions of drizzle/0046_daily_expenses.sql).
+    // and, for the receipts of expenses, the three functions of drizzle/0046_daily_expenses.sql).
     // Every other function there must stay closed to it, including ones later steps add.
     const callable = await admin<{ role: string; name: string }[]>`
       select r.rolname as role, p.proname as name
@@ -866,7 +866,7 @@ describe.skipIf(!hasDb)("row-level security as app_runtime", () => {
       where n.nspname = 'app' and has_function_privilege(r.rolname, p.oid, 'execute')
         and has_schema_privilege(r.rolname, n.oid, 'usage')
       order by 1, 2`;
-    expect(callable.map((f) => `${f.role}:${f.name}`)).toEqual(["authenticated:storage_receipt_reader", "authenticated:storage_receipt_writer", "authenticated:storage_role"]);
+    expect(callable.map((f) => `${f.role}:${f.name}`)).toEqual(["authenticated:storage_receipt_out_of_reach", "authenticated:storage_receipt_reader", "authenticated:storage_receipt_writer", "authenticated:storage_role"]);
   });
 
   it("gives anon and authenticated nothing, and app_runtime no way to rewrite the audit log", async () => {

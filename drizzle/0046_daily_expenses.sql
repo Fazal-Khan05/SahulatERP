@@ -22,6 +22,13 @@
 --      store a file of their own, and to read a file that is their own or is the receipt of an
 --      expense they may see. The object store gets the same two rules.
 --
+--      A receipt belongs to its expense, and an expense may belong to a branch. 0002 shows the
+--      owner and the auditor every file of the company, whatever the branch, and an auditor may
+--      be limited to some branches. So a restrictive policy of this migration's own, on the
+--      files table and on the object store, hides the file of a receipt from a member limited
+--      to branches unless its expense is in one of theirs. It hides nothing else from anyone.
+--      And the file of a receipt stays stored: no one marks it pending again.
+--
 --   3. An expense may name nobody. Step 34 asked for a supplier on the list or a payee named in
 --      words. A small daily expense (tea, a rickshaw, photocopies) often has no one worth
 --      naming, so app.record_expense now takes neither as well, never both. With nobody named
@@ -36,6 +43,7 @@
 --   SE334  (from 0038) no such expense in this company
 --   SE376  a receipt is a stored file of the person attaching it, not yet anyone's receipt
 --   SE377  an expense has at most ten receipts
+--   SE378  the file of a receipt stays stored
 
 CREATE TABLE "expense_receipts" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
@@ -167,6 +175,54 @@ CREATE POLICY files_update_receipt ON public.files FOR UPDATE TO app_runtime
   WITH CHECK (tenant_id = (SELECT app.tenant_id()) AND (SELECT app.tenant_role()) = 'accountant' AND created_by = (SELECT app.current_user_id()));
 --> statement-breakpoint
 
+-- A receipt is seen only with its expense. 0002 shows the owner and the auditor every file; an
+-- auditor (or an accountant) limited to some branches must not see, through the files, the
+-- receipt of an expense of another branch or of the whole company. Restrictive: it narrows what
+-- the policies beside it allow, for a member limited to branches and a receipt out of their
+-- reach, and for nothing else.
+CREATE FUNCTION app.receipt_file_out_of_reach(p_tenant uuid, p_file uuid) RETURNS boolean
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+  AS $$
+    SELECT app.tenant_branch_ids() IS NOT NULL AND EXISTS (
+      SELECT 1 FROM public.expense_receipts r
+      JOIN public.expenses e ON e.tenant_id = r.tenant_id AND e.id = r.expense_id
+      WHERE r.tenant_id = p_tenant AND r.file_id = p_file
+        AND (e.branch_id IS NULL OR NOT (e.branch_id = ANY (app.tenant_branch_ids()))))
+  $$;
+--> statement-breakpoint
+REVOKE ALL ON FUNCTION app.receipt_file_out_of_reach(uuid, uuid) FROM PUBLIC;
+--> statement-breakpoint
+GRANT EXECUTE ON FUNCTION app.receipt_file_out_of_reach(uuid, uuid) TO app_runtime;
+--> statement-breakpoint
+CREATE POLICY files_select_receipt_branch ON public.files AS RESTRICTIVE FOR SELECT TO app_runtime
+  USING (NOT app.receipt_file_out_of_reach(tenant_id, id));
+--> statement-breakpoint
+
+-- The file of a receipt stays stored. The app marks a file stored once and never again; this
+-- holds the line for a receipt whoever asks, so one kept with an expense cannot be made to
+-- vanish from it.
+CREATE FUNCTION app.check_receipt_file() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+  AS $$
+BEGIN
+  IF session_user = 'postgres' THEN
+    RETURN NEW;
+  END IF;
+  IF OLD.status = 'stored' AND (NEW.status IS DISTINCT FROM OLD.status OR NEW.stored_at IS DISTINCT FROM OLD.stored_at)
+     AND EXISTS (SELECT 1 FROM public.expense_receipts r WHERE r.tenant_id = OLD.tenant_id AND r.file_id = OLD.id) THEN
+    RAISE EXCEPTION 'the file of a receipt stays stored' USING ERRCODE = 'SE378';
+  END IF;
+  RETURN NEW;
+END $$;
+--> statement-breakpoint
+REVOKE ALL ON FUNCTION app.check_receipt_file() FROM PUBLIC;
+--> statement-breakpoint
+CREATE TRIGGER files_receipt_kept BEFORE UPDATE ON public.files
+  FOR EACH ROW EXECUTE FUNCTION app.check_receipt_file();
+--> statement-breakpoint
+ALTER TABLE public.files ENABLE ALWAYS TRIGGER files_receipt_kept;
+--> statement-breakpoint
+
 -- ── hand-written: the object store ──────────────────────────────────────────────────────────────
 -- The bytes are stored and fetched as the signed-in user, so the object store asks its own
 -- policies (0002: the owner stores, the owner and the auditor read). Beside them, for an
@@ -196,16 +252,33 @@ CREATE FUNCTION app.storage_receipt_reader(p_name text) RETURNS boolean
             WHERE r.tenant_id = f.tenant_id AND r.file_id = f.id AND (m.branch_ids IS NULL OR e.branch_id = ANY (m.branch_ids)))))
   $$;
 --> statement-breakpoint
-REVOKE ALL ON FUNCTION app.storage_receipt_writer(text), app.storage_receipt_reader(text) FROM PUBLIC;
+-- The same narrowing as on the files table: the object of a receipt is out of reach of a member
+-- limited to branches unless its expense is in one of theirs.
+CREATE FUNCTION app.storage_receipt_out_of_reach(p_name text) RETURNS boolean
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+  AS $$
+    SELECT EXISTS (
+      SELECT 1 FROM public.files f
+      JOIN public.memberships m ON m.tenant_id = f.tenant_id AND m.user_id = (SELECT auth.uid())
+      JOIN public.expense_receipts r ON r.tenant_id = f.tenant_id AND r.file_id = f.id
+      JOIN public.expenses e ON e.tenant_id = r.tenant_id AND e.id = r.expense_id
+      WHERE f.storage_key = p_name AND m.branch_ids IS NOT NULL
+        AND (e.branch_id IS NULL OR NOT (e.branch_id = ANY (m.branch_ids))))
+  $$;
 --> statement-breakpoint
--- `authenticated` (the object store's role) gets these two beside app.storage_role, and nothing else.
-GRANT EXECUTE ON FUNCTION app.storage_receipt_writer(text), app.storage_receipt_reader(text) TO authenticated;
+REVOKE ALL ON FUNCTION app.storage_receipt_writer(text), app.storage_receipt_reader(text), app.storage_receipt_out_of_reach(text) FROM PUBLIC;
+--> statement-breakpoint
+-- `authenticated` (the object store's role) gets these three beside app.storage_role, and nothing else.
+GRANT EXECUTE ON FUNCTION app.storage_receipt_writer(text), app.storage_receipt_reader(text), app.storage_receipt_out_of_reach(text) TO authenticated;
 --> statement-breakpoint
 CREATE POLICY files_bucket_insert_receipt ON storage.objects FOR INSERT TO authenticated
   WITH CHECK (bucket_id = 'files' AND (SELECT app.storage_receipt_writer(name)));
 --> statement-breakpoint
 CREATE POLICY files_bucket_select_receipt ON storage.objects FOR SELECT TO authenticated
   USING (bucket_id = 'files' AND (SELECT app.storage_receipt_reader(name)));
+--> statement-breakpoint
+CREATE POLICY files_bucket_select_receipt_branch ON storage.objects AS RESTRICTIVE FOR SELECT TO authenticated
+  USING (bucket_id <> 'files' OR NOT (SELECT app.storage_receipt_out_of_reach(name)));
 --> statement-breakpoint
 
 -- ── hand-written: an expense may name nobody ────────────────────────────────────────────────────

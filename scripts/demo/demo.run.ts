@@ -9,5 +9,6 @@ const action = process.env.DEMO_ACTION;
 it(`demo company: ${action ?? "nothing asked"}`, async () => {
   expect(["seed", "reset"]).toContain(action);
   const said = action === "seed" ? await seedDemo() : await resetDemo();
-  for (const line of said) console.log(`  ${line}`);
+  // Written straight to the terminal: the test runner keeps what a passing run logs to itself.
+  process.stdout.write(`\n${said.map((line) => `  ${line}`).join("\n")}\n\n`);
 });

@@ -64,9 +64,10 @@ describe.skipIf(!hasDb)("importing a company's data from another system", () => 
   });
 
   // An old system's customer list: its name and the date above the headings, its own headings,
-  // and a total at the bottom.
+  // and a total at the bottom. Made once: a workbook made again carries another time inside it.
+  let made: Promise<Uint8Array> | null = null;
   const customersFile = () =>
-    workbook([
+    (made ??= workbook([
       ["Old Ledger Pro - Customer List"],
       ["Printed on", new Date(Date.UTC(2026, 10, 20))],
       [],
@@ -75,7 +76,7 @@ describe.skipIf(!hasDb)("importing a company's data from another system", () => 
       ["C-102", "Eta Autos", "0300-0000002", "Multan", 0],
       ["C-103", "Theta Store", null, "Karachi", 250.5],
       [null, "Total", null, null, 1750.5],
-    ]);
+    ]));
 
   it("reads where the headings are and guesses the columns, from the headings other systems give them", async () => {
     const read = await readFileForMapping(as.owner, "customers", { name: "customers.xlsx", bytes: await customersFile() });

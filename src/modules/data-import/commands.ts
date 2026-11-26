@@ -175,7 +175,7 @@ export type PreviewOutcome = {
 export async function previewImport(ctx: TenantContext, ask: ImportAsk): Promise<PreviewOutcome> {
   const prepared = await prepare(ctx, ask);
   const kind = IMPORT_KINDS[ask.kind];
-  const columns = kind.columns.filter((column) => prepared.mapping[column.key] !== null).map((column) => column.header);
+  const columns = kind.columns.filter((column) => typeof prepared.mapping[column.key] === "number").map((column) => column.header);
   const [earlier] = await withTenant(ctx.userId, ctx.tenantId, (tx) =>
     tx
       .select({ createdAt: dataImports.createdAt, rows: dataImports.rows })

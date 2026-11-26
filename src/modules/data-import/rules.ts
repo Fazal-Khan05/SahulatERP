@@ -107,8 +107,8 @@ export const IMPORT_KINDS: Record<DataImportKind, ImportKind> = {
   opening_stock: {
     kind: "opening_stock",
     title: "Opening stock",
-    one: "item in stock",
-    many: "items in stock",
+    one: "line of stock",
+    many: "lines of stock",
     about: "How much of each item each warehouse held on the day the books open here, and what one cost. It comes in as a draft for each warehouse, which you look over and post.",
     before: "The items must be on the list first (import them above). Each warehouse named in the file must exist.",
     columns: withRequired(OPENING_FILE_COLUMNS, ["code", "quantity", "cost"], {
@@ -146,7 +146,7 @@ export const IMPORT_KINDS: Record<DataImportKind, ImportKind> = {
     title: "What you owe suppliers",
     one: "unpaid bill",
     many: "unpaid bills",
-    about: "Every supplier's bill you had not paid in full when the books open here, with what is still unpaid on it. Payments and ageing then work on each one as they do on bills entered here.",
+    about: "Every supplier's bill you had not paid in full when the books open here, with what is still unpaid on it. Aged payables then shows each one by its date, as it does bills entered here.",
     before: "The suppliers must be on the list first, and the opening entry started (Settings, Opening balances).",
     columns: withRequired(PARTY_COLUMNS.payable, ["party", "documentNumber", "documentDate", "amount"], {
       party: ["Supplier name", "Supplier code", "Party", "Party name", "Account title"],
@@ -190,13 +190,13 @@ const filledCount = (cells: readonly string[]): number => cells.filter((cell) =>
 /**
  * Which row holds the headings, as an index into `rows`: old systems put the company's name, the
  * report's name and the date above them. It is the first of the first fifty rows that has at
- * least half as many cells filled as the fullest of them (and at least two), or the first row
- * with anything in it.
+ * least three quarters as many cells filled as the fullest of them (and at least two), or the
+ * first row with anything in it. Only a guess: the screen shows it, and it can be changed.
  */
 export function findHeadingRow(rows: readonly (readonly string[])[]): number {
   const top = rows.slice(0, 50);
   const widest = Math.max(0, ...top.map(filledCount));
-  const enough = Math.max(2, Math.ceil(widest / 2));
+  const enough = Math.max(2, Math.ceil((widest * 3) / 4));
   const found = top.findIndex((cells) => filledCount(cells) >= enough);
   if (found !== -1) return found;
   return Math.max(0, rows.findIndex((cells) => filledCount(cells) > 0));
@@ -222,6 +222,8 @@ export function columnLetter(index: number): string {
 
 /** Which of the file's columns each of ours is read from: an index into its headings, or none. */
 export type ColumnMapping = Record<string, number | null>;
+/** Whether one of our columns is read from the file. */
+const read = (mapping: ColumnMapping, key: string): boolean => typeof mapping[key] === "number";
 
 /**
  * A first guess at the mapping: the heading this kind was read from last time, else a heading
@@ -285,7 +287,7 @@ export function readMapping(kind: ImportKind, raw: (key: string) => unknown, hea
 
 /** The mapping by heading, to remember for the next file of this kind: { "name": "Customer Name" }. */
 export function mappingByHeading(mapping: ColumnMapping, headings: readonly string[]): Record<string, string> {
-  return Object.fromEntries(Object.entries(mapping).flatMap(([key, index]) => (index === null ? [] : [[key, headings[index]]])));
+  return Object.fromEntries(Object.entries(mapping).flatMap(([key, index]) => (typeof index === "number" && headings[index] !== undefined ? [[key, headings[index]]] : [])));
 }
 
 /** At most this many row numbers or ranges to leave out. */
@@ -319,7 +321,7 @@ const csvCell = (value: string): string => (/[",\r\n]/.test(value) || value !== 
  * named by the row the file has. Rows above the headings, and rows left out, come through empty.
  */
 export function mappedCsv(kind: ImportKind, rows: readonly (readonly string[])[], headingAt: number, mapping: ColumnMapping, leftOut: ReadonlySet<number>): string {
-  const used = kind.columns.filter((column) => mapping[column.key] !== null);
+  const used = kind.columns.filter((column) => read(mapping, column.key));
   const lines: string[] = [];
   rows.forEach((cells, index) => {
     if (index < headingAt || leftOut.has(index + 1)) lines.push("");
@@ -331,7 +333,7 @@ export function mappedCsv(kind: ImportKind, rows: readonly (readonly string[])[]
 
 /** The first few rows under the headings, read as the mapping says, for the screen to show. */
 export function sampleRows(kind: ImportKind, rows: readonly (readonly string[])[], headingAt: number, mapping: ColumnMapping, leftOut: ReadonlySet<number>, count: number): { row: number; cells: string[] }[] {
-  const used = kind.columns.filter((column) => mapping[column.key] !== null);
+  const used = kind.columns.filter((column) => read(mapping, column.key));
   const out: { row: number; cells: string[] }[] = [];
   for (let index = headingAt + 1; index < rows.length && out.length < count; index++) {
     if (leftOut.has(index + 1)) continue;

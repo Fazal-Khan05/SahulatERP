@@ -12,10 +12,13 @@ import {
   PURCHASE_REPORTS,
   agedPayablesTable,
   grniTable,
+  purchaseRegisterTable,
+  purchasesTable,
   section165Table,
   supplierStatementTable,
   withholdingRegisterTable,
   type PurchaseFilter,
+  type PurchaseRegisterRow,
   type PurchaseReportKey,
   type SalaryTaxLine,
   type WithheldEntry,
@@ -252,6 +255,73 @@ async function withholdingRegister(tx: Tx, ctx: TenantContext, filter: PurchaseF
   return withholdingRegisterTable(entries, position, filter, salaries);
 }
 
+/** Purchases by supplier: posted bills in the period less goods sent back that a bill had taken, before tax. */
+async function purchasesBySupplier(tx: Tx, ctx: TenantContext, filter: PurchaseFilter): Promise<ReportTable> {
+  const rows = await tx.execute<{ label: string; billed: string; returned: string }>(sql`
+    with moved as (
+      select b.supplier_id, b.amount as billed, 0::numeric as returned
+      from public.supplier_bills b
+      where b.tenant_id = ${ctx.tenantId} and b.status = 'posted' and b.bill_date between ${filter.from}::date and ${filter.to}::date
+        and (${filter.branchId}::uuid is null or b.branch_id = ${filter.branchId}::uuid)
+      union all
+      select r.supplier_id, 0, r.billed_amount
+      from public.supplier_returns r
+      where r.tenant_id = ${ctx.tenantId} and r.status = 'posted' and r.return_date between ${filter.from}::date and ${filter.to}::date
+        and (${filter.branchId}::uuid is null or r.branch_id = ${filter.branchId}::uuid)
+    )
+    select max(s.name) || coalesce(' (' || max(s.code) || ')', '') as label, sum(m.billed)::text as billed, sum(m.returned)::text as returned
+    from moved m join public.suppliers s on s.tenant_id = ${ctx.tenantId} and s.id = m.supplier_id
+    where (${filter.supplierId}::uuid is null or m.supplier_id = ${filter.supplierId}::uuid)
+    group by m.supplier_id`);
+  return purchasesTable("purchases-by-supplier", rows.map((row) => ({ label: row.label, detail: null, unit: null, quantity: null, billed: d(row.billed), returned: d(row.returned) })), filter);
+}
+
+/** Purchases by item: the goods lines of posted bills (quantity in the item's base unit), less the lines of goods sent back that a bill had taken; charges that are not for an item on a line of their own. */
+async function purchasesByItem(tx: Tx, ctx: TenantContext, filter: PurchaseFilter): Promise<ReportTable> {
+  const rows = await tx.execute<{ label: string; detail: string | null; unit: string | null; quantity: string | null; billed: string; returned: string; other: boolean }>(sql`
+    with moved as (
+      select l.item_id, l.quantity * g.unit_factor as quantity, l.amount as billed, 0::numeric as returned
+      from public.supplier_bill_lines l
+      join public.supplier_bills b on b.tenant_id = l.tenant_id and b.id = l.bill_id
+      left join public.goods_receipt_lines g on g.tenant_id = l.tenant_id and g.id = l.receipt_line_id
+      where l.tenant_id = ${ctx.tenantId} and b.status = 'posted' and b.bill_date between ${filter.from}::date and ${filter.to}::date
+        and (${filter.branchId}::uuid is null or b.branch_id = ${filter.branchId}::uuid)
+        and (${filter.supplierId}::uuid is null or b.supplier_id = ${filter.supplierId}::uuid)
+      union all
+      select l.item_id, -l.base_quantity, 0, l.amount
+      from public.supplier_return_lines l
+      join public.supplier_returns r on r.tenant_id = l.tenant_id and r.id = l.return_id
+      where l.tenant_id = ${ctx.tenantId} and r.status = 'posted' and l.bill_line_id is not null and r.return_date between ${filter.from}::date and ${filter.to}::date
+        and (${filter.branchId}::uuid is null or r.branch_id = ${filter.branchId}::uuid)
+        and (${filter.supplierId}::uuid is null or r.supplier_id = ${filter.supplierId}::uuid)
+    )
+    select coalesce(max(i.code), 'Other') as label, coalesce(max(i.name), 'Charges on bills that are not for an item') as detail, max(u.code) as unit,
+           sum(m.quantity)::text as quantity, sum(m.billed)::text as billed, sum(m.returned)::text as returned, m.item_id is null as other
+    from moved m
+    left join public.items i on i.tenant_id = ${ctx.tenantId} and i.id = m.item_id
+    left join public.units u on u.tenant_id = i.tenant_id and u.id = i.base_unit_id
+    group by m.item_id`);
+  return purchasesTable("purchases-by-item", rows.map((row) => ({ label: row.label, detail: row.detail, unit: row.unit, quantity: row.other || row.quantity === null ? null : d(row.quantity), billed: d(row.billed), returned: d(row.returned) })), filter);
+}
+
+async function purchaseRegister(tx: Tx, ctx: TenantContext, filter: PurchaseFilter): Promise<ReportTable> {
+  const rows = await tx.execute<{ date: string; kind: "bill" | "return"; number: string; supplier: string; reference: string | null; amount: string; tax: string; total: string }>(sql`
+    select b.bill_date::text as date, 'bill' as kind, b.number, s.name as supplier, b.supplier_invoice_no as reference,
+           b.amount::text, (b.total - b.amount)::text as tax, b.total::text as total
+    from public.supplier_bills b join public.suppliers s on s.tenant_id = b.tenant_id and s.id = b.supplier_id
+    where b.tenant_id = ${ctx.tenantId} and b.status = 'posted' and b.bill_date between ${filter.from}::date and ${filter.to}::date
+      and (${filter.branchId}::uuid is null or b.branch_id = ${filter.branchId}::uuid)
+      and (${filter.supplierId}::uuid is null or b.supplier_id = ${filter.supplierId}::uuid)
+    union all
+    select r.return_date::text, 'return', r.number, s.name, r.supplier_reference, (-r.billed_amount)::text, (-r.sales_tax)::text, (-r.credit)::text
+    from public.supplier_returns r join public.suppliers s on s.tenant_id = r.tenant_id and s.id = r.supplier_id
+    where r.tenant_id = ${ctx.tenantId} and r.status = 'posted' and r.return_date between ${filter.from}::date and ${filter.to}::date
+      and (${filter.branchId}::uuid is null or r.branch_id = ${filter.branchId}::uuid)
+      and (${filter.supplierId}::uuid is null or r.supplier_id = ${filter.supplierId}::uuid)
+    order by 1, 3`);
+  return purchaseRegisterTable(rows.map((row): PurchaseRegisterRow => ({ date: row.date, kind: row.kind, number: row.number, supplier: row.supplier, reference: row.reference ?? "", amount: d(row.amount), tax: d(row.tax), total: d(row.total) })), filter);
+}
+
 /** One buying report, as a table. */
 export async function getPurchaseReport(ctx: TenantContext, report: PurchaseReportKey, filter: PurchaseFilter): Promise<ReportTable> {
   requirePurchaseReport(ctx, report);
@@ -267,6 +337,12 @@ export async function getPurchaseReport(ctx: TenantContext, report: PurchaseRepo
         return supplierStatement(tx, ctx, filter);
       case "withholding-register":
         return withholdingRegister(tx, ctx, filter);
+      case "purchases-by-supplier":
+        return purchasesBySupplier(tx, ctx, filter);
+      case "purchases-by-item":
+        return purchasesByItem(tx, ctx, filter);
+      case "purchase-register":
+        return purchaseRegister(tx, ctx, filter);
       case "section-165":
         return section165Table(await selectWithheld(tx, ctx, { ...filter, supplierId: null }), filter, SUPPLIER_TYPE_LABELS);
     }

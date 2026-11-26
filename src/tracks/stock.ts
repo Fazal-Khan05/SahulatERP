@@ -82,6 +82,10 @@ export const reports: readonly ReportSection[] = [
       { label: "Supplier statement", href: "/purchase-reports/supplier-statement", about: "Everything in the books for one supplier in a period, with what was owed before and after.", permission: "supplier_bill.read", module: "purchasing" },
       { label: "Withholding register", href: "/purchase-reports/withholding-register", about: "Every amount of tax withheld from suppliers in a period, with its challan, and what is still to be paid over.", permission: "supplier_bill.read", module: "purchasing" },
       { label: "Statement of tax withheld (section 165)", href: "/purchase-reports/section-165", about: "The income tax withheld from suppliers in a quarter, payee by payee, for FBR's statement.", permission: "supplier_bill.read", module: "purchasing" },
+      // Batch B. What was bought, by supplier and by item, and the register of bills and returns.
+      { label: "Purchases by supplier", href: "/purchase-reports/purchases-by-supplier", about: "What was bought from each supplier in a period: bills less goods sent back, largest first.", permission: "supplier_bill.read", module: "purchasing" },
+      { label: "Purchases by item", href: "/purchase-reports/purchases-by-item", about: "What was bought of each item in a period, with the quantity: bills less goods sent back.", permission: "supplier_bill.read", module: "purchasing" },
+      { label: "Purchase register", href: "/purchase-reports/purchase-register", about: "Every posted supplier bill and goods sent back in a period, one line each, with totals.", permission: "supplier_bill.read", module: "purchasing" },
       { label: "Goods received, not yet billed", href: "/purchases/grni", about: "Goods that have arrived and have no supplier bill yet, at what they cost, against the account in the books.", permission: "purchase_order.read", module: "purchasing" },
     ],
   },

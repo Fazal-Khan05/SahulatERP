@@ -44,6 +44,30 @@ export const PURCHASE_REPORTS = {
     dated: true,
     bySupplier: false,
   },
+  "purchases-by-supplier": {
+    title: "Purchases by supplier",
+    about: "What was bought from each supplier in a period: posted bills less goods sent back, largest first.",
+    permission: "supplier_bill.read",
+    period: true,
+    dated: true,
+    bySupplier: false,
+  },
+  "purchases-by-item": {
+    title: "Purchases by item",
+    about: "What was bought of each item in a period, with the quantity: posted bills less goods sent back, largest first.",
+    permission: "supplier_bill.read",
+    period: true,
+    dated: true,
+    bySupplier: true,
+  },
+  "purchase-register": {
+    title: "Purchase register",
+    about: "Every posted supplier bill and goods sent back in a period, one line each, in date order.",
+    permission: "supplier_bill.read",
+    period: true,
+    dated: true,
+    bySupplier: true,
+  },
   grni: {
     title: "Goods received, not yet billed",
     about: "Goods that have arrived and have no supplier bill yet, at what they cost, against the account in the books.",
@@ -386,5 +410,69 @@ export function grniTable(lines: readonly GrniLine[], total: Decimal, books: Dec
       { kind: "total", depth: 0, cells: ["", null, null, null, null, "Difference", null, difference] },
     ],
     notes: difference.isZero() ? [] : ["The goods waiting for a bill and the account in the books do not agree; please report it."],
+  };
+}
+
+// ── Purchases by supplier, by item, and the register ────────────────────────────────────────────
+// Amounts are those of posted bills before tax, less what goods sent back took off a bill. Goods
+// sent back that no bill had taken yet are not here: they were never bought, only received.
+
+/** One group's purchases. `quantity` is in the item's base unit, and null where it does not apply. */
+export type PurchaseRow = { label: string; detail: string | null; unit: string | null; quantity: Decimal | null; billed: Decimal; returned: Decimal };
+
+const plainQuantity = (quantity: Decimal) => quantity.toFixed(4).replace(/\.?0+$/, "");
+
+/** Purchases by supplier or by item: bills, goods sent back, and what is left, largest first, with a total. */
+export function purchasesTable(report: "purchases-by-supplier" | "purchases-by-item", rows: readonly PurchaseRow[], filter: PurchaseFilter): ReportTable {
+  const item = report === "purchases-by-item";
+  const sorted = [...rows].sort((a, b) => b.billed.minus(b.returned).comparedTo(a.billed.minus(a.returned)) || a.label.localeCompare(b.label));
+  const billed = sum(sorted.map((row) => row.billed));
+  const returned = sum(sorted.map((row) => row.returned));
+  const cells = (label: string, detail: string | null, quantity: Cell, bought: Decimal, back: Decimal): Cell[] => [label, ...(item ? [detail ?? "", quantity] : []), bought, blankIfZero(back), bought.minus(back)];
+  return {
+    title: PURCHASE_REPORTS[report].title,
+    period: period(filter),
+    columns: [
+      { label: item ? "Item" : "Supplier", numeric: false },
+      ...(item ? [{ label: "Name", numeric: false }, { label: "Quantity bought", numeric: true }] : []),
+      { label: "Billed", numeric: true },
+      { label: "Sent back", numeric: true },
+      { label: "Purchases", numeric: true },
+    ],
+    rows: [
+      ...sorted.map((row): ReportRow => ({ kind: "line", depth: 0, cells: cells(row.label, row.detail, row.quantity === null ? null : `${plainQuantity(row.quantity)} ${row.unit ?? ""}`.trim(), row.billed, row.returned) })),
+      { kind: "grand", depth: 0, cells: cells("Total", null, null, billed, returned) },
+    ],
+    notes: [
+      "Amounts are before sales tax, by the date of each bill or return. Goods sent back that no bill had taken yet are not counted: they were never billed." + (item ? " Charges on a bill that are not for an item are shown on a line of their own." : ""),
+    ],
+  };
+}
+
+/** One posted supplier bill or goods sent back. Goods sent back are negative. */
+export type PurchaseRegisterRow = { date: string; kind: "bill" | "return"; number: string; supplier: string; reference: string; amount: Decimal; tax: Decimal; total: Decimal };
+
+/** Every posted bill and return of a period, one line each, with totals. */
+export function purchaseRegisterTable(rows: readonly PurchaseRegisterRow[], filter: PurchaseFilter): ReportTable {
+  const amount = sum(rows.map((row) => row.amount));
+  const tax = sum(rows.map((row) => row.tax));
+  const total = sum(rows.map((row) => row.total));
+  return {
+    title: PURCHASE_REPORTS["purchase-register"].title,
+    period: period(filter),
+    columns: [
+      { label: "Date", numeric: false },
+      { label: "Document", numeric: false },
+      { label: "Supplier", numeric: false },
+      { label: "Supplier's reference", numeric: false },
+      { label: "Amount", numeric: true },
+      { label: "Tax", numeric: true },
+      { label: "Total", numeric: true },
+    ],
+    rows: [
+      ...rows.map((row): ReportRow => ({ kind: "line", depth: 0, cells: [formatIsoDate(row.date), `${row.kind === "bill" ? "Bill" : "Goods sent back"} ${row.number}`, row.supplier, row.reference, row.amount, blankIfZero(row.tax), row.total] })),
+      { kind: "grand", depth: 0, cells: ["Total", null, null, null, amount, tax, total] },
+    ],
+    notes: ["Amounts are before tax; the total is what is owed to the supplier before anything withheld. Goods sent back are shown as minus, and appear only for what a bill had taken."],
   };
 }

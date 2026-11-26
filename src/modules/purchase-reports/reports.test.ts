@@ -337,4 +337,29 @@ describe.skipIf(!hasDb)("buying reports", { timeout: 600_000 }, () => {
     expect(show(await getPurchaseReport(otherOwner, "aged-payables", november()))[0]).toMatch(/^Total \|/);
     expect((await getPurchaseReport(otherOwner, "supplier-statement", november({ supplierId: plain }))).notes).toEqual(["Choose a supplier to see its statement."]);
   });
+  it("purchases by supplier and by item: bills less goods sent back, largest first; and the register lists each bill and return", async () => {
+    const supplier = await getPurchaseReport(as.auditor, "purchases-by-supplier", november());
+    expect(show(supplier)).toEqual(["Karachi Motors (Pvt) Ltd | 110000.00 |  | 110000.00", "Lahore Parts | 6300.00 | 650.00 | 5650.00", "Total | 116300.00 | 650.00 | 115650.00"]);
+    const item = await getPurchaseReport(as.accountant, "purchases-by-item", november());
+    expect(show(item)).toEqual(["HL-1 | Helmet | 119 pc | 116300.00 | 650.00 | 115650.00", "Total |  |  | 116300.00 | 650.00 | 115650.00"]);
+    // One supplier, and the period before anything was billed.
+    expect(show(await getPurchaseReport(as.owner, "purchases-by-item", november({ supplierId: plain }))).at(-1)).toBe("Total |  |  | 6300.00 | 650.00 | 5650.00");
+    expect(show(await getPurchaseReport(as.owner, "purchases-by-supplier", november({ from: "2026-10-01", to: "2026-10-31" })))).toEqual(["Total | 0.00 |  | 0.00"]);
+    const register = await getPurchaseReport(as.accountant, "purchase-register", november());
+    const lines = show(register).map((line) => line.replace(/[A-Z]{2,3}-\d{4}-\d{5}/, "NO"));
+    expect(lines).toEqual([
+      "04-11-2026 | Bill NO | Lahore Parts | INV-1 | 2400.00 |  | 2400.00",
+      "04-11-2026 | Bill NO | Lahore Parts | INV-2 | 3900.00 |  | 3900.00",
+      "04-11-2026 | Bill NO | Karachi Motors (Pvt) Ltd | INV-3 | 100000.00 |  | 100000.00",
+      "04-11-2026 | Bill NO | Karachi Motors (Pvt) Ltd | INV-4 | 10000.00 |  | 10000.00",
+      "07-11-2026 | Goods sent back NO | Lahore Parts |  | -650.00 |  | -650.00",
+      "Total |  |  |  | 115650.00 | 0.00 | 115650.00",
+    ]);
+    for (const role of ["sales_manager", "salesperson", "warehouse_manager"] as const) {
+      for (const key of ["purchases-by-supplier", "purchases-by-item", "purchase-register"] as const) {
+        await expect(getPurchaseReport(as[role], key, november()), `${role} ${key}`).rejects.toThrow("Only an owner, an accountant or an auditor can see what is owed to suppliers.");
+      }
+    }
+    expect(show(await getPurchaseReport(north, "purchase-register", november()))).toEqual(["Total |  |  |  | 0.00 | 0.00 | 0.00"]);
+  });
 });

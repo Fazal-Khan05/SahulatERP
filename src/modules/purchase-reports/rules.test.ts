@@ -1,7 +1,7 @@
 import Decimal from "decimal.js";
 import { describe, expect, it } from "vitest";
 import { tableToCsv } from "@/modules/reports/rules";
-import { ageBand, agedPayablesTable, purchaseFilterQuery, readPurchaseFilter, supplierStatementTable, withholdingRegisterTable, type PurchaseFilter, type WithheldEntry } from "./rules";
+import { ageBand, agedPayablesTable, purchaseFilterQuery, purchaseRegisterTable, purchasesTable, readPurchaseFilter, supplierStatementTable, withholdingRegisterTable, type PurchaseFilter, type WithheldEntry } from "./rules";
 
 const d = (value: string) => new Decimal(value);
 const filter: PurchaseFilter = { from: "2026-11-01", to: "2026-11-30", branchId: null, supplierId: null };
@@ -135,5 +135,32 @@ describe("the withholding register", () => {
     expect(table.notes).toEqual([]);
     // With no salary tax and nothing on an expense, the register is as it always was.
     expect(withholdingRegisterTable([], { unpaid: zero, books: zero, salaries: d("0") }, filter).notes).toEqual([]);
+  });
+});
+
+describe("purchases by supplier, by item, and the register", () => {
+  it("sorts by what is left after goods sent back, largest first, with a total", () => {
+    const table = purchasesTable("purchases-by-supplier", [
+      { label: "Lahore Parts", detail: null, unit: null, quantity: null, billed: d("6300"), returned: d("650") },
+      { label: "Karachi Motors", detail: null, unit: null, quantity: null, billed: d("110000"), returned: d("0") },
+    ], filter);
+    expect(table.columns.map((c) => c.label)).toEqual(["Supplier", "Billed", "Sent back", "Purchases"]);
+    expect(show(table)).toEqual(["Karachi Motors | 110000.00 |  | 110000.00", "Lahore Parts | 6300.00 | 650.00 | 5650.00", "Total | 116300.00 | 650.00 | 115650.00"]);
+  });
+
+  it("shows the quantity of an item in its own unit", () => {
+    const table = purchasesTable("purchases-by-item", [{ label: "HL-1", detail: "Helmet", unit: "pc", quantity: d("119"), billed: d("116300"), returned: d("650") }], filter);
+    expect(show(table)).toEqual(["HL-1 | Helmet | 119 pc | 116300.00 | 650.00 | 115650.00", "Total |  |  | 116300.00 | 650.00 | 115650.00"]);
+  });
+
+  it("lists bills and returns, returns as minus, with totals", () => {
+    const table = purchaseRegisterTable(
+      [
+        { date: "2026-11-04", kind: "bill", number: "PB-1", supplier: "Lahore Parts", reference: "INV-2", amount: d("3900"), tax: d("702"), total: d("4602") },
+        { date: "2026-11-07", kind: "return", number: "PR-1", supplier: "Lahore Parts", reference: "", amount: d("-650"), tax: d("-117"), total: d("-767") },
+      ],
+      filter,
+    );
+    expect(show(table)).toEqual(["04-11-2026 | Bill PB-1 | Lahore Parts | INV-2 | 3900.00 | 702.00 | 4602.00", "07-11-2026 | Goods sent back PR-1 | Lahore Parts |  | -650.00 | -117.00 | -767.00", "Total |  |  |  | 3250.00 | 585.00 | 3835.00"]);
   });
 });

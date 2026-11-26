@@ -37,6 +37,11 @@ export const permissions = {
   // the policies in drizzle/0039_sales_tax_return.sql name the same roles.
   "tax_return.read": ["owner", "accountant", "auditor"],
   "tax_return.settings": ["owner", "accountant"],
+  // Sales analysis (batch B): sales by customer, item, salesperson, city and month, and the sales
+  // register. The owner and those who read the books, and the sales manager, who sees the sales of
+  // the branches they work in; costs and margins only for those who already read item profit
+  // (stock.cost.read). A salesperson sees their own orders, never the company's sales.
+  "sales_report.read": ["owner", "accountant", "auditor", "sales_manager"],
 } as const satisfies TrackPermissions;
 
 /**
@@ -72,6 +77,17 @@ export const reports: readonly ReportSection[] = [
     reports: [
       { label: "Aged receivables", href: "/recovery/ageing", about: "What each customer owes, by days past the due date.", permission: "recovery.read", module: "collections" },
       { label: "Customer statements", href: "/recovery/statements", about: "A customer's invoices and payments over a period, with the balance after each.", permission: "recovery.read", module: "collections" },
+    ],
+  },
+  {
+    title: "Sales analysis",
+    reports: [
+      { label: "Sales by customer", href: "/sales-reports/sales-by-customer", about: "What each customer bought in a period, invoices less credit notes, largest first.", permission: "sales_report.read", module: "sales" },
+      { label: "Sales by item", href: "/sales-reports/sales-by-item", about: "What was sold of each item in a period, with the quantity.", permission: "sales_report.read", module: "sales" },
+      { label: "Sales by salesperson", href: "/sales-reports/sales-by-salesperson", about: "What each salesperson sold in a period; a shared line counts each person's share.", permission: "sales_report.read", module: "sales" },
+      { label: "Sales by city", href: "/sales-reports/sales-by-city", about: "What was sold to the customers of each city in a period.", permission: "sales_report.read", module: "sales" },
+      { label: "Sales by month", href: "/sales-reports/sales-by-month", about: "What was sold in each month of a period.", permission: "sales_report.read", module: "sales" },
+      { label: "Sales register", href: "/sales-reports/sales-register", about: "Every posted invoice and credit note of a period, one line each, with totals.", permission: "sales_report.read", module: "sales" },
     ],
   },
   {

@@ -158,11 +158,13 @@ async function selectWithheld(tx: Tx, ctx: TenantContext, filter: PurchaseFilter
     -- Tax withheld from a supplier on an expense paid out of cash or the bank (Step 34): the
     -- expense's own rows. An expense cancelled by the end of the period has given its tax back.
     select x.entry_date::text, x.kind, s.name, s.supplier_type, s.ntn, s.cnic, e.number, coalesce(e.reference, ''), w.label, x.legal_reference,
-           x.on_active_list, x.base_amount::text, x.rate::text, x.amount::text, null, null
+           x.on_active_list, x.base_amount::text, x.rate::text, x.amount::text, xc.challan_no, xc.paid_on::text
     from public.expense_withholdings x
     join public.expenses e on e.tenant_id = x.tenant_id and e.id = x.expense_id
     join public.suppliers s on s.tenant_id = x.tenant_id and s.id = x.supplier_id
     join public.withholding_rules w on w.tenant_id = x.tenant_id and w.id = x.rule_id
+    left join public.challan_expense_entries xe on xe.tenant_id = x.tenant_id and xe.entry_id = x.id
+    left join public.withholding_challans xc on xc.tenant_id = xe.tenant_id and xc.id = xe.challan_id
     left join public.journals r on r.tenant_id = e.tenant_id and r.id = e.reversal_journal_id
     where x.tenant_id = ${ctx.tenantId} and x.entry_date between ${filter.from}::date and ${filter.to}::date
       and (r.id is null or r.journal_date > ${filter.to}::date)
@@ -179,14 +181,16 @@ const CONTROL_OF: Record<WithholdingKind, string> = { income_tax: "wht_income_ta
 
 /** The income tax the payroll runs approved in the period deducted from pay, run by run: the runs' own figures. */
 async function selectSalaryTax(tx: Tx, ctx: TenantContext, filter: PurchaseFilter): Promise<SalaryTaxLine[]> {
-  const rows = await tx.execute<{ journal_date: string; month: string; number: string; people: number; taxable: string; tax: string }>(sql`
-    select r.journal_date::text, r.month::text, r.number, r.tax::text,
+  const rows = await tx.execute<{ journal_date: string; month: string; number: string; people: number; taxable: string; tax: string; challan_no: string | null; paid_on: string | null }>(sql`
+    select r.journal_date::text, r.month::text, r.number, r.tax::text, c.challan_no, c.paid_on::text,
       (select count(*)::int from public.payslips p where p.tenant_id = r.tenant_id and p.run_id = r.id and p.tax > 0) as people,
       (select coalesce(sum(p.taxable), 0)::text from public.payslips p where p.tenant_id = r.tenant_id and p.run_id = r.id and p.tax > 0) as taxable
     from public.payroll_runs r
+    left join public.challan_payroll_runs cr on cr.tenant_id = r.tenant_id and cr.run_id = r.id
+    left join public.withholding_challans c on c.tenant_id = cr.tenant_id and c.id = cr.challan_id
     where r.tenant_id = ${ctx.tenantId} and r.status in ('approved', 'paid') and r.tax > 0 and r.journal_date between ${filter.from}::date and ${filter.to}::date
     order by r.journal_date, r.number`);
-  return rows.map((row) => ({ date: row.journal_date, month: row.month, runNumber: row.number, people: row.people, taxable: d(row.taxable), amount: d(row.tax) }));
+  return rows.map((row) => ({ date: row.journal_date, month: row.month, runNumber: row.number, people: row.people, taxable: d(row.taxable), amount: d(row.tax), challanNo: row.challan_no, paidOn: row.paid_on }));
 }
 
 /** What is still to be paid over at the end of a day, and what the withholding payable accounts hold that day: for the whole company. */
@@ -207,26 +211,32 @@ async function selectWithheldPosition(tx: Tx, ctx: TenantContext, on: string): P
       join public.accounts a on a.tenant_id = jl.tenant_id and a.id = jl.account_id
       where jl.tenant_id = ${ctx.tenantId} and a.is_control and a.control_type in ('wht_income_tax', 'wht_sales_tax', 'wht_provincial_tax') and j.journal_date <= ${on}::date
       group by a.control_type`),
-    // Withheld on expenses that stood that day: no challan covers these yet, so all of it is still to be paid.
+    // Withheld on expenses that stood that day, and that no challan had paid by then.
     tx.execute<{ kind: WithholdingKind; amount: string }>(sql`
       select x.kind, sum(x.amount)::text as amount
       from public.expense_withholdings x
       join public.expenses e on e.tenant_id = x.tenant_id and e.id = x.expense_id
       left join public.journals r on r.tenant_id = e.tenant_id and r.id = e.reversal_journal_id
       where x.tenant_id = ${ctx.tenantId} and x.entry_date <= ${on}::date and (r.id is null or r.journal_date > ${on}::date)
+        and not exists (
+          select 1 from public.challan_expense_entries xe
+          join public.withholding_challans c on c.tenant_id = xe.tenant_id and c.id = xe.challan_id
+          where xe.tenant_id = x.tenant_id and xe.entry_id = x.id and c.paid_on <= ${on}::date)
       group by x.kind`),
-    // Deducted from pay by the payroll runs approved by that day (section 149), credited to the income tax account.
+    // Deducted from pay by the payroll runs approved by that day (section 149), credited to the
+    // income tax account, and not paid over by then.
     tx.execute<{ amount: string }>(sql`
       select coalesce(sum(r.tax), 0)::text as amount from public.payroll_runs r
-      where r.tenant_id = ${ctx.tenantId} and r.status in ('approved', 'paid') and r.journal_date <= ${on}::date`),
+      where r.tenant_id = ${ctx.tenantId} and r.status in ('approved', 'paid') and r.journal_date <= ${on}::date
+        and not exists (
+          select 1 from public.challan_payroll_runs cr
+          join public.withholding_challans c on c.tenant_id = cr.tenant_id and c.id = cr.challan_id
+          where cr.tenant_id = r.tenant_id and cr.run_id = r.id and c.paid_on <= ${on}::date)`),
   ]);
   const zero = () => ({ income_tax: new Decimal(0), sales_tax: new Decimal(0), provincial_sales_tax: new Decimal(0) });
-  const position: WithheldPosition = { unpaid: zero(), books: zero(), salaries: d(salaries?.amount), onExpenses: new Decimal(0) };
+  const position: WithheldPosition = { unpaid: zero(), books: zero(), salaries: d(salaries?.amount) };
   for (const row of unpaid) position.unpaid[row.kind] = d(row.amount);
-  for (const row of onExpenses) {
-    position.unpaid[row.kind] = position.unpaid[row.kind].plus(d(row.amount));
-    position.onExpenses = position.onExpenses.plus(d(row.amount));
-  }
+  for (const row of onExpenses) position.unpaid[row.kind] = position.unpaid[row.kind].plus(d(row.amount));
   for (const kind of Object.keys(CONTROL_OF) as WithholdingKind[]) position.books[kind] = d(books.find((row) => row.control_type === CONTROL_OF[kind])?.amount);
   return position;
 }

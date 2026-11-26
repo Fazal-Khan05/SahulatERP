@@ -266,7 +266,7 @@ describe.skipIf(!hasDb)("buying reports", { timeout: 600_000 }, () => {
       " | Difference |  |  |  |  |  |  |  | 0.00 |  | ",
     ]);
     expect(await books(["wht_income_tax", "wht_sales_tax", "wht_provincial_tax"], "2026-11-17")).toBe("10440.00");
-    expect(table.notes).toEqual([expect.stringMatching(/^A challan here pays over tax withheld on supplier bills\./)]);
+    expect(table.notes).toEqual([]);
 
     // October's payroll, approved: one person paid enough to be taxed. The run credits its tax to
     // the same account as income tax withheld from suppliers (Step 41).

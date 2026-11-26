@@ -52,7 +52,7 @@ No migration: every figure is read from rows that are already there.
    paid ahead, and credit notes not yet set against an invoice, are held in Advances from
    customers and are not taken off what the invoices still owe; the report's note says so.
 
-## Still not built (found here, wants a step of its own with a migration)
+## Found here, and built since (docs/later/tax-paid-over.md)
 
 - **Paying over salary tax and tax withheld on an expense.** A challan (Step 26) covers tax
   withheld on supplier bills: its rows point at a bill's withholding entry. There is no way to

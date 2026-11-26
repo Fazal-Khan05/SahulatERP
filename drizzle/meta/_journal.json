@@ -330,6 +330,13 @@
       "when": 1795673420652,
       "tag": "0046_daily_expenses",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1795702343634,
+      "tag": "0047_tax_paid_over",
+      "breakpoints": true
     }
   ]
 }

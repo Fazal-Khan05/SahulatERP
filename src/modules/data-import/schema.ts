@@ -11,7 +11,7 @@ import { tenants } from "../tenant/schema";
 // and reads a kind's last mapping back as the one to offer for the next file of that kind. The
 // rows themselves go in through the commands that import each kind (customers, suppliers,
 // items, opening stock, opening balances), as they would from those commands' own screens.
-// Written by the app, never changed or removed (drizzle/0046_data_imports.sql).
+// Written by the app, never changed or removed (drizzle/0047_data_imports.sql).
 
 /** What a file was imported as, in the order a company is best brought in. */
 export const DATA_IMPORT_KINDS = ["customers", "suppliers", "items", "opening_stock", "customer_balances", "supplier_balances", "ledger_balances"] as const;

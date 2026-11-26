@@ -382,6 +382,9 @@ export async function ChallanCards({ session }: { session: TenantSession }) {
   return (
     <>
       <Card title="Tax withheld, not yet paid to the government" className="max-w-5xl">
+        <p className="mb-3 text-sm text-muted-foreground" data-testid="challan-scope">
+          Tax withheld on supplier bills is paid over here. Tax withheld on an expense, and income tax deducted from salaries, are in the Withholding register under Reports with everything else still to be paid; recording their payment is not built yet.
+        </p>
         {unpaid.length === 0 ? (
           <Empty>Nothing withheld is waiting to be paid over.</Empty>
         ) : record ? (

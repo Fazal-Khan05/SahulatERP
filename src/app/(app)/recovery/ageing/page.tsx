@@ -6,7 +6,7 @@ import { Card, PageHead } from "@/components/page-parts";
 import { buttonVariants } from "@/components/ui/button";
 import { requireTenant } from "@/lib/auth/session";
 import { todayIso } from "@/lib/format";
-import { listCustomerAgeing } from "@/modules/recovery/queries";
+import { getReceivablesInBooks, listCustomerAgeing } from "@/modules/recovery/queries";
 import { ageingTable } from "@/modules/recovery/rules";
 import { ReportTableView } from "../../reports/_parts/report-table";
 import { Refused, Sections, recoveryRefusal } from "../_parts/parts";
@@ -27,7 +27,7 @@ async function Ageing() {
   const refused = recoveryRefusal(session);
   if (refused) return <Refused title="Aged receivables" reason={refused} />;
   const today = todayIso(new Date());
-  const table = ageingTable(await listCustomerAgeing(session, today), today);
+  const table = ageingTable(await listCustomerAgeing(session, today), today, await getReceivablesInBooks(session));
   return (
     <>
       <PageHead title="Aged receivables" sub="What each customer owes today, by days past the due date." />

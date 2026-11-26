@@ -6,7 +6,7 @@ import { PageLoading } from "@/components/page-loading";
 import { PrintButton, PrintHeader } from "@/components/print-parts";
 import { requireTenant } from "@/lib/auth/session";
 import { formatDateTime, todayIso } from "@/lib/format";
-import { listCustomerAgeing } from "@/modules/recovery/queries";
+import { getReceivablesInBooks, listCustomerAgeing } from "@/modules/recovery/queries";
 import { ageingTable } from "@/modules/recovery/rules";
 import { can } from "@/modules/tenant/rules";
 import { ReportTableView } from "../../../(app)/reports/_parts/report-table";
@@ -27,7 +27,7 @@ async function PrintAgeing() {
   const session = await requireTenant();
   if (!session.modules.collections || !can(session.role, "recovery.read")) notFound();
   const today = todayIso(new Date());
-  const table = ageingTable(await listCustomerAgeing(session, today), today);
+  const table = ageingTable(await listCustomerAgeing(session, today), today, await getReceivablesInBooks(session));
   return (
     <>
       <div className="mb-8 flex items-center justify-between gap-4 print:hidden">

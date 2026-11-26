@@ -44,6 +44,20 @@ describe("ageing what customers owe", () => {
     const bands = table.rows.at(-1)!.cells.slice(3, 7) as Decimal[];
     expect(overdueTotal.eq(bands.reduce((total, band) => total.plus(band), d(0)))).toBe(true);
   });
+
+  it("sets its total beside the Trade receivables account in the books, and says so when they do not agree", () => {
+    const rows = [ageOpenItems(who("A"), [{ dueDate: "2026-12-01", outstanding: d(500) }], TODAY), ageOpenItems(who("B"), [{ dueDate: "2026-11-01", outstanding: d(200) }], TODAY)];
+    const last = (books: Decimal | null) => ageingTable(rows, TODAY, books).rows.slice(-2).map((row) => `${row.kind} ${row.cells[1]} ${(row.cells.at(-1) as Decimal).toFixed(2)}`);
+    expect(last(d(700))).toEqual(["total Trade receivables, in the books 700.00", "total Difference 0.00"]);
+    expect(ageingTable(rows, TODAY, d(700)).notes).toHaveLength(1);
+    expect(last(d(650))).toEqual(["total Trade receivables, in the books 650.00", "total Difference 50.00"]);
+    expect(ageingTable(rows, TODAY, d(650)).notes.at(-1)).toMatch(/do not agree/);
+    // Without the books' figure (someone who does not read the books), the report ends at its total, as before.
+    expect(last(null)).toEqual(["line B 200.00", "grand Total 700.00"]);
+    // Every row has as many cells as there are columns.
+    const table = ageingTable(rows, TODAY, d(700));
+    expect(table.rows.every((row) => row.cells.length === table.columns.length)).toBe(true);
+  });
 });
 
 describe("promises to pay", () => {

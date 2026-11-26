@@ -60,7 +60,8 @@ back (CN-2627-00001), 3,501.40 owed. The whole seed takes 16 to 18 seconds there
    rows. With that on, a quick market purchase is from a seller in the market, not from a
    supplier on the list (the app's own rule).
 4. **One salary is above the tax threshold**, so a payslip and the year's statement show income
-   tax. The price is a difference of 320.00 on the withholding register (see "Found").
+   tax. (When this was first seeded the withholding register showed a difference of 320.00 for
+   it; that fault in the report was then put right, see docs/later/withholding-register.md.)
 5. **Ali's commission is paid on its own, Sana's with her salary.** Both are employees; only
    Sana's sign-in is tied to her employee record. So the walk's "Pay commission" for Ali is
    still true, and payroll shows commission in a run.
@@ -83,15 +84,15 @@ back (CN-2627-00001), 3,501.40 owed. The whole seed takes 16 to 18 seconds there
 
 ## Found while seeding (reported, not worked around)
 
-- **The withholding register does not read salary tax.** A payroll run credits its tax to the
-  same account (2210) the register compares itself with, so the register shows a "Difference"
-  equal to it (320.00 here). docs/later/step-41.md already lists it as still to do, with tax
-  withheld on an expense. The seed says so in a note at its end and does not hide it.
+- **The withholding register did not read salary tax.** A payroll run credits its tax to the
+  same account (2210) the register compares itself with, so the register showed a "Difference"
+  equal to it (320.00 here). Put right since (docs/later/withholding-register.md); the seed now
+  refuses to finish unless the register agrees with the books too.
 - **`npm run demo:seed` and `demo:reset` printed nothing.** The runner logged what it did, and
   the test runner keeps a passing run's log to itself. `scripts/demo/demo.run.ts` now writes it
   straight to the terminal.
-- **Aged receivables has no line comparing it with the books**, as aged payables and stock
-  valuation have. The two agree (the seed checks it); the screen does not say so.
+- **Aged receivables had no line comparing it with the books**, as aged payables and stock
+  valuation have. Added with the register's fix.
 
 ## Could not verify
 

@@ -11,8 +11,9 @@ import { getStockReport } from "@/modules/stock-reports/queries";
 import type { Demo } from "../world";
 
 // The seed does not call itself done unless the books agree: the trial balance, the stock
-// report with the stock account, what customers and suppliers owe with their accounts, and the
-// goods received and not billed with theirs. The figures the walk in docs/DEMO.md quotes are
+// report with the stock account, what customers and suppliers owe with their accounts, the
+// goods received and not billed with theirs, and the tax withheld and still to be paid with the
+// withholding accounts. The figures the walk in docs/DEMO.md quotes are
 // read here too, from the same reports the screens show.
 
 const isAmount = (cell: unknown): cell is Decimal => Decimal.isDecimal(cell);
@@ -59,15 +60,12 @@ export async function checkBooks(d: Demo): Promise<void> {
   const unbilled = await getGrni(owner);
   agree("Goods received not billed and its account", unbilled.total, unbilled.ledger);
 
-  if (problems.length > 0) throw new Error(`The demo's books do not agree:\n  ${problems.join("\n  ")}`);
-  d.said.push(`The books agree: trial balance ${formatAmount(grand[4] ?? new Decimal(0))} each side; stock ${formatAmount(amountOn(stock, "Total")!)}; customers owe ${formatAmount(owedByCustomers)}; suppliers are owed ${formatAmount(amountOn(payables, "Total")!)}; goods received and not billed ${formatAmount(unbilled.total)}.`);
-
-  // The withholding register sets the tax withheld from suppliers beside the payable accounts.
-  // Salary tax from payroll is credited to the same account and is not in the register yet
-  // (docs/later/step-41.md), so a difference equal to it is said, not hidden.
+  // Tax withheld from suppliers, on bills and on expenses, and deducted from salaries by the payroll runs.
   const register = await getPurchaseReport(owner, "withholding-register", { from, to: today, branchId: null, supplierId: null });
-  const off = amountOn(register, "Difference");
-  if (off && !off.isZero()) d.said.push(`Note: the withholding register shows a difference of ${formatAmount(off.abs())}: the salary tax of the payroll run, which the register does not read yet.`);
+  agree("Tax withheld and still to be paid, and the withholding accounts", amountOn(register, "Withheld and not yet paid over"), amountOn(register, "Withholding payable accounts in the books"));
+
+  if (problems.length > 0) throw new Error(`The demo's books do not agree:\n  ${problems.join("\n  ")}`);
+  d.said.push(`The books agree: trial balance ${formatAmount(grand[4] ?? new Decimal(0))} each side; stock ${formatAmount(amountOn(stock, "Total")!)}; customers owe ${formatAmount(owedByCustomers)}; suppliers are owed ${formatAmount(amountOn(payables, "Total")!)}; goods received and not billed ${formatAmount(unbilled.total)}; tax withheld and still to be paid ${formatAmount(amountOn(register, "Withheld and not yet paid over")!)}.`);
 
   // ── What the walk quotes ────────────────────────────────────────────────────────────────────
   const ali = d.people.ALI.id;
@@ -89,5 +87,7 @@ export async function checkBooks(d: Demo): Promise<void> {
     customersOwe: formatAmount(owedByCustomers),
     suppliersOwed: formatAmount(amountOn(payables, "Total")!),
     goodsNotBilled: formatAmount(unbilled.total),
+    taxStillToPay: formatAmount(amountOn(register, "Withheld and not yet paid over")!),
+    salaryTax: formatAmount(amountOn(register, "Total, income tax deducted from salaries") ?? new Decimal(0)),
   });
 }

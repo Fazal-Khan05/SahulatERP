@@ -169,7 +169,7 @@ are the owner's unless another sign-in is named.
 | Owner | Collections, Follow-ups and promises | Model Town Motors to call today; Anarkali Auto Store promised 48,700.00 |
 | Owner | Collections, Overdue customers, Anarkali Auto Store | The customer whose cheque bounced: what they owe, the follow-up note and the promise to pay |
 | Owner | Collections, Customer statements | A statement for any customer and period, to print or save |
-| Owner | Collections, Aged receivables | What each customer owes by age; the total, 16,23,150.00, is the receivables account in the books |
+| Owner | Collections, Aged receivables | What each customer owes by age; the total, 16,23,150.00, is set beside Trade receivables in the books, with a difference of 0.00 |
 | Owner | Collections, Receipts | Twelve receipts, RC-2627-00001 to 00012: cash, bank transfers, cheques and one advance |
 | Owner | Collections, Cheques | Cheque 00117345 from Korangi Workshop, 38,400.00, still in hand; tick Show cleared, bounced and cancelled cheques too for the one that cleared and the one that bounced |
 
@@ -261,7 +261,7 @@ are the owner's unless another sign-in is named.
 | Owner | Reports, Cash flow | Where the money came from and went |
 | Owner | Reports, Aged payables | What is owed to each supplier by age; the total, 5,78,222.00, is what the books say |
 | Owner | Reports, Supplier statement | A statement for any supplier and period |
-| Owner | Reports, Withholding register | Tax withheld from suppliers, bill by bill; it shows a difference of 320.00, the salary tax of the payroll run, which this report does not read yet |
+| Owner | Reports, Withholding register | Tax withheld from suppliers, bill by bill, and the 320.00 of income tax deducted from October's salaries in a section of its own; 25,541.00 is still to be paid, the same as the accounts in the books |
 | Owner | Reports, Statement of tax withheld (section 165) | The quarter's income tax withheld, payee by payee, with the challan's number |
 | Owner | Reports, Sales tax return | One sentence: the company is not registered for sales tax, so it files no return |
 
@@ -319,9 +319,10 @@ are the owner's unless another sign-in is named.
   that could be a real account is invented.
 - **Period close.** The accountant's menu names it; it is not built.
 - **Emailing an invoice or a statement.** Not there; the PDF is downloaded and sent by hand.
-- **The withholding register agreeing to the paisa.** It shows a difference of 320.00: the
-  salary tax of the payroll run, which sits in the same account and which the register does
-  not read yet. Everything else agrees with the books, and the seed checks it.
+- **Paying salary tax over to the government.** A challan records the payment of tax withheld
+  on supplier bills. The tax deducted from salaries (320.00 here), and tax withheld on an
+  expense, show in the withholding register as still to be paid; recording their payment is
+  not built yet.
 - **Importing customers, suppliers, items or attendance from a file.** The screens are there
   (*Customers*, *Import*, and so on) and show nothing until a file is chosen.
 - **Two-step sign-in.** Switched off on the live site for the demo; it is switched back on

@@ -27,8 +27,34 @@ async function orderFor(d: Demo, who: TenantContext, kind: "quotation" | "order"
   return { id, result: await submitSalesDocument(who, id) };
 }
 
+/** Sold and billed in one step by the owner, with no share of commission: the company's own accounts. */
+async function houseSale(d: Demo, date: string, customer: string, warehouseId: string, lines: Line[]) {
+  const order = await orderFor(d, d.owner, "order", date, customer, warehouseId, lines);
+  const invoice = (await startInvoice(d.owner, order.id)).id;
+  const draft = (await getSalesDocument(d.owner, invoice))!;
+  await saveInvoiceDraft(d.owner, invoice, { date, lines: draft.lines.map((l) => ({ sourceLineId: l.sourceLineId, quantity: l.quantity.toFixed() })) });
+  const { number } = await postInvoice(d.owner, invoice);
+  return { id: invoice, number, total: (await getSalesDocument(d.owner, invoice))!.totals.total };
+}
+
 export async function seedSellingMore(d: Demo): Promise<void> {
   const { owner, accountant, manager, ali, sana, day, yesterday } = d;
+
+  // ── The owner's own accounts: larger sales of what was bought and imported, no commission ───
+  const house = [
+    await houseSale(d, day(0, 9), "C-003", d.karachi, [["BR-101", 200], ["EN-301", 250], ["LT-201", 300]]),
+    await houseSale(d, day(0, 24), "C-001", d.karachi, [["EN-302", 30], ["EN-320", 25], ["LT-240", 20]]),
+    await houseSale(d, day(0, 25), "C-010", d.lahore, [["TY-401", 25], ["TY-410", 100]]),
+    await houseSale(d, day(1, 7), "C-002", d.karachi, [["AC-501", 40], ["EN-310", 30], ["BR-110", 25]]),
+    await houseSale(d, day(1, 16), "C-003", d.karachi, [["EN-302", 30], ["EN-320", 25], ["LT-240", 25]]),
+    await houseSale(d, day(1, 18), "C-007", d.lahore, [["TY-402", 15], ["TY-411", 60]]),
+  ];
+  // Two of them paid by bank transfer this month.
+  for (const [index, date, customer] of [[0, day(1, 6), "C-003"], [1, day(1, 15), "C-001"]] as const) {
+    const paid = await saveReceiptDraft(accountant, null, { date, customerId: d.customers[customer], method: "bank", accountId: d.bank, amount: house[index].total.toFixed(2), reference: `IBFT ${7741203 + index}`, chequeNumber: "", chequeBank: "", chequeDate: "", allocations: [{ kind: "invoice", id: house[index].id, amount: house[index].total.toFixed(2) }] });
+    await postReceipt(accountant, paid.id);
+  }
+  d.said.push(`The owner's own accounts: ${house.length} larger invoices, ${house[0].number} to ${house[house.length - 1].number}, of what was bought and imported; two paid by bank transfer.`);
 
   // ── Price lists, from yesterday, on items no open order holds ───────────────────────────────
   const dealers = (await createPriceList(manager, "Dealer price list")).id;

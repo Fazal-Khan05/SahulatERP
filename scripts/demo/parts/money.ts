@@ -3,6 +3,7 @@ import { recordDailyExpense } from "@/modules/daily-expenses/commands";
 import { getDailyChoices } from "@/modules/daily-expenses/queries";
 import { postManualJournal, reverseManualJournal, saveDraft } from "@/modules/manual-journals/commands";
 import { addOpenDocument, postOpening, setAccountBalance, startOpening } from "@/modules/opening/commands";
+import { setPeriodLocked } from "@/modules/numbering/commands";
 import { accountId, type Demo } from "../world";
 
 // Money: what the company held and owed when it started using the app, the owner's capital paid
@@ -40,7 +41,7 @@ export async function seedMoney(d: Demo): Promise<void> {
   const monthEnd = shift(thisMonth, -1);
   const wear = await saveDraft(accountant, null, { date: monthEnd, memo: "Depreciation for the month", branchId: "", lines: [await line("5320", "14500", "", "Furniture, equipment and the delivery van"), await line("1590", "", "14500", "Depreciation for the month")] });
   const wearNumber = (await postManualJournal(accountant, wear.id)).number;
-  const twice = await saveDraft(accountant, null, { date: day(1, 5), memo: "Rent for the month, accrued", branchId: "", lines: [await line("5230", "85000", "", "Warehouse rent"), await line("2140", "", "85000", "Rent owed to the landlord")] });
+  const twice = await saveDraft(accountant, null, { date: day(1, 5), memo: "Rent for the month, accrued", branchId: "", lines: [await line("5230", "55000", "", "Warehouse rent"), await line("2140", "", "55000", "Rent owed to the landlord")] });
   const twiceNumber = (await postManualJournal(accountant, twice.id)).number;
   // The rent was then paid from the bank as a daily expense, so the accrual is taken back.
   await reverseManualJournal(owner, twice.id, { date: day(1, 6) });
@@ -61,13 +62,13 @@ export async function seedMoney(d: Demo): Promise<void> {
   // month, day of the month, what for, amount, paid from, paid to, note
   type Entry = [0 | 1, number, string, string, "petty" | "bank" | "cash", string, string];
   const ENTRIES: Entry[] = [
-    [0, 1, "Rent", "85000", "bank", "Landlord, Plot 14-C SITE", "Warehouse rent for the month"],
+    [0, 1, "Rent", "55000", "bank", "Landlord, Plot 14-C SITE", "Warehouse rent for the month"],
     [0, 2, "Entertainment", "650", "petty", "", "Tea and biscuits for the office"],
     [0, 3, "Travelling and conveyance", "3200", "petty", "Shell, Shahrah-e-Faisal", "Petrol for the delivery van"],
     [0, 5, "Freight and cartage outward", "1800", "petty", "", "Rickshaw to the transport adda"],
     [0, 8, "Printing and stationery", "2350", "petty", "Saddar Stationers", "Invoice books and markers"],
     [0, 9, "Entertainment", "480", "petty", "", "Tea for the office"],
-    [0, 11, "Electricity, gas and water", "38400", "bank", "K-Electric", "Electricity bill for the warehouse"],
+    [0, 11, "Electricity, gas and water", "21400", "bank", "K-Electric", "Electricity bill for the warehouse"],
     [0, 12, "Travelling and conveyance", "2900", "petty", "", "Petrol for the delivery van"],
     [0, 15, "Telephone and internet", "6500", "bank", "Internet provider", "Internet for the month"],
     [0, 16, "Freight and cartage outward", "4200", "petty", "Mazda adda, Lea Market", "Loading for Hyderabad"],
@@ -75,11 +76,11 @@ export async function seedMoney(d: Demo): Promise<void> {
     [0, 20, "Entertainment", "1250", "petty", "", "Lunch for the customers from Hyderabad"],
     [0, 23, "Travelling and conveyance", "3100", "petty", "", "Petrol for the delivery van"],
     [0, 26, "Miscellaneous expenses", "900", "petty", "", "Drinking water bottles"],
-    [1, 1, "Rent", "85000", "bank", "Landlord, Plot 14-C SITE", "Warehouse rent for the month"],
+    [1, 1, "Rent", "55000", "bank", "Landlord, Plot 14-C SITE", "Warehouse rent for the month"],
     [1, 2, "Entertainment", "700", "petty", "", "Tea and biscuits for the office"],
     [1, 3, "Travelling and conveyance", "3400", "petty", "Shell, Shahrah-e-Faisal", "Petrol for the delivery van"],
     [1, 5, "Freight and cartage outward", "2600", "petty", "", "Rickshaw and loading"],
-    [1, 7, "Electricity, gas and water", "41250", "bank", "K-Electric", "Electricity bill for the warehouse"],
+    [1, 7, "Electricity, gas and water", "23250", "bank", "K-Electric", "Electricity bill for the warehouse"],
     [1, 8, "Printing and stationery", "1450", "petty", "", "Printer paper"],
     [1, 10, "Travelling and conveyance", "2800", "petty", "", "Petrol for the delivery van"],
     [1, 12, "Telephone and internet", "6500", "bank", "Internet provider", "Internet for the month"],
@@ -100,6 +101,14 @@ export async function seedMoney(d: Demo): Promise<void> {
 
   // ── An expense on the full form: two lines, one payee, paid from the bank ───────────────────
   const printing = await recordExpense(accountant, { date: day(0, 18), accountId: d.bank, payee: "Shahrah Printers", reference: "Inv 8841", lines: [{ accountId: charged("Printing and stationery"), description: "Invoice books and letterheads", amount: "18,500" }, { accountId: charged("Printing and stationery"), description: "Visiting cards for the sales team", amount: "4,200" }] });
+
+  // The month before the books were opened here is locked: nothing can be dated in it by mistake.
+  const [closed] = await d.sql<{ id: string; name: string }[]>`
+    select id, to_char(starts_on, 'FMMonth YYYY') as name from public.fiscal_periods where tenant_id = ${d.tenantId} and ends_on < ${lastMonth}::date order by starts_on desc limit 1`;
+  if (closed) {
+    await setPeriodLocked(owner, closed.id, true);
+    d.facts.lockedPeriod = closed.name;
+  }
 
   Object.assign(d.facts, { capitalJournal: capitalNumber, depreciationJournal: wearNumber, reversedJournal: twiceNumber, pettyCashTransfer: float.number, cashBanked: deposit.number, todaysFirstExpense: tea.number, todaysExpenses: "4,650.00", fullExpense: printing.number });
   d.said.push(`Cash and bank: petty cash, ${float.number} and two more transfers, ${ENTRIES.length + 3} daily expenses over the two months with three today, and ${printing.number} on the full form.`);

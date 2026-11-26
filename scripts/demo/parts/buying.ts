@@ -138,7 +138,7 @@ export async function seedBuying(d: Demo): Promise<void> {
   // ── 5. A service, with the province's tax and income tax withheld: unpaid ───────────────────
   const guards = await bill(d, {
     date: day(1, 2), supplierId: d.suppliers["S-005"], branchId: d.karachiBranch, supplierInvoiceNo: "CGS/2611", dueDate: shift(day(1, 2), 15), incomeTaxCode: "income_tax.services.other", provincialTaxCode: "provincial_sales_tax.sindh",
-    expenses: [{ accountId: await accountId(d, "5330"), description: "Guards for the Karachi warehouse, last month", amount: "42000" }],
+    expenses: [{ accountId: await accountId(d, "5330"), description: "Guards for the Karachi warehouse, last month", amount: "28000" }],
   });
 
   // ── 6. The tax withheld last month, paid over to the government with its challan ────────────

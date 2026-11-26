@@ -16,11 +16,11 @@ export async function seedPayroll(d: Demo): Promise<void> {
   const joined = `${d.fyYear}-07-01`;
   // code, name, designation, province, basis, registered with EOBI, the login they sign in with, pay
   const PEOPLE: [string, string, string, string, "monthly" | "daily", string | null, [string, string][]][] = [
-    ["E-001", "Imran Qureshi", "Sales manager", "sindh", "monthly", null, [["basic", "95000"], ["house_rent", "25000"], ["conveyance", "10000"]]],
-    ["E-002", "Sana Malik", "Salesperson, Lahore", "punjab", "monthly", d.people.SANA.id, [["basic", "52000"], ["conveyance", "8000"]]],
-    ["E-003", "Ali Raza", "Salesperson, Karachi", "sindh", "monthly", null, [["basic", "52000"], ["conveyance", "8000"]]],
-    ["E-004", "Nadia Hussain", "Accountant", "sindh", "monthly", null, [["basic", "78000"], ["medical", "7000"]]],
-    ["E-005", "Bilal Ahmed", "Warehouse helper", "sindh", "daily", null, [["daily_wage", "1800"]]],
+    ["E-001", "Imran Qureshi", "Sales manager", "sindh", "monthly", null, [["basic", "62000"], ["house_rent", "15000"], ["conveyance", "5000"]]],
+    ["E-002", "Sana Malik", "Salesperson, Lahore", "punjab", "monthly", d.people.SANA.id, [["basic", "34000"], ["conveyance", "5000"]]],
+    ["E-003", "Ali Raza", "Salesperson, Karachi", "sindh", "monthly", null, [["basic", "34000"], ["conveyance", "5000"]]],
+    ["E-004", "Nadia Hussain", "Accountant", "sindh", "monthly", null, [["basic", "50000"], ["medical", "5000"]]],
+    ["E-005", "Bilal Ahmed", "Warehouse helper", "sindh", "daily", null, [["daily_wage", "1300"]]],
   ];
   const employees: Record<string, string> = {};
   for (const [code, name, designation, province, payBasis, userId, pay] of PEOPLE) {

@@ -575,7 +575,17 @@ export async function ExpenseScreen({ params, searchParams }: { params: Promise<
         <ReceiptsCard session={session} expenseId={expense.id} />
         <Books title="In the books" lines={expense.journal} />
         <Books title="Taken back" lines={expense.reversal} />
-        {expense.status === "posted" && can(session.role, "cash_bank.manage") ? <CancelCard action={cancelExpenseAction.bind(null, expense.id)} word="expense" /> : null}
+        {expense.status === "posted" && can(session.role, "cash_bank.manage") ? (
+          expense.taxPaidOver ? (
+            <Card title="This expense stands">
+              <p className="text-sm text-muted-foreground" data-testid="expense-stands">
+                Tax withheld on it has been paid to the government under a challan, so it is no longer cancelled. Put a mistake right with the supplier and a new entry.
+              </p>
+            </Card>
+          ) : (
+            <CancelCard action={cancelExpenseAction.bind(null, expense.id)} word="expense" />
+          )
+        ) : null}
       </div>
     </>
   );

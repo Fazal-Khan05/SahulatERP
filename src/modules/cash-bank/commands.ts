@@ -40,6 +40,7 @@ export function refusal(error: unknown, date: string | null): unknown {
   if (code === "SE339") return new UserError("A line, or the tax withheld, will not do: check the accounts, the amounts and the tax lines chosen.");
   if (code === "SE230") return new UserError("That withholding line is not in force on that date. Check the tax rates.");
   if (code === "SE340") return new UserError("A cash or bank account is archived only when it holds nothing.");
+  if (code === "SE380") return new UserError("Tax withheld on this expense has been paid to the government under a challan, so the expense stands. Put a mistake right with the supplier and a new entry.");
   if (code === "42501") return new UserError("Your role cannot do that.");
   return null;
 }

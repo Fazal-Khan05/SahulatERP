@@ -133,7 +133,7 @@ are the owner's unless another sign-in is named.
 
 | Sign in as | Click | On the screen |
 | --- | --- | --- |
-| Owner | Home | The business this month: cash and bank 27,45,576.00, sales 10,55,792.00, profit 96,070.83, customers owe 16,23,150.00, owed to suppliers 5,78,222.00 |
+| Owner | Home | The business this month: cash and bank 27,45,256.00, sales 10,55,792.00, profit 96,070.83, customers owe 16,23,150.00, owed to suppliers 5,78,222.00 |
 | Owner | Needs attention | Three things waiting: an order over its credit limit to approve, a cheque to deposit, a stock count to post |
 
 ### Selling
@@ -187,7 +187,7 @@ are the owner's unless another sign-in is named.
 | Owner | Purchases and imports, Supplier payments | Five payments to suppliers, PV-2627-00001 to 00005 |
 | Owner | Purchases and imports, Supplier payments, PV-2627-00003 | An advance of 2,50,000.00 sent to Guangzhou (noted as USD 897.99), later set against their bill |
 | Owner | Purchases and imports, Supplier returns | DB-2627-00001: four helmets with cracked shells sent back to Indus Auto Parts |
-| Owner | Purchases and imports, Withholding tax | Tax withheld from suppliers and not yet paid over, and challan WC-2627-00001 for last month's |
+| Owner | Purchases and imports, Withholding tax | Everything withheld and not yet paid over, 25,221.00 in all, and the challans: WC-2627-00001 for last month's tax withheld from suppliers, WC-2627-00002 for the 320.00 deducted from October's salaries |
 | Owner | Reports, Goods received, not yet billed | 25 front tyres received and not billed: 71,250.00, the same as the account in the books |
 | Owner | Purchases and imports, Quick market purchase | The one screen that buys, receives, bills and pays in one step |
 | Owner | Suppliers | Five suppliers and the market seller that stands for sellers not on the list |
@@ -225,7 +225,7 @@ are the owner's unless another sign-in is named.
 | Owner | Cash and bank, Transfers | TR-2627-00001 to 00003: petty cash topped up twice from the bank, and cash banked |
 | Owner | Cash and bank, Expenses | Every expense, the daily ones among them, EX-2627-00001 to 00032 |
 | Owner | Cash and bank, Expenses, EX-2627-00031 | An expense on the full form: two lines paid to Shahrah Printers from the bank, with its journal and the place to add a receipt |
-| Owner | Cash and bank, Reconcile, Meezan Bank current account | The bank's statement matched with the books: 24 lines matched, one deposit only the bank knows of, two cheques not yet presented |
+| Owner | Cash and bank, Reconcile, Meezan Bank current account | The bank's statement matched with the books: 25 lines matched, one deposit only the bank knows of, two cheques not yet presented |
 
 ### Commission
 
@@ -254,14 +254,14 @@ are the owner's unless another sign-in is named.
 | Sign in as | Click | On the screen |
 | --- | --- | --- |
 | Owner | Journals | Journals written by hand: JV-2627-00001 the owner's capital, 00002 depreciation, 00003 entered and reversed, and one draft |
-| Owner | Reports, Trial balance | Every account; both sides come to 1,34,55,194.75 |
+| Owner | Reports, Trial balance | Every account; both sides come to 1,34,54,874.75 |
 | Owner | Reports, General ledger | Any account's entries, one by one |
 | Owner | Reports, Balance sheet | What the company owns and owes today |
 | Owner | Reports, Profit and loss | Sales, cost of the goods sold and the expenses for the period |
 | Owner | Reports, Cash flow | Where the money came from and went |
 | Owner | Reports, Aged payables | What is owed to each supplier by age; the total, 5,78,222.00, is what the books say |
 | Owner | Reports, Supplier statement | A statement for any supplier and period |
-| Owner | Reports, Withholding register | Tax withheld from suppliers, bill by bill, and the 320.00 of income tax deducted from October's salaries in a section of its own; 25,541.00 is still to be paid, the same as the accounts in the books |
+| Owner | Reports, Withholding register | Tax withheld from suppliers, bill by bill, and the 320.00 of income tax deducted from October's salaries in a section of its own, each with the challan that paid it; 25,221.00 is still to be paid, the same as the accounts in the books |
 | Owner | Reports, Statement of tax withheld (section 165) | The quarter's income tax withheld, payee by payee, with the challan's number |
 | Owner | Reports, Sales tax return | One sentence: the company is not registered for sales tax, so it files no return |
 
@@ -319,10 +319,6 @@ are the owner's unless another sign-in is named.
   that could be a real account is invented.
 - **Period close.** The accountant's menu names it; it is not built.
 - **Emailing an invoice or a statement.** Not there; the PDF is downloaded and sent by hand.
-- **Paying salary tax over to the government.** A challan records the payment of tax withheld
-  on supplier bills. The tax deducted from salaries (320.00 here), and tax withheld on an
-  expense, show in the withholding register as still to be paid; recording their payment is
-  not built yet.
 - **Importing customers, suppliers, items or attendance from a file.** The screens are there
   (*Customers*, *Import*, and so on) and show nothing until a file is chosen.
 - **Two-step sign-in.** Switched off on the live site for the demo; it is switched back on

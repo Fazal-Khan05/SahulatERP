@@ -4,7 +4,8 @@ import { refresh } from "next/cache";
 import { requireTenant } from "@/lib/auth/session";
 import { UserError, logFailure } from "@/lib/errors";
 import type { FormState } from "@/lib/form-state";
-import { applyAdvance, cancelPayment, discardPayment, postPayment, recordChallan, savePaymentDraft } from "@/modules/supplier-payments/commands";
+import { applyAdvance, cancelPayment, discardPayment, postPayment, savePaymentDraft } from "@/modules/supplier-payments/commands";
+import { recordTaxChallan } from "@/modules/tax-paid-over/commands";
 
 // The company always comes from the verified session, never from the form. Ids arrive bound to
 // the action and are checked again in the command.
@@ -97,7 +98,10 @@ export async function cancelPaymentAction(id: string, loadedAt: string, _: FormS
 export async function recordChallanAction(_: FormState, formData: FormData): Promise<FormState> {
   const session = await requireTenant();
   try {
-    await recordChallan(session, { kind: formData.get("kind"), paidOn: formData.get("paidOn"), accountId: formData.get("accountId"), challanNo: formData.get("challanNo"), note: formData.get("note"), entryIds: column(formData, "entryId") });
+    await recordTaxChallan(session, {
+      kind: formData.get("kind"), paidOn: formData.get("paidOn"), accountId: formData.get("accountId"), challanNo: formData.get("challanNo"), note: formData.get("note"),
+      entryIds: column(formData, "entryId"), expenseEntryIds: column(formData, "expenseEntryId"), runIds: column(formData, "runId"),
+    });
   } catch (error) {
     return refusal("record withholding challan", error);
   }
